@@ -8,7 +8,9 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
+
 import net.runelite.client.plugins.microbot.util.walker.CustomWebWalker;
+
 
 import net.runelite.client.plugins.microbot.util.walker.WalkerState;
 
