@@ -46,7 +46,14 @@ public final class CustomWebWalker {
                 return WalkerState.ARRIVED;
             }
 
+
             if (lastLocation == null || !currentLocation.equals(lastLocation)) {
+
+
+            if (lastLocation == null || !currentLocation.equals(lastLocation)) {
+
+            if (!currentLocation.equals(lastLocation)) {
+
                 lastLocation = currentLocation;
                 lastMoveTime = System.currentTimeMillis();
             }
@@ -72,6 +79,17 @@ public final class CustomWebWalker {
 
         return WalkerState.UNREACHABLE;
     }
+
+
+
+    public static WalkerState walkTo(WorldPoint destination, int reachedDistance) {
+        return walkTo(destination, reachedDistance, 90_000L);
+    }
+
+    public static WalkerState walkTo(WorldPoint destination) {
+        return walkTo(destination, 3, 90_000L);
+    }
+
 
     private static WorldPoint getNextCheckpoint(List<WorldPoint> path) {
         int currentIndex = Rs2Walker.getClosestTileIndex(path);
