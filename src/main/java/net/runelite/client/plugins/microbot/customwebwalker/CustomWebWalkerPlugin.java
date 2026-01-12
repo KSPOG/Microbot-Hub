@@ -21,7 +21,10 @@ import net.runelite.client.plugins.microbot.PluginConstants;
 @Slf4j
 public class CustomWebWalkerPlugin extends Plugin {
 
+
     static final String version = "1.0.5";
+
+
 
     @Inject
     private CustomWebWalkerScript script;
