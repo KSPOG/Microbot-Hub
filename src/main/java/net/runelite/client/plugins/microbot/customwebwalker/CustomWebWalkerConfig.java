@@ -23,8 +23,8 @@ public interface CustomWebWalkerConfig extends Config {
             position = 0,
             section = destinationSection
     )
-    default int targetX() {
-        return 3208;
+    default String targetX() {
+        return "3208";
     }
 
     @ConfigItem(
@@ -34,8 +34,8 @@ public interface CustomWebWalkerConfig extends Config {
             position = 1,
             section = destinationSection
     )
-    default int targetY() {
-        return 3220;
+    default String targetY() {
+        return "3220";
     }
 
     @ConfigItem(
