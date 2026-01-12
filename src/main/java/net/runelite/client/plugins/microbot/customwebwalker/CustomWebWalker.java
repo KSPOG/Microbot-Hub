@@ -55,6 +55,9 @@ public final class CustomWebWalker {
 
             if (lastLocation == null || !currentLocation.equals(lastLocation)) {
 
+
+            if (lastLocation == null || !currentLocation.equals(lastLocation)) {
+
             if (!currentLocation.equals(lastLocation)) {
 
                 lastLocation = currentLocation;
@@ -82,8 +85,6 @@ public final class CustomWebWalker {
 
         return WalkerState.UNREACHABLE;
     }
-
-
     public static WalkerState walkTo(WorldPoint destination, int reachedDistance) {
         return walkTo(destination, reachedDistance, 90_000L);
     }
