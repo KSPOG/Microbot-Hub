@@ -12,6 +12,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 
 
+
 import net.runelite.client.plugins.microbot.util.walker.CustomWebWalker;
 
 import net.runelite.client.plugins.microbot.util.walker.WalkerState;
@@ -83,6 +84,7 @@ public class CustomWebWalkerScript extends Script {
         }
 
 
+
     @Inject
     public CustomWebWalkerScript(CustomWebWalkerConfig config) {
         this.config = config;
@@ -124,6 +126,7 @@ public class CustomWebWalkerScript extends Script {
     @Override
     public void shutdown() {
         super.shutdown();
+
 
     }
 }

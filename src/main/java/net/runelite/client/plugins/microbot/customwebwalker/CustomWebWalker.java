@@ -46,20 +46,7 @@ public final class CustomWebWalker {
                 return WalkerState.ARRIVED;
             }
 
-
             if (lastLocation == null || !currentLocation.equals(lastLocation)) {
-
-
-            if (lastLocation == null || !currentLocation.equals(lastLocation)) {
-
-
-            if (lastLocation == null || !currentLocation.equals(lastLocation)) {
-
-
-            if (lastLocation == null || !currentLocation.equals(lastLocation)) {
-
-            if (!currentLocation.equals(lastLocation)) {
-
                 lastLocation = currentLocation;
                 lastMoveTime = System.currentTimeMillis();
             }
@@ -73,11 +60,14 @@ public final class CustomWebWalker {
                 lastMoveTime = System.currentTimeMillis();
             }
 
-            if (!Rs2Player.isMoving()
-                    && System.currentTimeMillis() - lastWalkActionTime > WALK_ACTION_COOLDOWN_MS) {
+            if (System.currentTimeMillis() - lastWalkActionTime > WALK_ACTION_COOLDOWN_MS) {
                 WorldPoint nextCheckpoint = getNextCheckpoint(path);
-                Rs2Walker.walkFastCanvas(nextCheckpoint);
-                lastWalkActionTime = System.currentTimeMillis();
+                boolean shouldClickWhileMoving = Rs2Player.isMoving()
+                        && currentLocation.distanceTo(nextCheckpoint) > reachDistance + 2;
+                if (!Rs2Player.isMoving() || shouldClickWhileMoving) {
+                    Rs2Walker.walkFastCanvas(nextCheckpoint);
+                    lastWalkActionTime = System.currentTimeMillis();
+                }
             }
 
             sleepRandom(POLL_DELAY_MIN_MS, POLL_DELAY_MAX_MS);
@@ -85,6 +75,7 @@ public final class CustomWebWalker {
 
         return WalkerState.UNREACHABLE;
     }
+
     public static WalkerState walkTo(WorldPoint destination, int reachedDistance) {
         return walkTo(destination, reachedDistance, 90_000L);
     }
@@ -92,7 +83,6 @@ public final class CustomWebWalker {
     public static WalkerState walkTo(WorldPoint destination) {
         return walkTo(destination, 3, 90_000L);
     }
-
 
     private static WorldPoint getNextCheckpoint(List<WorldPoint> path) {
         int currentIndex = Rs2Walker.getClosestTileIndex(path);
