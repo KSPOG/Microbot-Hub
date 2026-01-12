@@ -1,0 +1,6 @@
+package net.runelite.client.plugins.microbot.customwebwalker;
+
+public enum WalkerState {
+    ARRIVED,
+    UNREACHABLE
+}
