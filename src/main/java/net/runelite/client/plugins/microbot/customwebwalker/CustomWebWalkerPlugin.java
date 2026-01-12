@@ -22,15 +22,7 @@ import net.runelite.client.plugins.microbot.PluginConstants;
 public class CustomWebWalkerPlugin extends Plugin {
 
 
-    static final String version = "1.0.4";
-
-
-    static final String version = "1.0.3";
-
-
-    static final String version = "1.0.2";
-
-    static final String version = "1.0.1";
+    static final String version = "1.0.5";
 
 
 
