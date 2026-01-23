@@ -33,7 +33,11 @@ import java.util.concurrent.*;
 )
 public class FlipPilotPlugin extends Plugin
 {
+
+    static final String version = "1.0.5";
+
     static final String version = "1.0.4";
+
     @Inject private Client client;
     @Inject private ClientToolbar clientToolbar;
     @Inject private OverlayManager overlayManager;
