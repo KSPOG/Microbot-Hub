@@ -35,7 +35,7 @@ public class WikiPriceService
                  InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
                  JsonReader reader = new JsonReader(isr))
             {
-                JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+                JsonObject root = new JsonParser().parse(reader).getAsJsonObject();
                 JsonObject data = root.getAsJsonObject("data");
                 for (Map.Entry<String, JsonElement> e : data.entrySet())
                 {
