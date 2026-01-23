@@ -40,11 +40,21 @@ public class FlipPilotPanel extends PluginPanel
     private final JLabel hourlyProfitValue = new JLabel("0 gp/hr");
     private final JLabel avgWealthValue = new JLabel("-");
 
+
     private final FlipEventTableModel flipEventTableModel = new FlipEventTableModel();
     private final JTable flipEventTable = new JTable(flipEventTableModel);
 
     private final ButtonGroup adjustGroup = new ButtonGroup();
     private final ButtonGroup riskGroup = new ButtonGroup();
+
+
+
+    private final FlipEventTableModel flipEventTableModel = new FlipEventTableModel();
+    private final JTable flipEventTable = new JTable(flipEventTableModel);
+
+    private final ButtonGroup adjustGroup = new ButtonGroup();
+    private final ButtonGroup riskGroup = new ButtonGroup();
+
 
     private List<Suggestion> suggestions = Collections.emptyList();
 
@@ -66,6 +76,9 @@ public class FlipPilotPanel extends PluginPanel
         content.add(buildHeader());
         content.add(Box.createVerticalStrut(8));
         content.add(buildControls());
+        content.add(Box.createVerticalStrut(6));
+        content.add(buildActionLegend());
+
 
         content.add(Box.createVerticalStrut(6));
         content.add(buildActionLegend());
@@ -102,6 +115,30 @@ public class FlipPilotPanel extends PluginPanel
         titlePanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
 
+
+        JLabel title = new JLabel("Abort offer for");
+        title.setFont(FontManager.getRunescapeSmallFont());
+        title.setForeground(Color.WHITE);
+
+        itemLabel.setFont(FontManager.getRunescapeBoldFont());
+        itemLabel.setForeground(ACTION_COLLECT_COLOR);
+
+        membersLabel.setFont(FontManager.getRunescapeSmallFont());
+        membersLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+
+        statusLabel.setFont(FontManager.getRunescapeSmallFont());
+        statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+
+        titlePanel.add(title);
+        titlePanel.add(itemLabel);
+        titlePanel.add(membersLabel);
+        titlePanel.add(statusLabel);
+
+        header.add(titlePanel, BorderLayout.CENTER);
+
+        return header;
+    }
+
         JLabel title = new JLabel("Abort offer for");
         title.setFont(FontManager.getRunescapeSmallFont());
         title.setForeground(Color.WHITE);
@@ -111,8 +148,93 @@ public class FlipPilotPanel extends PluginPanel
 
 
 
-    private JPanel buildHeader()
+
+    private JPanel buildControls()
     {
+        JPanel controls = new JPanel(new GridLayout(1, 4, 6, 0));
+        controls.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        controls.add(buildIconButton("\u25A0", "Stop", ColorScheme.DARKER_GRAY_COLOR));
+        controls.add(buildIconButton("\u23F8", "Pause", ColorScheme.DARKER_GRAY_COLOR));
+        controls.add(buildIconButton("\u2298", "Abort", ACTION_ABORT_COLOR));
+        controls.add(buildIconButton("\u00BB", "Collect/Buy", ACTION_COLLECT_COLOR));
+
+        return controls;
+    }
+
+    private JButton buildIconButton(String text, String tooltip, Color background)
+    {
+        JButton button = new JButton(text);
+        button.setToolTipText(tooltip);
+        button.setFont(FontManager.getRunescapeBoldFont());
+        button.setBackground(background);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        return button;
+    }
+
+    private JPanel buildActionLegend()
+    {
+        JPanel legend = new JPanel(new GridLayout(1, 2, 6, 0));
+        legend.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        legend.add(buildLegendPill("Abort", ACTION_ABORT_COLOR));
+        legend.add(buildLegendPill("Collect/Buy", ACTION_COLLECT_COLOR));
+
+        return legend;
+    }
+
+    private JPanel buildLegendPill(String text, Color color)
+    {
+        JPanel pill = new JPanel(new BorderLayout());
+        pill.setBackground(color);
+        pill.setBorder(new EmptyBorder(4, 8, 4, 8));
+
+        JLabel label = new JLabel(text, SwingConstants.CENTER);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(Color.WHITE);
+        pill.add(label, BorderLayout.CENTER);
+        return pill;
+    }
+
+    private JPanel buildAdjustSection()
+    {
+        JPanel section = buildSectionPanel();
+        section.add(buildSectionLabel("How often do you adjust offers?"), BorderLayout.NORTH);
+
+        JPanel buttons = new JPanel(new GridLayout(1, 5, 4, 0));
+        buttons.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        buttons.add(buildToggle(adjustGroup, "5m", true));
+        buttons.add(buildToggle(adjustGroup, "30m", false));
+        buttons.add(buildToggle(adjustGroup, "2h", false));
+        buttons.add(buildToggle(adjustGroup, "8h", false));
+        buttons.add(buildToggle(adjustGroup, "...", false));
+
+        section.add(buttons, BorderLayout.CENTER);
+        return section;
+    }
+
+    private JPanel buildRiskSection()
+    {
+        JPanel section = buildSectionPanel();
+        section.add(buildSectionLabel("Risk level:"), BorderLayout.NORTH);
+
+        JPanel buttons = new JPanel(new GridLayout(1, 3, 4, 0));
+        buttons.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        buttons.add(buildToggle(riskGroup, "Low", false));
+        buttons.add(buildToggle(riskGroup, "Med", true));
+        buttons.add(buildToggle(riskGroup, "High", false));
+
+        section.add(buttons, BorderLayout.CENTER);
+        return section;
+    }
+
+    private JPanel buildSessionSection()
+    {
+        JPanel section = buildSectionPanel();
+
         JPanel header = new JPanel(new BorderLayout(8, 0));
         header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         header.setBorder(new EmptyBorder(8, 8, 8, 8));
@@ -283,6 +405,7 @@ public class FlipPilotPanel extends PluginPanel
     private JPanel buildSessionSection()
     {
         JPanel section = buildSectionPanel();
+
         JPanel row = new JPanel(new BorderLayout(6, 0));
         row.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
@@ -306,6 +429,106 @@ public class FlipPilotPanel extends PluginPanel
         section.add(row, BorderLayout.CENTER);
         return section;
     }
+
+    private JPanel buildProfitSection()
+    {
+        JPanel panel = buildSectionPanel();
+        JLabel profitLabel = buildSectionLabel("Profit:");
+        profitValue.setFont(FontManager.getRunescapeBoldFont().deriveFont(18f));
+        profitValue.setForeground(new Color(0x43, 0xB0, 0x47));
+
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        row.add(profitLabel, BorderLayout.WEST);
+        row.add(profitValue, BorderLayout.EAST);
+
+        panel.add(row, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildStatsSection()
+    {
+        JPanel panel = buildSectionPanel();
+        JPanel grid = new JPanel(new GridLayout(0, 2, 6, 4));
+        grid.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        grid.add(buildStatLabel("ROI:"));
+        grid.add(roiValue);
+        grid.add(buildStatLabel("Flips made:"));
+        grid.add(flipsValue);
+        grid.add(buildStatLabel("Tax paid:"));
+        grid.add(taxValue);
+        grid.add(buildStatLabel("Session time:"));
+        grid.add(sessionTimeValue);
+        grid.add(buildStatLabel("Hourly profit:"));
+        grid.add(hourlyProfitValue);
+        grid.add(buildStatLabel("Avg wealth:"));
+        grid.add(avgWealthValue);
+
+        panel.add(grid, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildFlipListSection()
+    {
+        JPanel panel = buildSectionPanel();
+        JLabel label = buildSectionLabel("Recent flips");
+        panel.add(label, BorderLayout.NORTH);
+
+        JScrollPane scrollPane = new JScrollPane(flipEventTable);
+        scrollPane.setBorder(BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR));
+        panel.add(scrollPane, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildSectionPanel()
+    {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        panel.setBorder(new EmptyBorder(4, 0, 4, 0));
+        return panel;
+    }
+
+    private JLabel buildSectionLabel(String text)
+    {
+        JLabel label = new JLabel(text);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        return label;
+    }
+
+    private JLabel buildStatLabel(String text)
+    {
+        JLabel label = new JLabel(text);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(Color.WHITE);
+        return label;
+    }
+
+    private JToggleButton buildToggle(ButtonGroup group, String text, boolean selected)
+    {
+        JToggleButton button = new JToggleButton(text, selected);
+        button.setFont(FontManager.getRunescapeSmallFont());
+        button.setFocusPainted(false);
+        button.setBackground(selected ? ColorScheme.BRAND_ORANGE : ColorScheme.DARKER_GRAY_COLOR);
+        button.setForeground(Color.WHITE);
+        button.addItemListener(e -> updateToggleStyles(group));
+        group.add(button);
+        return button;
+    }
+
+    private void updateToggleStyles(ButtonGroup group)
+    {
+        for (var element = group.getElements(); element.hasMoreElements(); )
+        {
+            AbstractButton button = element.nextElement();
+            boolean selected = button.isSelected();
+            button.setBackground(selected ? ColorScheme.BRAND_ORANGE : ColorScheme.DARKER_GRAY_COLOR);
+            button.setForeground(Color.WHITE);
+        }
+    }
+
+
 
     private JPanel buildProfitSection()
     {
@@ -455,6 +678,7 @@ public class FlipPilotPanel extends PluginPanel
         }
     }
 
+
     private void configureTable()
     {
         flipEventTable.setFillsViewportHeight(true);
@@ -491,12 +715,14 @@ public class FlipPilotPanel extends PluginPanel
             itemLabel.setText("No item selected");
             itemLabel.setForeground(Color.WHITE);
 
+
         {
             itemLabel.setText(this.suggestions.get(0).name);
         }
         else
         {
             itemLabel.setText("No item selected");
+
 
         }
     }
@@ -525,6 +751,47 @@ public class FlipPilotPanel extends PluginPanel
     private void refreshFlipTable()
     {
         flipEventTableModel.setEvents(eventBus.getRecent(200));
+
+    }
+
+    private String formatDuration(Duration duration)
+    {
+        long seconds = duration.getSeconds();
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+        return String.format("%02d:%02d:%02d", hours, minutes, secs);
+    }
+
+    private String formatGp(long value)
+    {
+        return String.format("%,d gp", value);
+    }
+
+    private static class FlipEventTableModel extends AbstractTableModel
+    {
+        private final String[] columns = {"Item", "Profit"};
+        private List<FlipEvent> events = Collections.emptyList();
+
+        public void setEvents(List<FlipEvent> events)
+        {
+            this.events = events == null ? Collections.emptyList() : new ArrayList<>(events);
+            fireTableDataChanged();
+        }
+
+        @Override
+        public int getRowCount()
+        {
+            return events.size();
+        }
+
+        @Override
+        public int getColumnCount()
+        {
+            return columns.length;
+        }
+
+
     }
 
     private String formatDuration(Duration duration)
@@ -581,6 +848,7 @@ public class FlipPilotPanel extends PluginPanel
         {
             return columns.length;
         }
+
 
         @Override
         public String getColumnName(int column)
