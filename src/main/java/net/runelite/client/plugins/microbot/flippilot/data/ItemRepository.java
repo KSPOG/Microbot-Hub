@@ -53,7 +53,7 @@ public class ItemRepository
                  InputStreamReader isr = new InputStreamReader(is, StandardCharsets.UTF_8);
                  JsonReader reader = new JsonReader(isr))
             {
-                JsonArray arr = JsonParser.parseReader(reader).getAsJsonArray();
+                JsonArray arr = new JsonParser().parse(reader).getAsJsonArray();
                 for (JsonElement el : arr)
                 {
                     JsonObject o = el.getAsJsonObject();

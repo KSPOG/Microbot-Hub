@@ -27,10 +27,13 @@ import java.util.concurrent.*;
 @PluginDescriptor(
         name = "FlipPilot",
         description = "Original flipping assistant: suggestions, charts, watchlist alerts (no auth). Members-aware universe.",
-        tags = {"microbot", "flipping", "ge", "prices"}
+        tags = {"microbot", "flipping", "ge", "prices"},
+        version = FlipPilotPlugin.version,
+        minClientVersion = "2.1.0"
 )
 public class FlipPilotPlugin extends Plugin
 {
+    static final String version = "1.0.6";
     @Inject private Client client;
     @Inject private ClientToolbar clientToolbar;
     @Inject private OverlayManager overlayManager;
@@ -52,6 +55,9 @@ public class FlipPilotPlugin extends Plugin
     @Inject private AlertManager alertManager;
 
     @Inject private FlipPilotOverlay overlay;
+    @Inject private FlipPilotAutoFlipScript autoFlipScript;
+
+    private volatile List<Suggestion> latestSuggestions = Collections.emptyList();
 
     private ScheduledExecutorService executor;
     private FlipPilotPanel panel;
@@ -101,6 +107,11 @@ public class FlipPilotPlugin extends Plugin
             if (panel != null) panel.tickUi();
         }), 1, 1, TimeUnit.SECONDS);
 
+        if (config.autoFlipEnabled())
+        {
+            autoFlipScript.run(config, this::getTopSuggestion);
+        }
+
         log.info("FlipPilot started");
     }
 
@@ -119,6 +130,8 @@ public class FlipPilotPlugin extends Plugin
             executor.shutdownNow();
             executor = null;
         }
+
+        autoFlipScript.shutdown();
 
         historyStore.save();
         log.info("FlipPilot stopped");
@@ -154,6 +167,7 @@ public class FlipPilotPlugin extends Plugin
 
             List<ItemDef> universe = itemRepository.getUniverse(isMembers);
             List<Suggestion> suggestions = suggestionEngine.build(universe, latest, vol5m);
+            latestSuggestions = suggestions;
 
             // Alerts for watchlist items
             for (Suggestion s : suggestions)
@@ -193,5 +207,15 @@ public class FlipPilotPlugin extends Plugin
     public void reportFlip(int itemId, String itemName, int qty, long profit)
     {
         flipEventBus.publish(new FlipEvent(System.currentTimeMillis(), itemId, itemName, qty, profit));
+    }
+
+    private Suggestion getTopSuggestion()
+    {
+        List<Suggestion> suggestions = latestSuggestions;
+        if (suggestions == null || suggestions.isEmpty())
+        {
+            return null;
+        }
+        return suggestions.get(0);
     }
 }

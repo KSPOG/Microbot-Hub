@@ -5,143 +5,345 @@ import net.runelite.client.plugins.microbot.flippilot.engine.Suggestion;
 import net.runelite.client.plugins.microbot.flippilot.microbot.FlipEvent;
 import net.runelite.client.plugins.microbot.flippilot.microbot.FlipEventBus;
 import net.runelite.client.plugins.microbot.flippilot.storage.WatchlistStore;
-import net.runelite.client.plugins.microbot.flippilot.ui.PriceChartPanel;
+import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
+import net.runelite.client.ui.PluginPanel;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.AbstractTableModel;
 import java.awt.*;
-import java.text.DecimalFormat;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
 
-public class FlipPilotPanel extends JPanel
+public class FlipPilotPanel extends PluginPanel
 {
-    private final AtomicReference<List<Suggestion>> suggestionsRef = new AtomicReference<>(Collections.emptyList());
+    private static final Color ACTION_ABORT_COLOR = new Color(0xB0, 0x3A, 0x2C);
+    private static final Color ACTION_COLLECT_COLOR = new Color(0x3A, 0x7A, 0xFF);
+
     private final FlipEventBus eventBus;
     private final HistoryStore historyStore;
     private final WatchlistStore watchlistStore;
 
-    private final SuggestionTableModel tableModel = new SuggestionTableModel();
-    private final JTable table = new JTable(tableModel);
-
-    private final JLabel membersLabel = new JLabel("Members: ?");
+    private final JLabel itemLabel = new JLabel("No item selected");
+    private final JLabel membersLabel = new JLabel("F2P version. Sub for P2P");
     private final JLabel statusLabel = new JLabel("Status: idle");
-    private final JLabel profitLabel = new JLabel("Session Profit: 0 gp");
 
-    private final PriceChartPanel chart = new PriceChartPanel();
-    private final JTextArea detailsArea = new JTextArea();
+    private final JLabel profitValue = new JLabel("0 gp");
+    private final JLabel roiValue = new JLabel("-");
+    private final JLabel flipsValue = new JLabel("0");
+    private final JLabel taxValue = new JLabel("-");
+    private final JLabel sessionTimeValue = new JLabel("00:00:00");
+    private final JLabel hourlyProfitValue = new JLabel("0 gp/hr");
+    private final JLabel avgWealthValue = new JLabel("-");
 
-    private final JTextArea trackingArea = new JTextArea();
+    private final FlipEventTableModel flipEventTableModel = new FlipEventTableModel();
+    private final JTable flipEventTable = new JTable(flipEventTableModel);
 
-    private volatile int selectedItemId = -1;
+    private final ButtonGroup adjustGroup = new ButtonGroup();
+    private final ButtonGroup riskGroup = new ButtonGroup();
+
+    private List<Suggestion> suggestions = Collections.emptyList();
 
     public FlipPilotPanel(FlipEventBus eventBus, HistoryStore historyStore, WatchlistStore watchlistStore)
     {
-        super(new BorderLayout());
+        super();
         this.eventBus = eventBus;
         this.historyStore = historyStore;
         this.watchlistStore = watchlistStore;
 
-        JTabbedPane tabs = new JTabbedPane();
+        setLayout(new BorderLayout());
+        setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        tabs.addTab("Suggestions", buildSuggestionsTab());
-        tabs.addTab("Item", buildItemTab());
-        tabs.addTab("Tracking", buildTrackingTab());
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBorder(new EmptyBorder(10, 10, 10, 10));
+        content.setBackground(ColorScheme.DARK_GRAY_COLOR);
 
-        add(buildHeader(), BorderLayout.NORTH);
-        add(tabs, BorderLayout.CENTER);
+        content.add(buildHeader());
+        content.add(Box.createVerticalStrut(8));
+        content.add(buildControls());
+        content.add(Box.createVerticalStrut(6));
+        content.add(buildActionLegend());
+        content.add(Box.createVerticalStrut(10));
+        content.add(buildAdjustSection());
+        content.add(Box.createVerticalStrut(8));
+        content.add(buildRiskSection());
+        content.add(Box.createVerticalStrut(10));
+        content.add(buildSessionSection());
+        content.add(Box.createVerticalStrut(10));
+        content.add(buildProfitSection());
+        content.add(Box.createVerticalStrut(8));
+        content.add(buildStatsSection());
+        content.add(Box.createVerticalStrut(10));
+        content.add(buildFlipListSection());
 
-        detailsArea.setEditable(false);
-        detailsArea.setLineWrap(true);
-        detailsArea.setWrapStyleWord(true);
-
-        trackingArea.setEditable(false);
-        trackingArea.setLineWrap(true);
-        trackingArea.setWrapStyleWord(true);
-
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.getSelectionModel().addListSelectionListener(e ->
-        {
-            int row = table.getSelectedRow();
-            if (row >= 0 && row < tableModel.getRowCount())
-            {
-                Suggestion s = tableModel.getAt(row);
-                selectedItemId = s.itemId;
-                refreshItemDetails(s);
-            }
-        });
+        add(new JScrollPane(content), BorderLayout.CENTER);
+        configureTable();
     }
 
     private JPanel buildHeader()
     {
-        JPanel p = new JPanel(new GridLayout(3, 1));
-        p.add(membersLabel);
-        p.add(statusLabel);
-        p.add(profitLabel);
-        return p;
+        JPanel header = new JPanel(new BorderLayout(8, 0));
+        header.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        header.setBorder(new EmptyBorder(8, 8, 8, 8));
+
+        JLabel gear = new JLabel("\u2699");
+        gear.setFont(FontManager.getRunescapeBoldFont().deriveFont(16f));
+        gear.setForeground(ColorScheme.BRAND_ORANGE);
+        header.add(gear, BorderLayout.WEST);
+
+        JPanel titlePanel = new JPanel();
+        titlePanel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        titlePanel.setLayout(new BoxLayout(titlePanel, BoxLayout.Y_AXIS));
+
+        JLabel title = new JLabel("Abort offer for");
+        title.setFont(FontManager.getRunescapeSmallFont());
+        title.setForeground(Color.WHITE);
+
+        itemLabel.setFont(FontManager.getRunescapeBoldFont());
+        itemLabel.setForeground(ACTION_COLLECT_COLOR);
+
+        membersLabel.setFont(FontManager.getRunescapeSmallFont());
+        membersLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+
+        statusLabel.setFont(FontManager.getRunescapeSmallFont());
+        statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+
+        titlePanel.add(title);
+        titlePanel.add(itemLabel);
+        titlePanel.add(membersLabel);
+        titlePanel.add(statusLabel);
+
+        header.add(titlePanel, BorderLayout.CENTER);
+
+        return header;
     }
 
-    private JComponent buildSuggestionsTab()
+    private JPanel buildControls()
     {
-        JPanel p = new JPanel(new BorderLayout());
-        table.setFillsViewportHeight(true);
-        p.add(new JScrollPane(table), BorderLayout.CENTER);
-        return p;
+        JPanel controls = new JPanel(new GridLayout(1, 4, 6, 0));
+        controls.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        controls.add(buildIconButton("\u25A0", "Stop", ColorScheme.DARKER_GRAY_COLOR));
+        controls.add(buildIconButton("\u23F8", "Pause", ColorScheme.DARKER_GRAY_COLOR));
+        controls.add(buildIconButton("\u2298", "Abort", ACTION_ABORT_COLOR));
+        controls.add(buildIconButton("\u00BB", "Collect/Buy", ACTION_COLLECT_COLOR));
+
+        return controls;
     }
 
-    private JComponent buildItemTab()
+    private JButton buildIconButton(String text, String tooltip, Color background)
     {
-        JPanel p = new JPanel(new BorderLayout());
-
-        chart.setPreferredSize(new Dimension(10, 180));
-        p.add(chart, BorderLayout.NORTH);
-
-        p.add(new JScrollPane(detailsArea), BorderLayout.CENTER);
-
-        JButton addWatch = new JButton("Add to Watchlist");
-        JButton removeWatch = new JButton("Remove from Watchlist");
-
-        addWatch.addActionListener(e -> {
-            int id = selectedItemId;
-            if (id > 0) watchlistStore.add(id);
-        });
-
-        removeWatch.addActionListener(e -> {
-            int id = selectedItemId;
-            if (id > 0) watchlistStore.remove(id);
-        });
-
-        JPanel btns = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        btns.add(addWatch);
-        btns.add(removeWatch);
-
-        p.add(btns, BorderLayout.SOUTH);
-
-        return p;
+        JButton button = new JButton(text);
+        button.setToolTipText(tooltip);
+        button.setFont(FontManager.getRunescapeBoldFont());
+        button.setBackground(background);
+        button.setForeground(Color.WHITE);
+        button.setFocusPainted(false);
+        return button;
     }
 
-    private JComponent buildTrackingTab()
+    private JPanel buildActionLegend()
     {
-        JPanel p = new JPanel(new BorderLayout());
-        p.add(new JScrollPane(trackingArea), BorderLayout.CENTER);
+        JPanel legend = new JPanel(new GridLayout(1, 2, 6, 0));
+        legend.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        legend.add(buildLegendPill("Abort", ACTION_ABORT_COLOR));
+        legend.add(buildLegendPill("Collect/Buy", ACTION_COLLECT_COLOR));
+
+        return legend;
+    }
+
+    private JPanel buildLegendPill(String text, Color color)
+    {
+        JPanel pill = new JPanel(new BorderLayout());
+        pill.setBackground(color);
+        pill.setBorder(new EmptyBorder(4, 8, 4, 8));
+
+        JLabel label = new JLabel(text, SwingConstants.CENTER);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(Color.WHITE);
+        pill.add(label, BorderLayout.CENTER);
+        return pill;
+    }
+
+    private JPanel buildAdjustSection()
+    {
+        JPanel section = buildSectionPanel();
+        section.add(buildSectionLabel("How often do you adjust offers?"), BorderLayout.NORTH);
+
+        JPanel buttons = new JPanel(new GridLayout(1, 5, 4, 0));
+        buttons.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        buttons.add(buildToggle(adjustGroup, "5m", true));
+        buttons.add(buildToggle(adjustGroup, "30m", false));
+        buttons.add(buildToggle(adjustGroup, "2h", false));
+        buttons.add(buildToggle(adjustGroup, "8h", false));
+        buttons.add(buildToggle(adjustGroup, "...", false));
+
+        section.add(buttons, BorderLayout.CENTER);
+        return section;
+    }
+
+    private JPanel buildRiskSection()
+    {
+        JPanel section = buildSectionPanel();
+        section.add(buildSectionLabel("Risk level:"), BorderLayout.NORTH);
+
+        JPanel buttons = new JPanel(new GridLayout(1, 3, 4, 0));
+        buttons.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        buttons.add(buildToggle(riskGroup, "Low", false));
+        buttons.add(buildToggle(riskGroup, "Med", true));
+        buttons.add(buildToggle(riskGroup, "High", false));
+
+        section.add(buttons, BorderLayout.CENTER);
+        return section;
+    }
+
+    private JPanel buildSessionSection()
+    {
+        JPanel section = buildSectionPanel();
+        JPanel row = new JPanel(new BorderLayout(6, 0));
+        row.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        JLabel sessionLabel = buildSectionLabel("Session");
+        row.add(sessionLabel, BorderLayout.WEST);
+
+        JComboBox<String> accountSelect = new JComboBox<>(new String[]{"All accounts"});
+        accountSelect.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        accountSelect.setForeground(Color.WHITE);
+        row.add(accountSelect, BorderLayout.CENTER);
 
         JButton reset = new JButton("Reset session");
+        reset.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        reset.setForeground(Color.WHITE);
         reset.addActionListener(e -> {
             eventBus.resetSession();
-            refreshTracking();
+            refreshSessionStats();
         });
+        row.add(reset, BorderLayout.EAST);
 
-        JPanel bottom = new JPanel(new BorderLayout());
-        bottom.add(reset, BorderLayout.WEST);
-        p.add(bottom, BorderLayout.SOUTH);
+        section.add(row, BorderLayout.CENTER);
+        return section;
+    }
 
-        return p;
+    private JPanel buildProfitSection()
+    {
+        JPanel panel = buildSectionPanel();
+        JLabel profitLabel = buildSectionLabel("Profit:");
+        profitValue.setFont(FontManager.getRunescapeBoldFont().deriveFont(18f));
+        profitValue.setForeground(new Color(0x43, 0xB0, 0x47));
+
+        JPanel row = new JPanel(new BorderLayout());
+        row.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        row.add(profitLabel, BorderLayout.WEST);
+        row.add(profitValue, BorderLayout.EAST);
+
+        panel.add(row, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildStatsSection()
+    {
+        JPanel panel = buildSectionPanel();
+        JPanel grid = new JPanel(new GridLayout(0, 2, 6, 4));
+        grid.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+        grid.add(buildStatLabel("ROI:"));
+        grid.add(roiValue);
+        grid.add(buildStatLabel("Flips made:"));
+        grid.add(flipsValue);
+        grid.add(buildStatLabel("Tax paid:"));
+        grid.add(taxValue);
+        grid.add(buildStatLabel("Session time:"));
+        grid.add(sessionTimeValue);
+        grid.add(buildStatLabel("Hourly profit:"));
+        grid.add(hourlyProfitValue);
+        grid.add(buildStatLabel("Avg wealth:"));
+        grid.add(avgWealthValue);
+
+        panel.add(grid, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildFlipListSection()
+    {
+        JPanel panel = buildSectionPanel();
+        JLabel label = buildSectionLabel("Recent flips");
+        panel.add(label, BorderLayout.NORTH);
+
+        JScrollPane scrollPane = new JScrollPane(flipEventTable);
+        scrollPane.setBorder(BorderFactory.createLineBorder(ColorScheme.DARKER_GRAY_COLOR));
+        panel.add(scrollPane, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel buildSectionPanel()
+    {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        panel.setBorder(new EmptyBorder(4, 0, 4, 0));
+        return panel;
+    }
+
+    private JLabel buildSectionLabel(String text)
+    {
+        JLabel label = new JLabel(text);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+        return label;
+    }
+
+    private JLabel buildStatLabel(String text)
+    {
+        JLabel label = new JLabel(text);
+        label.setFont(FontManager.getRunescapeSmallFont());
+        label.setForeground(Color.WHITE);
+        return label;
+    }
+
+    private JToggleButton buildToggle(ButtonGroup group, String text, boolean selected)
+    {
+        JToggleButton button = new JToggleButton(text, selected);
+        button.setFont(FontManager.getRunescapeSmallFont());
+        button.setFocusPainted(false);
+        button.setBackground(selected ? ColorScheme.BRAND_ORANGE : ColorScheme.DARKER_GRAY_COLOR);
+        button.setForeground(Color.WHITE);
+        button.addItemListener(e -> updateToggleStyles(group));
+        group.add(button);
+        return button;
+    }
+
+    private void updateToggleStyles(ButtonGroup group)
+    {
+        for (var element = group.getElements(); element.hasMoreElements(); )
+        {
+            AbstractButton button = element.nextElement();
+            boolean selected = button.isSelected();
+            button.setBackground(selected ? ColorScheme.BRAND_ORANGE : ColorScheme.DARKER_GRAY_COLOR);
+            button.setForeground(Color.WHITE);
+        }
+    }
+
+    private void configureTable()
+    {
+        flipEventTable.setFillsViewportHeight(true);
+        flipEventTable.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        flipEventTable.setForeground(Color.WHITE);
+        flipEventTable.setGridColor(ColorScheme.DARK_GRAY_COLOR);
+        flipEventTable.setRowHeight(18);
+        flipEventTable.getTableHeader().setReorderingAllowed(false);
+        flipEventTable.getTableHeader().setBackground(ColorScheme.DARK_GRAY_COLOR);
+        flipEventTable.getTableHeader().setForeground(Color.WHITE);
     }
 
     public void setMembers(boolean isMembers)
     {
-        membersLabel.setText("Members: " + (isMembers ? "YES" : "NO"));
+        membersLabel.setText(isMembers ? "Members version" : "F2P version. Sub for P2P");
     }
 
     public void setStatus(String status)
@@ -151,93 +353,97 @@ public class FlipPilotPanel extends JPanel
 
     public void setSuggestions(List<Suggestion> suggestions)
     {
-        suggestionsRef.set(suggestions == null ? Collections.emptyList() : suggestions);
-        tableModel.setData(suggestions);
-        tableModel.fireTableDataChanged();
-
-        if (tableModel.getRowCount() > 0 && table.getSelectedRow() < 0)
+        this.suggestions = suggestions == null ? Collections.emptyList() : new ArrayList<>(suggestions);
+        if (!this.suggestions.isEmpty())
         {
-            table.setRowSelectionInterval(0, 0);
+            itemLabel.setText(this.suggestions.get(0).name);
+            itemLabel.setForeground(ACTION_COLLECT_COLOR);
+        }
+        else
+        {
+            itemLabel.setText("No item selected");
+            itemLabel.setForeground(Color.WHITE);
         }
     }
 
     public void tickUi()
     {
-        profitLabel.setText("Session Profit: " + eventBus.getSessionProfit() + " gp");
-        refreshTracking();
-        if (selectedItemId > 0)
+        refreshSessionStats();
+        refreshFlipTable();
+    }
+
+    private void refreshSessionStats()
+    {
+        long profit = eventBus.getSessionProfit();
+        profitValue.setText(formatGp(profit));
+
+        flipsValue.setText(String.valueOf(eventBus.getEventCount()));
+
+        Duration duration = Duration.ofMillis(eventBus.getSessionDurationMs());
+        sessionTimeValue.setText(formatDuration(duration));
+
+        double hours = Math.max(0.0001, duration.toMillis() / 3_600_000.0);
+        long hourly = Math.round(profit / hours);
+        hourlyProfitValue.setText(formatGp(hourly) + "/hr");
+    }
+
+    private void refreshFlipTable()
+    {
+        flipEventTableModel.setEvents(eventBus.getRecent(200));
+    }
+
+    private String formatDuration(Duration duration)
+    {
+        long seconds = duration.getSeconds();
+        long hours = seconds / 3600;
+        long minutes = (seconds % 3600) / 60;
+        long secs = seconds % 60;
+        return String.format("%02d:%02d:%02d", hours, minutes, secs);
+    }
+
+    private String formatGp(long value)
+    {
+        return String.format("%,d gp", value);
+    }
+
+    private static class FlipEventTableModel extends AbstractTableModel
+    {
+        private final String[] columns = {"Item", "Profit"};
+        private List<FlipEvent> events = Collections.emptyList();
+
+        public void setEvents(List<FlipEvent> events)
         {
-            chart.setPoints(historyStore.get(selectedItemId));
+            this.events = events == null ? Collections.emptyList() : new ArrayList<>(events);
+            fireTableDataChanged();
         }
-    }
 
-    private void refreshItemDetails(Suggestion s)
-    {
-        chart.setPoints(historyStore.get(s.itemId));
-
-        boolean watched = watchlistStore.isWatched(s.itemId);
-
-        detailsArea.setText(
-                "Item: " + s.name + " (" + s.itemId + ")\n" +
-                "Watched: " + (watched ? "YES" : "NO") + "\n\n" +
-                "High: " + s.high + "\n" +
-                "Low: " + s.low + "\n" +
-                "Estimated margin: " + s.margin + " gp\n" +
-                "ROI: " + new DecimalFormat("0.00").format(s.roiPct) + "%\n" +
-                "Limit: " + (s.limit > 0 ? s.limit : "-") + "\n" +
-                "Vol(5m): " + s.vol5m + "\n" +
-                "Risk: " + new DecimalFormat("0.00").format(s.risk) + "\n" +
-                "Score: " + new DecimalFormat("0.00").format(s.score) + "\n"
-        );
-    }
-
-    private void refreshTracking()
-    {
-        List<FlipEvent> recent = eventBus.getRecent(25);
-        StringBuilder sb = new StringBuilder();
-        sb.append("Session profit: ").append(eventBus.getSessionProfit()).append(" gp\n\n");
-        sb.append("Recent flips (reported by your logic):\n");
-        for (int i = recent.size() - 1; i >= 0; i--)
+        @Override
+        public int getRowCount()
         {
-            FlipEvent e = recent.get(i);
-            sb.append("- ").append(e.itemName)
-              .append(" x").append(e.qty)
-              .append(" profit=").append(e.profit)
-              .append("\n");
+            return events.size();
         }
-        trackingArea.setText(sb.toString());
-    }
 
-    // ---------- Table model ----------
-    private static class SuggestionTableModel extends AbstractTableModel
-    {
-        private final String[] cols = {"Item", "High", "Low", "Margin", "ROI%", "Limit", "Vol(5m)", "Risk", "Score"};
-        private List<Suggestion> data = Collections.emptyList();
+        @Override
+        public int getColumnCount()
+        {
+            return columns.length;
+        }
 
-        public void setData(List<Suggestion> d) { data = d == null ? Collections.emptyList() : d; }
-        public Suggestion getAt(int row) { return data.get(row); }
-
-        @Override public int getRowCount() { return data.size(); }
-        @Override public int getColumnCount() { return cols.length; }
-        @Override public String getColumnName(int c) { return cols[c]; }
+        @Override
+        public String getColumnName(int column)
+        {
+            return columns[column];
+        }
 
         @Override
         public Object getValueAt(int rowIndex, int columnIndex)
         {
-            Suggestion s = data.get(rowIndex);
-            switch (columnIndex)
+            FlipEvent event = events.get(events.size() - 1 - rowIndex);
+            if (columnIndex == 0)
             {
-                case 0: return s.name;
-                case 1: return s.high;
-                case 2: return s.low;
-                case 3: return s.margin;
-                case 4: return new DecimalFormat("0.00").format(s.roiPct);
-                case 5: return s.limit > 0 ? s.limit : "-";
-                case 6: return s.vol5m;
-                case 7: return new DecimalFormat("0.00").format(s.risk);
-                case 8: return new DecimalFormat("0.00").format(s.score);
-                default: return "";
+                return event.qty + " x " + event.itemName;
             }
+            return String.format("%,d", event.profit);
         }
     }
 }
