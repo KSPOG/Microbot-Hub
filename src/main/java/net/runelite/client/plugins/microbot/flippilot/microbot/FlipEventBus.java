@@ -9,6 +9,7 @@ public class FlipEventBus
 {
     private final List<FlipEvent> events = new CopyOnWriteArrayList<>();
     private volatile long sessionProfit = 0;
+    private volatile long sessionStartMs = System.currentTimeMillis();
 
     public void publish(FlipEvent e)
     {
@@ -26,6 +27,16 @@ public class FlipEventBus
         return sessionProfit;
     }
 
+    public int getEventCount()
+    {
+        return events.size();
+    }
+
+    public long getSessionDurationMs()
+    {
+        return Math.max(0, System.currentTimeMillis() - sessionStartMs);
+    }
+
     public List<FlipEvent> getRecent(int max)
     {
         int size = events.size();
@@ -37,5 +48,6 @@ public class FlipEventBus
     {
         events.clear();
         sessionProfit = 0;
+        sessionStartMs = System.currentTimeMillis();
     }
 }

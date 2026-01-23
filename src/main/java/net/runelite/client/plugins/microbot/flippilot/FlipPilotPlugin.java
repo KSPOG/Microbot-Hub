@@ -27,10 +27,13 @@ import java.util.concurrent.*;
 @PluginDescriptor(
         name = "FlipPilot",
         description = "Original flipping assistant: suggestions, charts, watchlist alerts (no auth). Members-aware universe.",
-        tags = {"microbot", "flipping", "ge", "prices"}
+        tags = {"microbot", "flipping", "ge", "prices"},
+        version = FlipPilotPlugin.version,
+        minClientVersion = "2.1.0"
 )
 public class FlipPilotPlugin extends Plugin
 {
+    static final String version = "1.0.5";
     @Inject private Client client;
     @Inject private ClientToolbar clientToolbar;
     @Inject private OverlayManager overlayManager;
