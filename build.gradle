@@ -42,9 +42,9 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = project.ext.TARGET_JDK_VERSION
     options.compilerArgs.addAll([
-        '-parameters',
-        '-Xlint:none',
-        '-g'
+            '-parameters',
+            '-Xlint:none',
+            '-g'
     ])
 
 
@@ -144,11 +144,25 @@ afterEvaluate {
     def allPlugins = project.ext.discoverPlugins(pluginsDir)
     def pluginsProperty = project.findProperty("pluginList")
     def selectedPluginNames = pluginsProperty ? pluginsProperty.split(',').collect { it.trim() } : []
+    def selectedPluginNamesLower = selectedPluginNames.collect { it.toLowerCase(Locale.ROOT) }
 
     def validPlugins = allPlugins.findAll { plugin ->
-        if (selectedPluginNames && !selectedPluginNames.contains(plugin.name)) {
-            logger.info("Skipping plugin: ${plugin.name}")
-            return false
+        if (selectedPluginNames) {
+            def pluginAlias = plugin.name.endsWith("Plugin")
+                    ? plugin.name.substring(0, plugin.name.length() - "Plugin".length())
+                    : plugin.name
+            def pluginNameLower = plugin.name.toLowerCase(Locale.ROOT)
+            def pluginAliasLower = pluginAlias.toLowerCase(Locale.ROOT)
+            def pluginSourceSetLower = plugin.sourceSetName.toLowerCase(Locale.ROOT)
+            if (!selectedPluginNames.contains(plugin.name)
+                    && !selectedPluginNames.contains(pluginAlias)
+                    && !selectedPluginNames.contains(plugin.sourceSetName)
+                    && !selectedPluginNamesLower.contains(pluginNameLower)
+                    && !selectedPluginNamesLower.contains(pluginAliasLower)
+                    && !selectedPluginNamesLower.contains(pluginSourceSetLower)) {
+                logger.info("Skipping plugin: ${plugin.name}")
+                return false
+            }
         }
         logger.info("Processing plugin: ${plugin.name}")
         return true
@@ -179,9 +193,9 @@ afterEvaluate {
 
         // Collect for publishing
         pluginPublications << [
-            name    : plugin.name,
-            jarTask : jarTask,
-            version : pluginVersionFromPluginJson(plugin.dir)
+                name    : plugin.name,
+                jarTask : jarTask,
+                version : pluginVersionFromPluginJson(plugin.dir)
         ]
     }
 
@@ -223,10 +237,24 @@ tasks.register("copyPluginDocs") {
         def allPlugins = project.ext.discoverPlugins(pluginsDir)
         def pluginsProperty = project.findProperty("pluginList")
         def selectedPluginNames = pluginsProperty ? pluginsProperty.split(',').collect { it.trim() } : []
+        def selectedPluginNamesLower = selectedPluginNames.collect { it.toLowerCase(Locale.ROOT) }
 
         def validPlugins = allPlugins.findAll { plugin ->
-            if (selectedPluginNames && !selectedPluginNames.contains(plugin.name)) {
-                return false
+            if (selectedPluginNames) {
+                def pluginAlias = plugin.name.endsWith("Plugin")
+                        ? plugin.name.substring(0, plugin.name.length() - "Plugin".length())
+                        : plugin.name
+                def pluginNameLower = plugin.name.toLowerCase(Locale.ROOT)
+                def pluginAliasLower = pluginAlias.toLowerCase(Locale.ROOT)
+                def pluginSourceSetLower = plugin.sourceSetName.toLowerCase(Locale.ROOT)
+                if (!selectedPluginNames.contains(plugin.name)
+                        && !selectedPluginNames.contains(pluginAlias)
+                        && !selectedPluginNames.contains(plugin.sourceSetName)
+                        && !selectedPluginNamesLower.contains(pluginNameLower)
+                        && !selectedPluginNamesLower.contains(pluginAliasLower)
+                        && !selectedPluginNamesLower.contains(pluginSourceSetLower)) {
+                    return false
+                }
             }
             return true
         }
