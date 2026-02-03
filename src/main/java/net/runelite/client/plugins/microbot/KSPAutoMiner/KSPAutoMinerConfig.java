@@ -35,4 +35,15 @@ public interface KSPAutoMinerConfig extends Config {
     default KSPAutoMinerRock rock() {
         return KSPAutoMinerRock.COPPER_TIN;
     }
+
+    @ConfigItem(
+            keyName = "enableAntiban",
+            name = "Enable Antiban",
+            description = "Use universal antiban settings",
+            position = 2,
+            section = generalSection
+    )
+    default boolean enableAntiban() {
+        return true;
+    }
 }

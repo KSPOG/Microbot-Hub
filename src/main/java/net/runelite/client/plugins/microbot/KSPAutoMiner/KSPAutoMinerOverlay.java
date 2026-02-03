@@ -28,16 +28,12 @@ public class KSPAutoMinerOverlay extends OverlayPanel {
 
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Current Status:")
-                .build());
-        panelComponent.getChildren().add(LineComponent.builder()
-                .left(KSPAutoMinerScript.status)
+                .right(KSPAutoMinerScript.status)
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Mode:")
-                .build());
-        panelComponent.getChildren().add(LineComponent.builder()
-                .left(KSPAutoMinerScript.modeLabel)
+                .right(KSPAutoMinerScript.modeLabel)
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()

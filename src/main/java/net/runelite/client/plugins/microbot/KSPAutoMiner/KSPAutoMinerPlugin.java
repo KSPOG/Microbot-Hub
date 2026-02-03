@@ -22,7 +22,7 @@ import java.awt.AWTException;
 )
 @Slf4j
 public class KSPAutoMinerPlugin extends Plugin {
-    public static final String version = "1.0.4";
+    public static final String version = "1.0.12";
 
     @Inject
     private KSPAutoMinerConfig config;
