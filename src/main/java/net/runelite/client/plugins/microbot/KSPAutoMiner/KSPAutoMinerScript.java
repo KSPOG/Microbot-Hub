@@ -333,6 +333,7 @@ public class KSPAutoMinerScript extends Script {
         lastCopperCount = Rs2Inventory.count("Copper ore");
     }
 
+
     private boolean bankOresAndUpgradePickaxe(WorldPoint returnLocation) {
         if (!Rs2Bank.walkToBankAndUseBank()) {
             return false;
@@ -433,6 +434,7 @@ public class KSPAutoMinerScript extends Script {
                 .orElse(null);
     }
 
+
     private GameObject findNearestRock(WorldPoint searchCenter, int radius) {
         if (searchCenter == null || targetRock == null) {
             return null;
@@ -499,6 +501,7 @@ public class KSPAutoMinerScript extends Script {
         }
     }
 
+
     private static final class PickaxeRequirement {
         private final int itemId;
         private final int miningLevel;
@@ -510,5 +513,6 @@ public class KSPAutoMinerScript extends Script {
             this.attackLevel = attackLevel;
         }
     }
+
 
 }
