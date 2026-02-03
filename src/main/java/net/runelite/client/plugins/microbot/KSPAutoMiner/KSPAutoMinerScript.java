@@ -129,7 +129,11 @@ public class KSPAutoMinerScript extends Script {
                     return;
                 }
 
+
+                if (Rs2Player.isAnimating() && !Rs2Player.isMoving()) {
+
                 if (Rs2Player.isAnimating()) {
+
                     return;
                 }
 
