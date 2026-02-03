@@ -13,7 +13,7 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 import net.runelite.client.plugins.microbot.woodcutting.enums.WoodcuttingTree;
 
@@ -24,15 +24,15 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Slf4j
 public class EggEvent implements BlockingEvent {
 
-    private final AutoWoodcuttingPlugin plugin;
-    public EggEvent(AutoWoodcuttingPlugin plugin) {
+    private final ForestryEventPlugin plugin;
+    public EggEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             var forester = Rs2Npc
                     .getNpcs(NpcID.GATHERING_EVENT_PHEASANT_FORESTER)
@@ -56,7 +56,7 @@ public class EggEvent implements BlockingEvent {
             return true; // If the forester is not found, we cannot proceed with the event
         }
 
-        plugin.currentForestryEvent = ForestryEvents.PHEASANT;
+        plugin.setCurrentForestryEvent(ForestryEvents.PHEASANT);
 
         //if inventory is full, we cannot proceed with the event
         if (Rs2Inventory.isFull()) {
