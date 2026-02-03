@@ -1,18 +1,19 @@
-package net.runelite.client.plugins.microbot.woodcutting;
+package net.runelite.client.plugins.microbot.KSPAutoWoodcutter;
 
 import com.google.inject.Provides;
-import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ChatMessageType;
 import net.runelite.api.GameObject;
 import net.runelite.api.NPC;
-import net.runelite.api.events.*;
+import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.ConfigChanged;
+import net.runelite.api.events.GameObjectDespawned;
+import net.runelite.api.events.GameObjectSpawned;
+import net.runelite.api.events.NpcDespawned;
+import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.gameval.NpcID;
 import net.runelite.api.gameval.ObjectID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -22,44 +23,58 @@ import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.InteractOrder;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
-import net.runelite.client.plugins.microbot.woodcutting.Forestry.*;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.EggEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.EntlingsEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.FlowersEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.FoxEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.HivesEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.LeprechaunEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.RitualEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.RootEvent;
+import net.runelite.client.plugins.microbot.woodcutting.Forestry.StrugglingSaplingEvent;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 import net.runelite.client.plugins.microbot.woodcutting.enums.WoodcuttingTree;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
-import java.awt.*;
+import java.awt.AWTException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Pattern;
-
-import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
 @PluginDescriptor(
-        name = PluginDescriptor.Mocrosoft + "Auto Woodcutting",
-        description = "Microbot woodcutting plugin",
-        tags = {"Woodcutting", "microbot", "skilling"},
-        authors = {"Mocrosoft"},
-        version = AutoWoodcuttingPlugin.version,
-        minClientVersion = "2.0.7",
-        cardUrl = "https://chsami.github.io/Microbot-Hub/AutoWoodcuttingPlugin/assets/card.jpg",
-        iconUrl = "https://chsami.github.io/Microbot-Hub/AutoWoodcuttingPlugin/assets/icon.jpg",
+        name = PluginConstants.KSP + "Auto Woodcutter",
+        description = "Progressive woodcutting with banking or dropping",
+        tags = {"woodcutting", "microbot", "ksp"},
+        version = KSPAutoWoodcutterPlugin.version,
+        minClientVersion = "2.0.13",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin {
-    public static final String version = "1.8.1";
+public class KSPAutoWoodcutterPlugin extends Plugin implements ForestryEventPlugin {
+    public static final String version = "0.1.5";
+
     @Inject
-    @Getter(AccessLevel.MODULE)
-    public AutoWoodcuttingScript autoWoodcuttingScript;
-    @Inject
-    public AutoWoodcuttingConfig config;
+    private KSPAutoWoodcutterConfig config;
+
+    @Provides
+    KSPAutoWoodcutterConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(KSPAutoWoodcutterConfig.class);
+    }
+
     @Inject
     private OverlayManager overlayManager;
+
     @Inject
-    private AutoWoodcuttingOverlay woodcuttingOverlay;
+    private KSPAutoWoodcutterOverlay overlay;
+
+    @Inject
+    private KSPAutoWoodcutterScript script;
+
+    @Inject
+    public Rs2TileObjectCache rs2TileObjectCache;
 
     private EggEvent eggEvent;
     private EntlingsEvent entlingsEvent;
@@ -71,61 +86,41 @@ public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin
     private RootEvent rootEvent;
     private StrugglingSaplingEvent saplingEvent;
 
-    // Forestry event variables
     public final List<Rs2NpcModel> ritualCircles = new ArrayList<>();
     public ForestryEvents currentForestryEvent = ForestryEvents.NONE;
     public final GameObject[] saplingOrder = new GameObject[3];
     public final List<GameObject> saplingIngredients = new ArrayList<>(5);
-    
-    // thread-safe counter for completed forestry events
     private final AtomicInteger completedForestryEvents = new AtomicInteger(0);
 
-    private static final Pattern WOOD_CUT_PATTERN = Pattern.compile("You get (?:some|an)[\\w ]+(?:logs?|mushrooms)\\.");
-
-    @Inject
-    public Rs2TileObjectCache rs2TileObjectCache;
-
-    @Provides
-    AutoWoodcuttingConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(AutoWoodcuttingConfig.class);
-    }
 
     @Override
     protected void startUp() throws AWTException {
-        if (overlayManager != null) {
-            overlayManager.add(woodcuttingOverlay);
+        overlayManager.add(overlay);
+        if (config.enableForestry()) {
+            addEvents();
         }
-        if (config.enableForestry())
-            this.addEvents();
-        autoWoodcuttingScript.run(config);
+        script.run(config);
     }
 
+    @Override
     protected void shutDown() {
-        autoWoodcuttingScript.shutdown();
-        this.removeEvents();
+        script.shutdown();
+        removeEvents();
         ritualCircles.clear();
         currentForestryEvent = ForestryEvents.NONE;
         completedForestryEvents.set(0);
-        overlayManager.remove(woodcuttingOverlay);
+        overlayManager.remove(overlay);
     }
 
     @Subscribe
     public void onChatMessage(ChatMessage event) {
-        if (event.getType() != ChatMessageType.SPAM
-                && event.getType() != ChatMessageType.GAMEMESSAGE
-                && event.getType() != ChatMessageType.MESBOX) {
+        if (event.getType() != net.runelite.api.ChatMessageType.SPAM
+                && event.getType() != net.runelite.api.ChatMessageType.GAMEMESSAGE
+                && event.getType() != net.runelite.api.ChatMessageType.MESBOX) {
             return;
         }
 
         final var msg = event.getMessage();
-        if (WOOD_CUT_PATTERN.matcher(msg).matches()) {
-            woodcuttingOverlay.incrementLogsChopped();
-        }
-
-        if (msg.equals("you can't light a fire here.")) {
-            autoWoodcuttingScript.cannotLightFire = true;
-        }
-
         if (msg.startsWith("The sapling seems to love")) {
             int ingredientNum = msg.contains("first") ? 1 : (msg.contains("second") ? 2 : (msg.contains("third") ? 3 : -1));
             if (ingredientNum == -1) {
@@ -197,6 +192,27 @@ public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin
             case ObjectID.GATHERING_EVENT_SAPLING_INGREDIENT_5:
                 this.saplingIngredients.remove(object);
                 break;
+        }
+    }
+
+    @Subscribe
+    public void onConfigChanged(ConfigChanged ev) {
+        if (ev.getGroup().equals(KSPAutoWoodcutterConfig.configGroup)) {
+            if (ev.getKey().equals("enableForestry")) {
+                if (config.enableForestry()) {
+                    addEvents();
+                } else {
+                    removeEvents();
+                }
+            } else {
+                var key = ev.getKey();
+                var value = ev.getNewValue();
+                if (value != null && value.equals("true")) {
+                    addEvent(key);
+                } else if (value != null && value.equals("false")) {
+                    removeEvent(key);
+                }
+            }
         }
     }
 
@@ -298,29 +314,7 @@ public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin
         }
     }
 
-    @Subscribe
-    public void onConfigChanged (ConfigChanged ev){
-        if (ev.getGroup().equals(AutoWoodcuttingConfig.configGroup)) {
-            if (ev.getKey().equals("enableForestry")) {
-                if (config.enableForestry()) {
-                    this.addEvents();
-                } else {
-                    this.removeEvents();
-                }
-            } else {
-                var key = ev.getKey();
-                var value = ev.getNewValue();
-                if (value != null && value.equals("true")) {
-                    this.addEvent(key);
-                }
-                else if (value != null && value.equals("false")) {
-                    this.removeEvent(key);
-                }
-            }
-        }
-    }
-
-    private void addEvent(String key){
+    private void addEvent(String key) {
         var eventManager = Microbot.getBlockingEventManager();
         switch (key) {
             case "eggEvent":
@@ -421,14 +415,6 @@ public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin
                 break;
         }
     }
-    
-    public void incrementForestryEventCompleted() {
-        completedForestryEvents.incrementAndGet();
-    }
-    
-    public int getCompletedForestryEventCount() {
-        return completedForestryEvents.get();
-    }
 
     @Override
     public boolean isEnabled() {
@@ -445,47 +431,65 @@ public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin
         return currentForestryEvent;
     }
 
+    @Override
     public WoodcuttingTree getSelectedTree() {
-        if (autoWoodcuttingScript != null) {
-            return autoWoodcuttingScript.getActiveTree();
-        }
-        return config.TREE();
+        KSPAutoWoodcutterTree selected = resolveTargetTree();
+        return mapToWoodcuttingTree(selected);
     }
-    
-    /**
-     * Ensures inventory has space for forestry event rewards by dropping logs if needed
-     * @param requiredSlots minimum number of free slots needed
-     * @return true if enough space was made available
-     */
+
+    private KSPAutoWoodcutterTree resolveTargetTree() {
+        if (config.mode().isProgressiveMode()) {
+            int level = Microbot.getClient().getRealSkillLevel(net.runelite.api.Skill.WOODCUTTING);
+            return KSPAutoWoodcutterTree.resolveForLevel(level);
+        }
+        return config.tree();
+    }
+
+    private WoodcuttingTree mapToWoodcuttingTree(KSPAutoWoodcutterTree tree) {
+        if (tree == null) {
+            return WoodcuttingTree.TREE;
+        }
+        for (WoodcuttingTree candidate : WoodcuttingTree.values()) {
+            if (candidate.getLogID() == tree.getLogId()) {
+                return candidate;
+            }
+        }
+        return WoodcuttingTree.TREE;
+    }
+
+    @Override
     public boolean ensureInventorySpace(int requiredSlots) {
         int currentFreeSlots = 28 - Rs2Inventory.count();
         if (currentFreeSlots >= requiredSlots) {
             return true;
         }
-        
+
         WoodcuttingTree tree = getSelectedTree();
         String logName = tree.getLog();
         int slotsNeeded = requiredSlots - currentFreeSlots;
         int logsToDelete = Math.min(slotsNeeded, Rs2Inventory.count(logName));
-        
+
         if (logsToDelete <= 0) {
             log.warn("Cannot make inventory space - no logs to drop");
             return false;
         }
-        
+
         log.info("Making space for forestry rewards: dropping {} logs of {}", logsToDelete, tree.getName());
-        
+
         int actualDropped = Rs2Inventory.dropAmount(logName, logsToDelete, InteractOrder.EFFICIENT_ROW);
-        
-        sleepUntil(() -> (28 - Rs2Inventory.count()) >= requiredSlots, 2000);
-        
+
         boolean success = (28 - Rs2Inventory.count()) >= requiredSlots;
         if (!success) {
-            log.warn("Failed to create enough inventory space: dropped {} logs but still need {} slots", 
-                actualDropped, requiredSlots);
+            log.warn("Failed to create enough inventory space: dropped {} logs but still need {} slots",
+                    actualDropped, requiredSlots);
         }
-        
+
         return success;
+    }
+
+    @Override
+    public void incrementForestryEventCompleted() {
+        completedForestryEvents.incrementAndGet();
     }
 
     @Override

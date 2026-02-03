@@ -8,7 +8,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 
 import java.util.stream.Collectors;
@@ -17,15 +17,15 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Slf4j
 public class FlowersEvent implements BlockingEvent {
 
-    private final AutoWoodcuttingPlugin plugin;
-    public FlowersEvent(AutoWoodcuttingPlugin plugin) {
+    private final ForestryEventPlugin plugin;
+    public FlowersEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             var flowers = Rs2Npc.getNpcs(npc ->
                     npc.getName() != null && isFloweringBush(npc.getId())
@@ -39,7 +39,7 @@ public class FlowersEvent implements BlockingEvent {
 
     @Override
     public boolean execute() {
-        plugin.currentForestryEvent = ForestryEvents.FLOWERING_TREE;
+        plugin.setCurrentForestryEvent(ForestryEvents.FLOWERING_TREE);
         Rs2Walker.setTarget(null); // stop walking, stop moving to bank for example
         
         // ensure inventory space for strange pollen and fruits/seeds
