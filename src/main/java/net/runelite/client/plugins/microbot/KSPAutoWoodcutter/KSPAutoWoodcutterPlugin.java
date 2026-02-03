@@ -5,7 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameObject;
 import net.runelite.api.NPC;
 import net.runelite.api.events.ChatMessage;
+
 import net.runelite.client.events.ConfigChanged;
+
+import net.runelite.api.events.ConfigChanged;
+
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.NpcDespawned;
@@ -54,7 +58,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 )
 @Slf4j
 public class KSPAutoWoodcutterPlugin extends Plugin implements ForestryEventPlugin {
+
     public static final String version = "0.1.6";
+
+    public static final String version = "0.1.5";
+
 
     @Inject
     private KSPAutoWoodcutterConfig config;
