@@ -12,25 +12,25 @@ import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Slf4j
 public class RootEvent implements BlockingEvent {
 
-    private final AutoWoodcuttingPlugin plugin;
-    public RootEvent(AutoWoodcuttingPlugin plugin) {
+    private final ForestryEventPlugin plugin;
+    public RootEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
-            var root = plugin.rs2TileObjectCache.query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS).nearest();
-            var specialRoot = plugin.rs2TileObjectCache.query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS_SPECIAL).nearest();
+            var root = plugin.getTileObjectCache().query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS).nearest();
+            var specialRoot = plugin.getTileObjectCache().query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS_SPECIAL).nearest();
 
             // Is the hasAction Check needed?
             // If special root is present
@@ -51,11 +51,11 @@ public class RootEvent implements BlockingEvent {
     @Override
     public boolean execute() {
         Microbot.log("RootEvent: Executing Root event");
-        plugin.currentForestryEvent = ForestryEvents.TREE_ROOT;
+        plugin.setCurrentForestryEvent(ForestryEvents.TREE_ROOT);
         Rs2Walker.setTarget(null); // stop walking, stop moving to bank for example
         while (this.validate()) {
-            var root = plugin.rs2TileObjectCache.query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS).nearest();
-            var specialRoot = plugin.rs2TileObjectCache.query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS_SPECIAL).nearest();
+            var root = plugin.getTileObjectCache().query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS).nearest();
+            var specialRoot = plugin.getTileObjectCache().query().where(x -> x.getId() == ObjectID.GATHERING_EVENT_RISING_ROOTS_SPECIAL).nearest();
 
             // Use special attack if available
             if ( Rs2Equipment.isWearing(ItemID.DRAGON_AXE) || Rs2Equipment.isWearing(ItemID.DRAGON_AXE_2H) || Rs2Equipment.isWearing(ItemID.CRYSTAL_AXE) ||

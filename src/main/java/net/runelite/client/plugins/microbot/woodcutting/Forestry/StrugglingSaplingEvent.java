@@ -10,7 +10,7 @@ import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingScript;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 
@@ -23,7 +23,7 @@ import java.util.stream.Collectors;
 import static net.runelite.api.gameval.ObjectID.*;
 @Slf4j
 public class StrugglingSaplingEvent implements BlockingEvent {
-    private final AutoWoodcuttingPlugin plugin;
+    private final ForestryEventPlugin plugin;
     private final List<Integer> ingredientIds = List.of(
         GATHERING_EVENT_SAPLING_INGREDIENT_1,
         GATHERING_EVENT_SAPLING_INGREDIENT_2,
@@ -34,14 +34,14 @@ public class StrugglingSaplingEvent implements BlockingEvent {
         GATHERING_EVENT_SAPLING_INGREDIENT_5
     );
 
-    public StrugglingSaplingEvent(AutoWoodcuttingPlugin plugin) {
+    public StrugglingSaplingEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;        
             var strugglingSaplings = Rs2GameObject.getGameObjects(Rs2GameObject.nameMatches("Struggling sapling", false));
             if (strugglingSaplings == null) return false;
@@ -60,7 +60,7 @@ public class StrugglingSaplingEvent implements BlockingEvent {
     public boolean execute() {
         try {
             Microbot.log("StrugglingSaplingEvent: Executing Struggling Sapling event");
-            plugin.currentForestryEvent = ForestryEvents.STRUGGLING_SAPLING;
+            plugin.setCurrentForestryEvent(ForestryEvents.STRUGGLING_SAPLING);
             // Find the struggling sapling
             var sapling = Rs2GameObject.getGameObjects(Rs2GameObject.nameMatches("Struggling sapling", false))
                     .stream()
@@ -112,7 +112,7 @@ public class StrugglingSaplingEvent implements BlockingEvent {
                 } else {
                     stage = 0;
                 }
-                var correctIngredient = plugin.saplingOrder[stage];
+                var correctIngredient = plugin.getSaplingOrder()[stage];
 
                 if (correctIngredient != null) {
                     // Look for matching ingredient in our available ingredients
@@ -150,9 +150,9 @@ public class StrugglingSaplingEvent implements BlockingEvent {
             }
 
             Microbot.log("StrugglingSaplingEvent: Finished processing struggling sapling.");
-            plugin.saplingOrder[0] = null; // Reset the sapling order after processing
-            plugin.saplingOrder[1] = null;
-            plugin.saplingOrder[2] = null;
+            plugin.getSaplingOrder()[0] = null; // Reset the sapling order after processing
+            plugin.getSaplingOrder()[1] = null;
+            plugin.getSaplingOrder()[2] = null;
             plugin.incrementForestryEventCompleted();
             return true;
         }
