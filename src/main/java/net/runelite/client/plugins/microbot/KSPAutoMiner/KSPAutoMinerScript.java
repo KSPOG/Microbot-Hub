@@ -4,13 +4,17 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameObject;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.ItemID;
+import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 import java.time.Duration;
@@ -37,6 +41,20 @@ public class KSPAutoMinerScript extends Script {
             "Mithril ore",
             "Adamantite ore",
             "Runite ore"
+    );
+
+    // Requirements based on OSRS wiki pickaxe requirements.
+    private static final List<PickaxeRequirement> PICKAXE_REQUIREMENTS = Arrays.asList(
+            new PickaxeRequirement(ItemID.BRONZE_PICKAXE, 1, 1),
+            new PickaxeRequirement(ItemID.IRON_PICKAXE, 1, 1),
+            new PickaxeRequirement(ItemID.STEEL_PICKAXE, 6, 5),
+            new PickaxeRequirement(ItemID.BLACK_PICKAXE, 11, 10),
+            new PickaxeRequirement(ItemID.MITHRIL_PICKAXE, 21, 20),
+            new PickaxeRequirement(ItemID.ADAMANT_PICKAXE, 31, 30),
+            new PickaxeRequirement(ItemID.RUNE_PICKAXE, 41, 40),
+            new PickaxeRequirement(ItemID.DRAGON_PICKAXE, 61, 60),
+            new PickaxeRequirement(ItemID.INFERNAL_PICKAXE, 61, 60),
+            new PickaxeRequirement(ItemID.CRYSTAL_PICKAXE, 71, 70)
     );
 
     public static String status = "Idle";
@@ -101,7 +119,7 @@ public class KSPAutoMinerScript extends Script {
                 if (Rs2Inventory.isFull()) {
                     if (mode.isBankingMode()) {
                         status = "Banking";
-                        if (!Rs2Bank.bankItemsAndWalkBackToOriginalPosition(ALL_ORES, targetLocation)) {
+                        if (!bankOresAndUpgradePickaxe(targetLocation)) {
                             return;
                         }
                     } else {
@@ -111,7 +129,7 @@ public class KSPAutoMinerScript extends Script {
                     return;
                 }
 
-                if (Rs2Player.isMoving() || Rs2Player.isAnimating()) {
+                if (Rs2Player.isAnimating()) {
                     return;
                 }
 
@@ -160,6 +178,9 @@ public class KSPAutoMinerScript extends Script {
 
     private void updateTarget(KSPAutoMinerMode mode, KSPAutoMinerRock rockSelection) {
         int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
+        int combatLevel = Microbot.getClient().getLocalPlayer() != null
+                ? Microbot.getClient().getLocalPlayer().getCombatLevel()
+                : 0;
         if (rockSelection != selectedRock) {
             selectedRock = rockSelection;
             resetOreCounters();
@@ -187,7 +208,7 @@ public class KSPAutoMinerScript extends Script {
                 targetRock = Rock.IRON;
                 break;
             case COAL:
-                targetLocation = COAL_LOCATION;
+                targetLocation = combatLevel < 65 ? new WorldPoint(3081, 3421, 0) : COAL_LOCATION;
                 targetRock = Rock.COAL;
                 break;
             case GOLD:
@@ -312,6 +333,108 @@ public class KSPAutoMinerScript extends Script {
         lastCopperCount = Rs2Inventory.count("Copper ore");
     }
 
+
+    private boolean bankOresAndUpgradePickaxe(WorldPoint returnLocation) {
+        if (!Rs2Bank.walkToBankAndUseBank()) {
+            return false;
+        }
+        if (!Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        Rs2Bank.depositAllExcept("pickaxe");
+        upgradePickaxeIfAvailable();
+        Rs2Bank.closeBank();
+
+        if (returnLocation != null) {
+            CustomWebWalker.walkTo(returnLocation);
+        }
+        return true;
+    }
+
+    private void upgradePickaxeIfAvailable() {
+        Rs2ItemModel bestFromBank = getBestPickaxeFromBank();
+        if (bestFromBank == null) {
+            return;
+        }
+
+        Rs2ItemModel currentPickaxe = getBestPickaxeOnPlayer();
+        int currentLevel = currentPickaxe != null ? getPickaxeMiningLevel(currentPickaxe.getId()) : 0;
+        int bankLevel = getPickaxeMiningLevel(bestFromBank.getId());
+
+        if (bankLevel <= currentLevel) {
+            return;
+        }
+
+        if (getPickaxeAttackLevel(bestFromBank.getId()) > 1) {
+            Rs2ItemModel currentWeapon = Rs2Equipment.get(EquipmentInventorySlot.WEAPON);
+            Rs2Bank.withdrawAndEquip(bestFromBank.getId());
+            if (currentWeapon != null && currentWeapon.getId() != bestFromBank.getId()) {
+                Rs2Bank.depositOne(currentWeapon.getId());
+            }
+        } else {
+            if (!Rs2Inventory.hasItem(bestFromBank.getId())) {
+                Rs2Bank.withdrawOne(bestFromBank.getId());
+            }
+        }
+
+        if (currentPickaxe != null && currentPickaxe.getId() != bestFromBank.getId()
+                && Rs2Inventory.hasItem(currentPickaxe.getId())) {
+            Rs2Bank.depositOne(currentPickaxe.getId());
+        }
+    }
+
+    private Rs2ItemModel getBestPickaxeOnPlayer() {
+        Rs2ItemModel equipped = Rs2Equipment.get(EquipmentInventorySlot.WEAPON);
+        if (equipped != null && isPickaxe(equipped.getId()) && canUsePickaxe(equipped.getId())) {
+            return equipped;
+        }
+
+        return Rs2Inventory.items()
+                .filter(item -> isPickaxe(item.getId()) && canUsePickaxe(item.getId()))
+                .max((first, second) -> Integer.compare(
+                        getPickaxeMiningLevel(first.getId()),
+                        getPickaxeMiningLevel(second.getId())))
+                .orElse(null);
+    }
+
+    private Rs2ItemModel getBestPickaxeFromBank() {
+        return Rs2Bank.getAll(item -> isPickaxe(item.getId()) && canUsePickaxe(item.getId()))
+                .max((first, second) -> Integer.compare(
+                        getPickaxeMiningLevel(first.getId()),
+                        getPickaxeMiningLevel(second.getId())))
+                .orElse(null);
+    }
+
+    private boolean canUsePickaxe(int itemId) {
+        PickaxeRequirement requirement = getPickaxeRequirement(itemId);
+        return requirement != null
+                && Rs2Player.getSkillRequirement(Skill.MINING, requirement.miningLevel)
+                && Rs2Player.getSkillRequirement(Skill.ATTACK, requirement.attackLevel);
+    }
+
+    private boolean isPickaxe(int itemId) {
+        return getPickaxeRequirement(itemId) != null;
+    }
+
+    private int getPickaxeMiningLevel(int itemId) {
+        PickaxeRequirement requirement = getPickaxeRequirement(itemId);
+        return requirement != null ? requirement.miningLevel : 0;
+    }
+
+    private int getPickaxeAttackLevel(int itemId) {
+        PickaxeRequirement requirement = getPickaxeRequirement(itemId);
+        return requirement != null ? requirement.attackLevel : 0;
+    }
+
+    private PickaxeRequirement getPickaxeRequirement(int itemId) {
+        return PICKAXE_REQUIREMENTS.stream()
+                .filter(requirement -> requirement.itemId == itemId)
+                .findFirst()
+                .orElse(null);
+    }
+
+
     private GameObject findNearestRock(WorldPoint searchCenter, int radius) {
         if (searchCenter == null || targetRock == null) {
             return null;
@@ -377,5 +500,19 @@ public class KSPAutoMinerScript extends Script {
             return Microbot.getClient().getRealSkillLevel(Skill.MINING) >= miningLevel;
         }
     }
+
+
+    private static final class PickaxeRequirement {
+        private final int itemId;
+        private final int miningLevel;
+        private final int attackLevel;
+
+        private PickaxeRequirement(int itemId, int miningLevel, int attackLevel) {
+            this.itemId = itemId;
+            this.miningLevel = miningLevel;
+            this.attackLevel = attackLevel;
+        }
+    }
+
 
 }
