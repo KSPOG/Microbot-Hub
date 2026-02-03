@@ -6,12 +6,12 @@ import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.time.Duration;
 import java.util.Arrays;
@@ -65,6 +65,11 @@ public class KSPAutoMinerScript extends Script {
         lastInventoryCount = 0;
         status = "Starting";
         modeLabel = config.mode().toString();
+        Rs2Antiban.resetAntibanSettings();
+        if (config.enableAntiban()) {
+            Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
+            Rs2AntibanSettings.actionCooldownChance = 0.2;
+        }
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
@@ -74,7 +79,7 @@ public class KSPAutoMinerScript extends Script {
                 if (!Microbot.isLoggedIn()) {
                     return;
                 }
-                if (Rs2AntibanSettings.actionCooldownActive) {
+                if (config.enableAntiban() && Rs2AntibanSettings.actionCooldownActive) {
                     return;
                 }
 
@@ -112,11 +117,11 @@ public class KSPAutoMinerScript extends Script {
 
                 if (Rs2Player.getWorldLocation().distanceTo(targetLocation) > 6) {
                     status = "Walking to rocks";
-                    Rs2Walker.walkTo(targetLocation);
+                    CustomWebWalker.walkTo(targetLocation);
                     return;
                 }
 
-                GameObject rock = Rs2GameObject.findReachableObject(targetRock.getName(), true, 12, targetLocation);
+                GameObject rock = findNearestRock(targetLocation, 12);
                 if (rock == null) {
                     status = "No rocks found";
                     return;
@@ -125,6 +130,10 @@ public class KSPAutoMinerScript extends Script {
                 status = "Mining " + targetRock.getName();
                 if (Rs2GameObject.interact(rock)) {
                     Rs2Player.waitForXpDrop(Skill.MINING, true);
+                    if (config.enableAntiban()) {
+                        Rs2Antiban.actionCooldown();
+                        Rs2Antiban.takeMicroBreakByChance();
+                    }
                 }
             } catch (Exception ex) {
                 Microbot.log("KSPAutoMiner error: " + ex.getMessage());
@@ -138,6 +147,7 @@ public class KSPAutoMinerScript extends Script {
     public void shutdown() {
         super.shutdown();
         status = "Stopped";
+        Rs2Antiban.resetAntibanSettings();
     }
 
     public static Duration getRuntime() {
@@ -300,6 +310,20 @@ public class KSPAutoMinerScript extends Script {
         lastInventoryCount = countRelevantOres();
         lastTinCount = Rs2Inventory.count("Tin ore");
         lastCopperCount = Rs2Inventory.count("Copper ore");
+    }
+
+    private GameObject findNearestRock(WorldPoint searchCenter, int radius) {
+        if (searchCenter == null || targetRock == null) {
+            return null;
+        }
+
+        return Rs2GameObject.getGameObjects(Rs2GameObject.nameMatches(targetRock.getName(), false), searchCenter, radius)
+                .stream()
+                .filter(Rs2GameObject::isReachable)
+                .min((first, second) -> Integer.compare(
+                        first.getWorldLocation().distanceTo(Rs2Player.getWorldLocation()),
+                        second.getWorldLocation().distanceTo(Rs2Player.getWorldLocation())))
+                .orElse(null);
     }
 
     private void dropOres() {
