@@ -121,7 +121,7 @@ public class KSPAutoMinerScript extends Script {
                     return;
                 }
 
-                GameObject rock = Rs2GameObject.findReachableObject(targetRock.getName(), true, 12, targetLocation);
+                GameObject rock = findNearestRock(targetLocation, 12);
                 if (rock == null) {
                     status = "No rocks found";
                     return;
@@ -310,6 +310,20 @@ public class KSPAutoMinerScript extends Script {
         lastInventoryCount = countRelevantOres();
         lastTinCount = Rs2Inventory.count("Tin ore");
         lastCopperCount = Rs2Inventory.count("Copper ore");
+    }
+
+    private GameObject findNearestRock(WorldPoint searchCenter, int radius) {
+        if (searchCenter == null || targetRock == null) {
+            return null;
+        }
+
+        return Rs2GameObject.getGameObjects(Rs2GameObject.nameMatches(targetRock.getName(), false), searchCenter, radius)
+                .stream()
+                .filter(Rs2GameObject::isReachable)
+                .min((first, second) -> Integer.compare(
+                        first.getWorldLocation().distanceTo(Rs2Player.getWorldLocation()),
+                        second.getWorldLocation().distanceTo(Rs2Player.getWorldLocation())))
+                .orElse(null);
     }
 
     private void dropOres() {
