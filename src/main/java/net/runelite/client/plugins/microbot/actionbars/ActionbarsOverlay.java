@@ -1,8 +1,14 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
 import net.runelite.api.Client;
+
 import net.runelite.client.config.Keybind;
 import net.runelite.client.game.ItemManager;
+
+
+import net.runelite.client.config.Keybind;
+
+
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -18,7 +24,9 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.geom.RoundRectangle2D;
+
 import java.awt.image.BufferedImage;
+
 import java.util.List;
 
 public class ActionbarsOverlay extends Overlay {
@@ -35,6 +43,7 @@ public class ActionbarsOverlay extends Overlay {
 
     private final Client client;
     private final ActionbarsConfig config;
+
     private final ItemManager itemManager;
 
     @Inject
@@ -42,6 +51,13 @@ public class ActionbarsOverlay extends Overlay {
         this.client = client;
         this.config = config;
         this.itemManager = itemManager;
+
+
+    @Inject
+    public ActionbarsOverlay(Client client, ActionbarsConfig config) {
+        this.client = client;
+        this.config = config;
+
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
         setPriority(OverlayPriority.LOW);
@@ -98,9 +114,18 @@ public class ActionbarsOverlay extends Overlay {
             if (label.isBlank() && slot != null) {
                 label = slot.getAction().getFallbackLabel();
             }
+
             drawSlotIcon(graphics, currentX, slotY, i);
             drawSlotLabel(graphics, currentX, slotY + SLOT_SIZE - 10, label);
             drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, getKeyLabel(i));
+
+            drawSlotLabel(graphics, currentX, slotY + SLOT_SIZE - 10, label);
+
+            drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, getKeyLabel(i));
+
+            drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, KEY_LABELS[i]);
+
+
         }
         drawBarIndicator(graphics, x + 8, y + 14, activeIndex, bars.size());
         graphics.setFont(prevFont);
@@ -132,6 +157,7 @@ public class ActionbarsOverlay extends Overlay {
     }
 
     private void drawKeyLabel(Graphics2D graphics, int centerX, int baselineY, String label) {
+
         if (label == null || label.isBlank()) {
             return;
         }
@@ -141,6 +167,7 @@ public class ActionbarsOverlay extends Overlay {
             clipped = clipped.substring(0, clipped.length() - 1);
         }
         label = clipped;
+
         int textWidth = graphics.getFontMetrics().stringWidth(label);
         int textX = centerX + (SLOT_SIZE - textWidth) / 2;
         graphics.setColor(new Color(205, 210, 220, 200));
@@ -162,6 +189,7 @@ public class ActionbarsOverlay extends Overlay {
         graphics.drawString(clipped, textX, baselineY);
     }
 
+
     private void drawSlotIcon(Graphics2D graphics, int x, int y, int index) {
         int itemId = getItemIdForIndex(index);
         if (itemId <= 0) {
@@ -177,11 +205,13 @@ public class ActionbarsOverlay extends Overlay {
         graphics.drawImage(image, iconX, iconY, iconSize, iconSize, null);
     }
 
+
     private void drawBarIndicator(Graphics2D graphics, int x, int y, int activeIndex, int totalBars) {
         String text = "Bar " + activeIndex + "/" + totalBars;
         graphics.setColor(new Color(180, 188, 200, 200));
         graphics.drawString(text, x, y);
     }
+
 
     private String getKeyLabel(int index) {
         Keybind keybind = getKeybindForIndex(index);
@@ -225,6 +255,7 @@ public class ActionbarsOverlay extends Overlay {
         }
     }
 
+
     private int getItemIdForIndex(int index) {
         switch (index) {
             case 0:
@@ -255,4 +286,5 @@ public class ActionbarsOverlay extends Overlay {
                 return -1;
         }
     }
+
 }

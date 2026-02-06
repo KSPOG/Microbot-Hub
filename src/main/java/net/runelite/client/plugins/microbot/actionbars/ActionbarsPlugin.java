@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
 import com.google.inject.Provides;
+
 import net.runelite.api.KeyCode;
 import net.runelite.api.MenuAction;
 import net.runelite.api.events.MenuEntryAdded;
@@ -8,6 +9,12 @@ import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.Keybind;
 import net.runelite.client.eventbus.Subscribe;
+
+import net.runelite.client.config.ConfigManager;
+
+import net.runelite.client.config.Keybind;
+
+
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -19,7 +26,13 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 import java.awt.AWTException;
 import java.awt.event.KeyEvent;
+
 import java.util.ArrayList;
+
+
+import java.util.ArrayList;
+
+
 import java.util.List;
 
 @PluginDescriptor(
@@ -33,7 +46,14 @@ import java.util.List;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 public class ActionbarsPlugin extends Plugin implements KeyListener {
+
     public static final String version = "1.1.2";
+
+
+    public static final String version = "1.1.1";
+
+    public static final String version = "1.1.0";
+
 
     @Inject
     private OverlayManager overlayManager;
@@ -112,6 +132,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
     public void keyReleased(KeyEvent e) {
     }
 
+
     @Subscribe
     public void onMenuEntryAdded(MenuEntryAdded event) {
         if (!Microbot.getClient().isKeyPressed(KeyCode.KC_SHIFT)) {
@@ -158,6 +179,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
         );
     }
 
+
     private void shiftActiveBar(int delta) {
         List<ActionbarsBar> bars = ActionbarsDefinitions.parseBars(config.actionBars());
         int currentIndex = ActionbarsDefinitions.clampActiveIndex(bars, config.activeBarIndex());
@@ -172,6 +194,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
     }
 
     private Integer getSlotIndex(KeyEvent e) {
+
         List<Keybind> keybinds = getSlotKeybinds();
         for (int i = 0; i < keybinds.size(); i++) {
             Keybind keybind = keybinds.get(i);
@@ -179,6 +202,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
                 return i;
             }
         }
+
 
         switch (e.getKeyCode()) {
             case KeyEvent.VK_1:
@@ -210,6 +234,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
         }
     }
 
+
     private List<Keybind> getSlotKeybinds() {
         List<Keybind> keybinds = new ArrayList<>();
         keybinds.add(config.slot1Key());
@@ -227,6 +252,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
         return keybinds;
     }
 
+
     private boolean isItemMenu(MenuAction action) {
         return action == MenuAction.ITEM_FIRST_OPTION;
     }
@@ -242,4 +268,5 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
             return -1;
         }
     }
+
 }

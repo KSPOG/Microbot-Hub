@@ -15,6 +15,7 @@ public interface ActionbarsConfig extends Config {
     )
     String actionBarsSection = "actionBarsSection";
 
+
     @ConfigSection(
             name = "Slot Keybinds",
             description = "Customize hotkeys for each action bar slot",
@@ -22,12 +23,14 @@ public interface ActionbarsConfig extends Config {
     )
     String slotKeysSection = "slotKeysSection";
 
+
     @ConfigSection(
             name = "Slot Icons",
             description = "Bind inventory items to show as slot icons",
             position = 2
     )
     String slotIconsSection = "slotIconsSection";
+
 
     @ConfigItem(
             keyName = "activeBarIndex",
@@ -77,6 +80,7 @@ public interface ActionbarsConfig extends Config {
                 + "|Quick=TOGGLE_PRAYER:THICK_SKIN|Food=EAT_FAST_FOOD|Drink=DRINK_PRAYER_POTION"
                 + "|---=NONE|---=NONE|---=NONE";
     }
+
 
     @ConfigItem(
             keyName = "slot1Key",
@@ -209,6 +213,7 @@ public interface ActionbarsConfig extends Config {
     default Keybind slot12Key() {
         return Keybind.NOT_SET;
     }
+
 
     @ConfigItem(
             keyName = "slot1ItemId",
