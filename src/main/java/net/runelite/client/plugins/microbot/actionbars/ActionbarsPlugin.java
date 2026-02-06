@@ -36,7 +36,11 @@ import java.util.Set;
 )
 public class ActionbarsPlugin extends Plugin {
 
+
     public static final String version = "1.2.1";
+
+    public static final String version = "1.2.0";
+
 
     private static final Logger log = LoggerFactory.getLogger(ActionbarsPlugin.class);
     private static final Set<String> IGNORED_ENTRIES = Set.of("Cancel", "Examine");
