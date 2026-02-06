@@ -7,7 +7,15 @@ import net.runelite.client.plugins.microbot.actionbars.ActionBar;
 import net.runelite.client.plugins.microbot.actionbars.MenuEntryManager;
 import net.runelite.client.plugins.microbot.actionbars.bar.ActionBarManager;
 import net.runelite.client.ui.FontManager;
+
+import net.runelite.client.plugins.microbot.actionbars.ActionbarsPlugin;
+import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPanel;
+import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.OverlayPriority;
+
+import net.runelite.client.ui.overlay.OverlayPanel;
+
 import net.runelite.client.ui.overlay.components.ImageComponent;
 import net.runelite.client.ui.overlay.components.LineComponent;
 
@@ -25,6 +33,16 @@ public class ActionBarOverlay extends OverlayPanel {
             new ImageComponent(new BufferedImage(36, 32, BufferedImage.TYPE_INT_ARGB));
 
     @Inject
+
+    public ActionBarOverlay(ActionbarsPlugin plugin) {
+        super(plugin);
+        setPosition(OverlayPosition.DYNAMIC);
+        setLayer(OverlayLayer.ABOVE_WIDGETS);
+        setPriority(OverlayPriority.LOW);
+        setMovable(true);
+    }
+
+    @Inject
     private ActionBarManager actionBarManager;
 
     @Inject
@@ -34,6 +52,10 @@ public class ActionBarOverlay extends OverlayPanel {
 
     @Override
     public Dimension render(java.awt.Graphics2D graphics) {
+
+        panelComponent.getChildren().clear();
+        panelComponent.setPreferredSize(new Dimension(ActionBar.NUM_ACTIONS * 36, 32));
+
         Action[] actions = actionBarManager.getActiveBar().getActions();
         actionButtons = new ArrayList<>();
 
