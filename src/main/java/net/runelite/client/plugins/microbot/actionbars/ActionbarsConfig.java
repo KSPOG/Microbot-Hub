@@ -24,6 +24,14 @@ public interface ActionbarsConfig extends Config {
     String slotKeysSection = "slotKeysSection";
 
 
+    @ConfigSection(
+            name = "Slot Icons",
+            description = "Bind inventory items to show as slot icons",
+            position = 2
+    )
+    String slotIconsSection = "slotIconsSection";
+
+
     @ConfigItem(
             keyName = "activeBarIndex",
             name = "Active bar (1-based)",
@@ -204,5 +212,138 @@ public interface ActionbarsConfig extends Config {
     )
     default Keybind slot12Key() {
         return Keybind.NOT_SET;
+    }
+
+
+    @ConfigItem(
+            keyName = "slot1ItemId",
+            name = "Slot 1 item",
+            description = "Item id for slot 1",
+            position = 0,
+            section = slotIconsSection
+    )
+    default int slot1ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot2ItemId",
+            name = "Slot 2 item",
+            description = "Item id for slot 2",
+            position = 1,
+            section = slotIconsSection
+    )
+    default int slot2ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot3ItemId",
+            name = "Slot 3 item",
+            description = "Item id for slot 3",
+            position = 2,
+            section = slotIconsSection
+    )
+    default int slot3ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot4ItemId",
+            name = "Slot 4 item",
+            description = "Item id for slot 4",
+            position = 3,
+            section = slotIconsSection
+    )
+    default int slot4ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot5ItemId",
+            name = "Slot 5 item",
+            description = "Item id for slot 5",
+            position = 4,
+            section = slotIconsSection
+    )
+    default int slot5ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot6ItemId",
+            name = "Slot 6 item",
+            description = "Item id for slot 6",
+            position = 5,
+            section = slotIconsSection
+    )
+    default int slot6ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot7ItemId",
+            name = "Slot 7 item",
+            description = "Item id for slot 7",
+            position = 6,
+            section = slotIconsSection
+    )
+    default int slot7ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot8ItemId",
+            name = "Slot 8 item",
+            description = "Item id for slot 8",
+            position = 7,
+            section = slotIconsSection
+    )
+    default int slot8ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot9ItemId",
+            name = "Slot 9 item",
+            description = "Item id for slot 9",
+            position = 8,
+            section = slotIconsSection
+    )
+    default int slot9ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot10ItemId",
+            name = "Slot 10 item",
+            description = "Item id for slot 10",
+            position = 9,
+            section = slotIconsSection
+    )
+    default int slot10ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot11ItemId",
+            name = "Slot 11 item",
+            description = "Item id for slot 11",
+            position = 10,
+            section = slotIconsSection
+    )
+    default int slot11ItemId() {
+        return -1;
+    }
+
+    @ConfigItem(
+            keyName = "slot12ItemId",
+            name = "Slot 12 item",
+            description = "Item id for slot 12",
+            position = 11,
+            section = slotIconsSection
+    )
+    default int slot12ItemId() {
+        return -1;
     }
 }

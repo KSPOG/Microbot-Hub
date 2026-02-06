@@ -1,9 +1,19 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
 import com.google.inject.Provides;
+
+import net.runelite.api.KeyCode;
+import net.runelite.api.MenuAction;
+import net.runelite.api.events.MenuEntryAdded;
+import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.config.Keybind;
+import net.runelite.client.eventbus.Subscribe;
+
 import net.runelite.client.config.ConfigManager;
 
 import net.runelite.client.config.Keybind;
+
 
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
@@ -19,6 +29,10 @@ import java.awt.event.KeyEvent;
 
 import java.util.ArrayList;
 
+
+import java.util.ArrayList;
+
+
 import java.util.List;
 
 @PluginDescriptor(
@@ -32,6 +46,9 @@ import java.util.List;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 public class ActionbarsPlugin extends Plugin implements KeyListener {
+
+    public static final String version = "1.1.2";
+
 
     public static final String version = "1.1.1";
 
@@ -115,6 +132,54 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
     public void keyReleased(KeyEvent e) {
     }
 
+
+    @Subscribe
+    public void onMenuEntryAdded(MenuEntryAdded event) {
+        if (!Microbot.getClient().isKeyPressed(KeyCode.KC_SHIFT)) {
+            return;
+        }
+
+        if (!isItemMenu(event.getType())) {
+            return;
+        }
+
+        for (int slot = 1; slot <= ActionbarsDefinitions.SLOT_COUNT; slot++) {
+            String option = "Bind Action Bar Slot " + slot;
+            Microbot.getClient().createMenuEntry(1)
+                    .setOption(option)
+                    .setTarget(event.getTarget())
+                    .setParam0(event.getActionParam0())
+                    .setParam1(event.getActionParam1())
+                    .setIdentifier(event.getIdentifier())
+                    .setType(MenuAction.RUNELITE)
+                    .onClick(this::onMenuOptionClicked);
+        }
+    }
+
+    @Subscribe
+    public void onMenuOptionClicked(MenuOptionClicked event) {
+        if (!event.getMenuOption().startsWith("Bind Action Bar Slot ")) {
+            return;
+        }
+
+        int slotNumber = parseSlotNumber(event.getMenuOption());
+        if (slotNumber < 1 || slotNumber > ActionbarsDefinitions.SLOT_COUNT) {
+            return;
+        }
+
+        int itemId = event.getId();
+        if (itemId <= 0) {
+            return;
+        }
+
+        Microbot.getConfigManager().setConfiguration(
+                "actionbars",
+                "slot" + slotNumber + "ItemId",
+                itemId
+        );
+    }
+
+
     private void shiftActiveBar(int delta) {
         List<ActionbarsBar> bars = ActionbarsDefinitions.parseBars(config.actionBars());
         int currentIndex = ActionbarsDefinitions.clampActiveIndex(bars, config.activeBarIndex());
@@ -185,6 +250,23 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
         keybinds.add(config.slot11Key());
         keybinds.add(config.slot12Key());
         return keybinds;
+    }
+
+
+    private boolean isItemMenu(MenuAction action) {
+        return action == MenuAction.ITEM_FIRST_OPTION;
+    }
+
+    private int parseSlotNumber(String option) {
+        String[] parts = option.split(" ");
+        if (parts.length == 0) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(parts[parts.length - 1]);
+        } catch (NumberFormatException ex) {
+            return -1;
+        }
     }
 
 }
