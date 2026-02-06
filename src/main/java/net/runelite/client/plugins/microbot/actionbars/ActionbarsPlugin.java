@@ -37,10 +37,7 @@ import java.util.Set;
 public class ActionbarsPlugin extends Plugin {
 
 
-    public static final String version = "1.2.1";
-
-    public static final String version = "1.2.0";
-
+    public static final String version = "1.2.2";
 
     private static final Logger log = LoggerFactory.getLogger(ActionbarsPlugin.class);
     private static final Set<String> IGNORED_ENTRIES = Set.of("Cancel", "Examine");
@@ -51,13 +48,50 @@ public class ActionbarsPlugin extends Plugin {
     @Inject
     private ClientThread clientThread;
 
-    @Inject
-    private OverlayManager overlayManager;
+
+
+    public static final String version = "1.2.1";
+
+    public static final String version = "1.2.0";
+
+
+    private static final Logger log = LoggerFactory.getLogger(ActionbarsPlugin.class);
+    private static final Set<String> IGNORED_ENTRIES = Set.of("Cancel", "Examine");
+
 
     @Inject
+    private Client client;
+
+    @Inject
+
     private KeyManager keyManager;
 
     @Inject
+    private ActionBarManager actionBarManager;
+    private ClientThread clientThread;
+
+    @Inject
+    private OverlayManager overlayManager;
+
+
+    @Inject
+    private MenuEntryManager menuEntryManager;
+
+    @Inject
+
+    private KeybindListener keybindListener;
+
+    @Inject
+    private ActionBarOverlay actionBarOverlay;
+
+    @Override
+    protected void startUp() throws AWTException {
+        actionBarManager.startUp();
+        overlayManager.add(actionBarOverlay);
+        keyManager.registerKeyListener(keybindListener);
+    }
+
+
     private ActionBarManager actionBarManager;
 
     @Inject

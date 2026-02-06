@@ -35,6 +35,11 @@ public class KeybindListener implements KeyListener {
     @Override
     public void keyPressed(KeyEvent e) {
         Action[] actions = actionBarManager.getActiveActions();
+
+        if (actions == null) {
+            return;
+        }
+
         for (Action action : actions) {
             if (action == null) {
                 continue;
@@ -58,6 +63,10 @@ public class KeybindListener implements KeyListener {
     @Override
     public void keyReleased(KeyEvent e) {
         Action[] actions = actionBarManager.getActiveActions();
+
+        if (actions == null) {
+            return;
+        }
         for (Action action : actions) {
             if (action == null) {
                 continue;
