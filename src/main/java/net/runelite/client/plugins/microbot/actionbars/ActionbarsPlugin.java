@@ -2,7 +2,9 @@ package net.runelite.client.plugins.microbot.actionbars;
 
 import com.google.inject.Provides;
 import net.runelite.client.config.ConfigManager;
+
 import net.runelite.client.config.Keybind;
+
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
@@ -14,7 +16,9 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 import java.awt.AWTException;
 import java.awt.event.KeyEvent;
+
 import java.util.ArrayList;
+
 import java.util.List;
 
 @PluginDescriptor(
@@ -28,7 +32,11 @@ import java.util.List;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 public class ActionbarsPlugin extends Plugin implements KeyListener {
+
     public static final String version = "1.1.1";
+
+    public static final String version = "1.1.0";
+
 
     @Inject
     private OverlayManager overlayManager;
@@ -121,6 +129,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
     }
 
     private Integer getSlotIndex(KeyEvent e) {
+
         List<Keybind> keybinds = getSlotKeybinds();
         for (int i = 0; i < keybinds.size(); i++) {
             Keybind keybind = keybinds.get(i);
@@ -128,6 +137,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
                 return i;
             }
         }
+
 
         switch (e.getKeyCode()) {
             case KeyEvent.VK_1:
@@ -159,6 +169,7 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
         }
     }
 
+
     private List<Keybind> getSlotKeybinds() {
         List<Keybind> keybinds = new ArrayList<>();
         keybinds.add(config.slot1Key());
@@ -175,4 +186,5 @@ public class ActionbarsPlugin extends Plugin implements KeyListener {
         keybinds.add(config.slot12Key());
         return keybinds;
     }
+
 }

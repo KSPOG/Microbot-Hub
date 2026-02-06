@@ -1,7 +1,9 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
 import net.runelite.api.Client;
+
 import net.runelite.client.config.Keybind;
+
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -95,7 +97,11 @@ public class ActionbarsOverlay extends Overlay {
                 label = slot.getAction().getFallbackLabel();
             }
             drawSlotLabel(graphics, currentX, slotY + SLOT_SIZE - 10, label);
+
             drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, getKeyLabel(i));
+
+            drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, KEY_LABELS[i]);
+
         }
         drawBarIndicator(graphics, x + 8, y + 14, activeIndex, bars.size());
         graphics.setFont(prevFont);
@@ -127,6 +133,7 @@ public class ActionbarsOverlay extends Overlay {
     }
 
     private void drawKeyLabel(Graphics2D graphics, int centerX, int baselineY, String label) {
+
         if (label == null || label.isBlank()) {
             return;
         }
@@ -136,6 +143,7 @@ public class ActionbarsOverlay extends Overlay {
             clipped = clipped.substring(0, clipped.length() - 1);
         }
         label = clipped;
+
         int textWidth = graphics.getFontMetrics().stringWidth(label);
         int textX = centerX + (SLOT_SIZE - textWidth) / 2;
         graphics.setColor(new Color(205, 210, 220, 200));
@@ -162,6 +170,7 @@ public class ActionbarsOverlay extends Overlay {
         graphics.setColor(new Color(180, 188, 200, 200));
         graphics.drawString(text, x, y);
     }
+
 
     private String getKeyLabel(int index) {
         Keybind keybind = getKeybindForIndex(index);
@@ -204,4 +213,5 @@ public class ActionbarsOverlay extends Overlay {
                 return Keybind.NOT_SET;
         }
     }
+
 }
