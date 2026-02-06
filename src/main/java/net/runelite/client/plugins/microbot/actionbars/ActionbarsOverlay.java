@@ -1,14 +1,8 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
 import net.runelite.api.Client;
-
 import net.runelite.client.config.Keybind;
 import net.runelite.client.game.ItemManager;
-
-
-import net.runelite.client.config.Keybind;
-
-
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -24,9 +18,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.geom.RoundRectangle2D;
-
 import java.awt.image.BufferedImage;
-
 import java.util.List;
 
 public class ActionbarsOverlay extends Overlay {
@@ -51,13 +43,6 @@ public class ActionbarsOverlay extends Overlay {
         this.client = client;
         this.config = config;
         this.itemManager = itemManager;
-
-
-    @Inject
-    public ActionbarsOverlay(Client client, ActionbarsConfig config) {
-        this.client = client;
-        this.config = config;
-
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_WIDGETS);
         setPriority(OverlayPriority.LOW);
@@ -118,14 +103,6 @@ public class ActionbarsOverlay extends Overlay {
             drawSlotIcon(graphics, currentX, slotY, i);
             drawSlotLabel(graphics, currentX, slotY + SLOT_SIZE - 10, label);
             drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, getKeyLabel(i));
-
-            drawSlotLabel(graphics, currentX, slotY + SLOT_SIZE - 10, label);
-
-            drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, getKeyLabel(i));
-
-            drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, KEY_LABELS[i]);
-
-
         }
         drawBarIndicator(graphics, x + 8, y + 14, activeIndex, bars.size());
         graphics.setFont(prevFont);

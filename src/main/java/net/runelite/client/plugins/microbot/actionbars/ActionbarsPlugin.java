@@ -1,39 +1,28 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
-import com.google.inject.Provides;
-
+import net.runelite.api.Client;
 import net.runelite.api.KeyCode;
 import net.runelite.api.MenuAction;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.events.MenuEntryAdded;
-import net.runelite.api.events.MenuOptionClicked;
-import net.runelite.client.config.ConfigManager;
-import net.runelite.client.config.Keybind;
+import net.runelite.api.events.PostMenuSort;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.Subscribe;
-
-import net.runelite.client.config.ConfigManager;
-
-import net.runelite.client.config.Keybind;
-
-
 import net.runelite.client.input.KeyListener;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.plugins.microbot.actionbars.bar.ActionBarManager;
+import net.runelite.client.plugins.microbot.actionbars.overlay.ActionBarOverlay;
 import net.runelite.client.ui.overlay.OverlayManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import java.awt.AWTException;
 import java.awt.event.KeyEvent;
-
-import java.util.ArrayList;
-
-
-import java.util.ArrayList;
-
-
-import java.util.List;
+import java.util.Set;
 
 @PluginDescriptor(
         name = PluginConstants.DEFAULT_PREFIX + "Action Bars",
@@ -45,228 +34,118 @@ import java.util.List;
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
-public class ActionbarsPlugin extends Plugin implements KeyListener {
+public class ActionbarsPlugin extends Plugin {
 
-    public static final String version = "1.1.2";
+    public static final String version = "1.2.1";
 
+    private static final Logger log = LoggerFactory.getLogger(ActionbarsPlugin.class);
+    private static final Set<String> IGNORED_ENTRIES = Set.of("Cancel", "Examine");
 
-    public static final String version = "1.1.1";
+    @Inject
+    private Client client;
 
-    public static final String version = "1.1.0";
-
+    @Inject
+    private ClientThread clientThread;
 
     @Inject
     private OverlayManager overlayManager;
 
     @Inject
-    private ActionbarsOverlay actionbarsOverlay;
-
-    @Inject
-    private ActionbarsConfig config;
-
-    @Inject
     private KeyManager keyManager;
 
-    @Provides
-    ActionbarsConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(ActionbarsConfig.class);
-    }
+    @Inject
+    private ActionBarManager actionBarManager;
+
+    @Inject
+    private MenuEntryManager menuEntryManager;
+
+    @Inject
+    private KeybindListener keybindListener;
+
+    @Inject
+    private ActionBarOverlay actionBarOverlay;
 
     @Override
     protected void startUp() throws AWTException {
-        if (overlayManager != null) {
-            overlayManager.add(actionbarsOverlay);
-        }
-        keyManager.registerKeyListener(this);
+        actionBarManager.startUp();
+        overlayManager.add(actionBarOverlay);
+        keyManager.registerKeyListener(keybindListener);
     }
 
     @Override
     protected void shutDown() {
-        keyManager.unregisterKeyListener(this);
-        if (overlayManager != null) {
-            overlayManager.remove(actionbarsOverlay);
-        }
+        actionBarManager.shutDown();
+        overlayManager.remove(actionBarOverlay);
+        keyManager.unregisterKeyListener(keybindListener);
     }
-
-    @Override
-    public void keyTyped(KeyEvent e) {
-    }
-
-    @Override
-    public void keyPressed(KeyEvent e) {
-        if (config.nextBarHotkey().matches(e)) {
-            e.consume();
-            shiftActiveBar(1);
-            return;
-        }
-
-        if (config.previousBarHotkey().matches(e)) {
-            e.consume();
-            shiftActiveBar(-1);
-            return;
-        }
-
-        if (!Microbot.isLoggedIn()) {
-            return;
-        }
-
-        Integer slotIndex = getSlotIndex(e);
-        if (slotIndex == null) {
-            return;
-        }
-
-        ActionbarsBar activeBar = ActionbarsDefinitions.resolveActiveBar(
-                config.actionBars(),
-                config.activeBarIndex()
-        );
-        ActionbarsSlot slot = activeBar.getSlot(slotIndex);
-        if (slot == null || slot.getAction().getType() == ActionbarsActionType.NONE) {
-            return;
-        }
-
-        e.consume();
-        slot.getAction().execute();
-    }
-
-    @Override
-    public void keyReleased(KeyEvent e) {
-    }
-
 
     @Subscribe
     public void onMenuEntryAdded(MenuEntryAdded event) {
-        if (!Microbot.getClient().isKeyPressed(KeyCode.KC_SHIFT)) {
-            return;
-        }
-
-        if (!isItemMenu(event.getType())) {
-            return;
-        }
-
-        for (int slot = 1; slot <= ActionbarsDefinitions.SLOT_COUNT; slot++) {
-            String option = "Bind Action Bar Slot " + slot;
-            Microbot.getClient().createMenuEntry(1)
-                    .setOption(option)
+        if (client.isKeyPressed(KeyCode.KC_SHIFT) && !IGNORED_ENTRIES.contains(event.getOption())) {
+            MenuEntry menuEntry = event.getMenuEntry();
+            client.createMenuEntry(-1)
+                    .setOption("Bind action bar: " + menuEntry.getOption())
                     .setTarget(event.getTarget())
-                    .setParam0(event.getActionParam0())
-                    .setParam1(event.getActionParam1())
-                    .setIdentifier(event.getIdentifier())
                     .setType(MenuAction.RUNELITE)
-                    .onClick(this::onMenuOptionClicked);
+                    .onClick(clicked -> {
+                        log.info("Binding action bar entry {} {}", menuEntry.getOption(), menuEntry.getTarget());
+                        createAction(SavedAction.fromMenuEntry(menuEntry));
+                    });
         }
+
+        menuEntryManager.createMenuEntries();
     }
 
     @Subscribe
-    public void onMenuOptionClicked(MenuOptionClicked event) {
-        if (!event.getMenuOption().startsWith("Bind Action Bar Slot ")) {
-            return;
-        }
-
-        int slotNumber = parseSlotNumber(event.getMenuOption());
-        if (slotNumber < 1 || slotNumber > ActionbarsDefinitions.SLOT_COUNT) {
-            return;
-        }
-
-        int itemId = event.getId();
-        if (itemId <= 0) {
-            return;
-        }
-
-        Microbot.getConfigManager().setConfiguration(
-                "actionbars",
-                "slot" + slotNumber + "ItemId",
-                itemId
-        );
+    public void onPostMenuSort(PostMenuSort event) {
+        menuEntryManager.setHasCreatedEntries(false);
     }
 
+    private void createAction(SavedAction savedAction) {
+        sendChatMessage("Binding " + savedAction.getName() + ".");
+        sendChatMessage("Press esc to cancel.");
+        keyManager.registerKeyListener(new KeyListener() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                    keyManager.unregisterKeyListener(this);
+                    sendChatMessage("Cancelled.");
+                    return;
+                }
 
-    private void shiftActiveBar(int delta) {
-        List<ActionbarsBar> bars = ActionbarsDefinitions.parseBars(config.actionBars());
-        int currentIndex = ActionbarsDefinitions.clampActiveIndex(bars, config.activeBarIndex());
-        int totalBars = bars.size();
-        int nextIndex = currentIndex + delta;
-        if (nextIndex < 1) {
-            nextIndex = totalBars;
-        } else if (nextIndex > totalBars) {
-            nextIndex = 1;
-        }
-        ActionbarsDefinitions.updateActiveBarIndex(nextIndex);
-    }
+                if (e.getKeyCode() == KeyEvent.VK_ALT
+                        || e.getKeyCode() == KeyEvent.VK_CONTROL
+                        || e.getKeyCode() == KeyEvent.VK_META
+                        || e.getKeyCode() == KeyEvent.VK_SHIFT) {
+                    return;
+                }
 
-    private Integer getSlotIndex(KeyEvent e) {
-
-        List<Keybind> keybinds = getSlotKeybinds();
-        for (int i = 0; i < keybinds.size(); i++) {
-            Keybind keybind = keybinds.get(i);
-            if (keybind != null && keybind != Keybind.NOT_SET && keybind.matches(e)) {
-                return i;
+                Action action = actionBarManager.addAction(savedAction, new net.runelite.client.config.Keybind(e));
+                sendChatMessage("Bound " + action.getName() + " to " + action.getKeybind() + ".");
+                keyManager.unregisterKeyListener(this);
             }
-        }
 
+            @Override
+            public void keyTyped(KeyEvent e) {
+            }
 
-        switch (e.getKeyCode()) {
-            case KeyEvent.VK_1:
-                return 0;
-            case KeyEvent.VK_2:
-                return 1;
-            case KeyEvent.VK_3:
-                return 2;
-            case KeyEvent.VK_4:
-                return 3;
-            case KeyEvent.VK_5:
-                return 4;
-            case KeyEvent.VK_6:
-                return 5;
-            case KeyEvent.VK_7:
-                return 6;
-            case KeyEvent.VK_8:
-                return 7;
-            case KeyEvent.VK_9:
-                return 8;
-            case KeyEvent.VK_0:
-                return 9;
-            case KeyEvent.VK_MINUS:
-                return 10;
-            case KeyEvent.VK_EQUALS:
-                return 11;
-            default:
-                return null;
-        }
+            @Override
+            public void keyReleased(KeyEvent e) {
+            }
+        });
     }
 
-
-    private List<Keybind> getSlotKeybinds() {
-        List<Keybind> keybinds = new ArrayList<>();
-        keybinds.add(config.slot1Key());
-        keybinds.add(config.slot2Key());
-        keybinds.add(config.slot3Key());
-        keybinds.add(config.slot4Key());
-        keybinds.add(config.slot5Key());
-        keybinds.add(config.slot6Key());
-        keybinds.add(config.slot7Key());
-        keybinds.add(config.slot8Key());
-        keybinds.add(config.slot9Key());
-        keybinds.add(config.slot10Key());
-        keybinds.add(config.slot11Key());
-        keybinds.add(config.slot12Key());
-        return keybinds;
-    }
-
-
-    private boolean isItemMenu(MenuAction action) {
-        return action == MenuAction.ITEM_FIRST_OPTION;
-    }
-
-    private int parseSlotNumber(String option) {
-        String[] parts = option.split(" ");
-        if (parts.length == 0) {
-            return -1;
+    public void sendChatMessage(String message) {
+        if (!client.isClientThread()) {
+            clientThread.invokeLater(() -> sendChatMessage(message));
+            return;
         }
-        try {
-            return Integer.parseInt(parts[parts.length - 1]);
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
+        client.addChatMessage(
+                net.runelite.api.ChatMessageType.GAMEMESSAGE,
+                "Action bars",
+                "[Action bars] " + message,
+                null
+        );
     }
 
 }
