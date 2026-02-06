@@ -1,6 +1,9 @@
 package net.runelite.client.plugins.microbot.actionbars;
 
 import net.runelite.api.Client;
+
+import net.runelite.client.config.Keybind;
+
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -94,7 +97,11 @@ public class ActionbarsOverlay extends Overlay {
                 label = slot.getAction().getFallbackLabel();
             }
             drawSlotLabel(graphics, currentX, slotY + SLOT_SIZE - 10, label);
+
+            drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, getKeyLabel(i));
+
             drawKeyLabel(graphics, currentX, slotY + SLOT_SIZE + LABEL_HEIGHT - 2, KEY_LABELS[i]);
+
         }
         drawBarIndicator(graphics, x + 8, y + 14, activeIndex, bars.size());
         graphics.setFont(prevFont);
@@ -126,6 +133,17 @@ public class ActionbarsOverlay extends Overlay {
     }
 
     private void drawKeyLabel(Graphics2D graphics, int centerX, int baselineY, String label) {
+
+        if (label == null || label.isBlank()) {
+            return;
+        }
+        int maxWidth = SLOT_SIZE - 4;
+        String clipped = label;
+        while (!clipped.isEmpty() && graphics.getFontMetrics().stringWidth(clipped) > maxWidth) {
+            clipped = clipped.substring(0, clipped.length() - 1);
+        }
+        label = clipped;
+
         int textWidth = graphics.getFontMetrics().stringWidth(label);
         int textX = centerX + (SLOT_SIZE - textWidth) / 2;
         graphics.setColor(new Color(205, 210, 220, 200));
@@ -152,4 +170,48 @@ public class ActionbarsOverlay extends Overlay {
         graphics.setColor(new Color(180, 188, 200, 200));
         graphics.drawString(text, x, y);
     }
+
+
+    private String getKeyLabel(int index) {
+        Keybind keybind = getKeybindForIndex(index);
+        if (keybind != null && keybind != Keybind.NOT_SET) {
+            return keybind.toString();
+        }
+        if (index >= 0 && index < KEY_LABELS.length) {
+            return KEY_LABELS[index];
+        }
+        return "";
+    }
+
+    private Keybind getKeybindForIndex(int index) {
+        switch (index) {
+            case 0:
+                return config.slot1Key();
+            case 1:
+                return config.slot2Key();
+            case 2:
+                return config.slot3Key();
+            case 3:
+                return config.slot4Key();
+            case 4:
+                return config.slot5Key();
+            case 5:
+                return config.slot6Key();
+            case 6:
+                return config.slot7Key();
+            case 7:
+                return config.slot8Key();
+            case 8:
+                return config.slot9Key();
+            case 9:
+                return config.slot10Key();
+            case 10:
+                return config.slot11Key();
+            case 11:
+                return config.slot12Key();
+            default:
+                return Keybind.NOT_SET;
+        }
+    }
+
 }
