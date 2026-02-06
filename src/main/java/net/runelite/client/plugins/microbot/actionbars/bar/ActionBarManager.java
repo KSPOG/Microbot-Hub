@@ -25,6 +25,7 @@ public class ActionBarManager {
     private List<ActionBar> actionBars;
 
     public void startUp() {
+
         ensureLoaded();
     }
 
@@ -36,6 +37,16 @@ public class ActionBarManager {
 
     public ActionBar getActiveBar() {
         ensureLoaded();
+
+        actionBars = load();
+    }
+
+    public void shutDown() {
+        save(actionBars);
+    }
+
+    public ActionBar getActiveBar() {
+
         if (activeBarIndex < 0 || activeBarIndex >= actionBars.size()) {
             activeBarIndex = 0;
         }
@@ -43,9 +54,11 @@ public class ActionBarManager {
     }
 
     public Action[] getActiveActions() {
+
         if (actionBars == null) {
             ensureLoaded();
         }
+
         return getActiveBar().getActions();
     }
 
@@ -96,6 +109,7 @@ public class ActionBarManager {
         ActionBar[] loaded = gson.fromJson(payload, ActionBar[].class);
         return new ArrayList<>(Arrays.asList(loaded));
     }
+
 
     private void ensureLoaded() {
         if (actionBars == null) {
