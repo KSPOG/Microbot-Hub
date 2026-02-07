@@ -23,12 +23,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class F2pFishingScript extends Script {
     private static final List<String> CONSUMABLE_ITEMS = List.of("Fishing bait", "Feather");
+
     private static final int COIN_BUFFER = 10000;
+
 
     public static String status = "Idle";
     public static String modeLabel = "";
@@ -260,9 +263,11 @@ public class F2pFishingScript extends Script {
     }
 
     private void withdrawRequiredItems(F2pFishingConfig config) {
+
         if (shouldKeepCoins()) {
             ensureCoins(COIN_BUFFER);
         }
+
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
                 int currentAmount = Rs2Inventory.itemQuantity(item);
@@ -310,9 +315,11 @@ public class F2pFishingScript extends Script {
     }
 
     private boolean hasRequiredSupplies(F2pFishingConfig config) {
+
         if (shouldKeepCoins() && Rs2Inventory.itemQuantity(ItemID.COINS_995) < COIN_BUFFER) {
             return false;
         }
+
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
                 if (Rs2Inventory.itemQuantity(item) == 0) {
@@ -335,9 +342,11 @@ public class F2pFishingScript extends Script {
         return Rs2Inventory.hasItem(item) || Rs2Equipment.isWearing(item);
     }
 
+
     private boolean shouldKeepCoins() {
         return selectedFish == F2pFishingFish.TUNA_AND_SWORDFISH;
     }
+
 
     private boolean requiresInventory(String item) {
         return "Fishing rod".equalsIgnoreCase(item);
@@ -358,6 +367,7 @@ public class F2pFishingScript extends Script {
         if (Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
             return true;
         }
+
         AtomicBoolean isInteracting = new AtomicBoolean(false);
         Microbot.getClientThread().invoke(() -> {
             if (Microbot.getClient().getLocalPlayer() != null) {
@@ -365,6 +375,14 @@ public class F2pFishingScript extends Script {
             }
         });
         return isInteracting.get();
+
+        return Microbot.getClientThread().invoke(() -> {
+            if (Microbot.getClient().getLocalPlayer() == null) {
+                return false;
+            }
+            return Microbot.getClient().getLocalPlayer().isInteracting();
+        });
+
     }
 
     private String selectPreferredAction(Rs2NpcModel fishingSpot, List<String> actions) {
