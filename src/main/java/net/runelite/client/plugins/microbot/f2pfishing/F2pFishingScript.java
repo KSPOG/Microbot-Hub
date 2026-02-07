@@ -23,12 +23,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class F2pFishingScript extends Script {
     private static final List<String> CONSUMABLE_ITEMS = List.of("Fishing bait", "Feather");
+
     private static final int COIN_BUFFER = 10000;
+
+
+    private static final int COIN_BUFFER = 10000;
+
 
     public static String status = "Idle";
     public static String modeLabel = "";
@@ -249,6 +256,7 @@ public class F2pFishingScript extends Script {
         }
     }
 
+
     private void ensureCoinsAtBank(int totalCost) {
         if (totalCost <= 0) {
             return;
@@ -262,6 +270,7 @@ public class F2pFishingScript extends Script {
         sleepUntil(() -> Rs2Inventory.itemQuantity(ItemID.COINS_995) >= totalCost, 2000);
     }
 
+
     private int estimatePurchaseCost(Map<String, Integer> missingItems) {
         int totalCost = 0;
         for (Map.Entry<String, Integer> entry : missingItems.entrySet()) {
@@ -273,6 +282,13 @@ public class F2pFishingScript extends Script {
     }
 
     private void withdrawRequiredItems(F2pFishingConfig config) {
+
+
+        if (shouldKeepCoins()) {
+            ensureCoins(COIN_BUFFER);
+        }
+
+
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
                 int currentAmount = Rs2Inventory.itemQuantity(item);
@@ -292,6 +308,7 @@ public class F2pFishingScript extends Script {
             Rs2Bank.withdrawOne(item);
             sleepUntil(() -> Rs2Inventory.hasItem(item), 2000);
         }
+
         if (shouldKeepCoins() && Rs2Inventory.itemQuantity(ItemID.COINS_995) < COIN_BUFFER) {
             if (Rs2Bank.isOpen()) {
                 ensureCoinsAtBank(COIN_BUFFER);
@@ -300,6 +317,7 @@ public class F2pFishingScript extends Script {
             }
             withdrawNonConsumables();
         }
+
     }
 
     private Map<String, Integer> getMissingItemsFromBank(F2pFishingConfig config) {
@@ -327,6 +345,7 @@ public class F2pFishingScript extends Script {
         return CONSUMABLE_ITEMS.contains(itemName);
     }
 
+
     private void withdrawNonConsumables() {
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
@@ -347,6 +366,14 @@ public class F2pFishingScript extends Script {
     }
 
     private boolean hasRequiredSupplies(F2pFishingConfig config) {
+
+    private boolean hasRequiredSupplies(F2pFishingConfig config) {
+
+        if (shouldKeepCoins() && Rs2Inventory.itemQuantity(ItemID.COINS_995) < COIN_BUFFER) {
+            return false;
+        }
+
+
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
                 if (Rs2Inventory.itemQuantity(item) == 0) {
@@ -362,16 +389,22 @@ public class F2pFishingScript extends Script {
                 return false;
             }
         }
+
         return !shouldKeepCoins() || Rs2Inventory.itemQuantity(ItemID.COINS_995) >= COIN_BUFFER;
+
+        return true;
+
     }
 
     private boolean hasItemEquippedOrInventory(String item) {
         return Rs2Inventory.hasItem(item) || Rs2Equipment.isWearing(item);
     }
 
+
     private boolean shouldKeepCoins() {
         return selectedFish == F2pFishingFish.TUNA_AND_SWORDFISH;
     }
+
 
     private boolean requiresInventory(String item) {
         return "Fishing rod".equalsIgnoreCase(item);
@@ -392,6 +425,7 @@ public class F2pFishingScript extends Script {
         if (Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
             return true;
         }
+
         AtomicBoolean isInteracting = new AtomicBoolean(false);
         Microbot.getClientThread().invoke(() -> {
             if (Microbot.getClient().getLocalPlayer() != null) {
@@ -399,6 +433,16 @@ public class F2pFishingScript extends Script {
             }
         });
         return isInteracting.get();
+
+
+        return Microbot.getClientThread().invoke(() -> {
+            if (Microbot.getClient().getLocalPlayer() == null) {
+                return false;
+            }
+            return Microbot.getClient().getLocalPlayer().isInteracting();
+        });
+
+
     }
 
     private String selectPreferredAction(Rs2NpcModel fishingSpot, List<String> actions) {
