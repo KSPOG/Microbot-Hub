@@ -24,11 +24,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class F2pFishingScript extends Script {
     private static final List<String> CONSUMABLE_ITEMS = List.of("Fishing bait", "Feather");
+
+    private static final int COIN_BUFFER = 10000;
+
 
     private static final int COIN_BUFFER = 10000;
 
@@ -252,6 +256,21 @@ public class F2pFishingScript extends Script {
         }
     }
 
+
+    private void ensureCoinsAtBank(int totalCost) {
+        if (totalCost <= 0) {
+            return;
+        }
+        int currentCoins = Rs2Inventory.itemQuantity(ItemID.COINS_995);
+        if (currentCoins >= totalCost) {
+            return;
+        }
+        int withdrawAmount = totalCost - currentCoins;
+        Rs2Bank.withdrawX(true, ItemID.COINS_995, withdrawAmount);
+        sleepUntil(() -> Rs2Inventory.itemQuantity(ItemID.COINS_995) >= totalCost, 2000);
+    }
+
+
     private int estimatePurchaseCost(Map<String, Integer> missingItems) {
         int totalCost = 0;
         for (Map.Entry<String, Integer> entry : missingItems.entrySet()) {
@@ -264,9 +283,11 @@ public class F2pFishingScript extends Script {
 
     private void withdrawRequiredItems(F2pFishingConfig config) {
 
+
         if (shouldKeepCoins()) {
             ensureCoins(COIN_BUFFER);
         }
+
 
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
@@ -287,6 +308,16 @@ public class F2pFishingScript extends Script {
             Rs2Bank.withdrawOne(item);
             sleepUntil(() -> Rs2Inventory.hasItem(item), 2000);
         }
+
+        if (shouldKeepCoins() && Rs2Inventory.itemQuantity(ItemID.COINS_995) < COIN_BUFFER) {
+            if (Rs2Bank.isOpen()) {
+                ensureCoinsAtBank(COIN_BUFFER);
+            } else {
+                ensureCoins(COIN_BUFFER);
+            }
+            withdrawNonConsumables();
+        }
+
     }
 
     private Map<String, Integer> getMissingItemsFromBank(F2pFishingConfig config) {
@@ -314,11 +345,34 @@ public class F2pFishingScript extends Script {
         return CONSUMABLE_ITEMS.contains(itemName);
     }
 
+
+    private void withdrawNonConsumables() {
+        for (String item : selectedFish.getRequiredItems()) {
+            if (isConsumable(item)) {
+                continue;
+            }
+            if (requiresInventory(item)) {
+                if (Rs2Inventory.hasItem(item)) {
+                    continue;
+                }
+            } else if (hasItemEquippedOrInventory(item)) {
+                continue;
+            }
+            if (Rs2Bank.hasItem(item)) {
+                Rs2Bank.withdrawOne(item);
+                sleepUntil(() -> Rs2Inventory.hasItem(item), 2000);
+            }
+        }
+    }
+
+    private boolean hasRequiredSupplies(F2pFishingConfig config) {
+
     private boolean hasRequiredSupplies(F2pFishingConfig config) {
 
         if (shouldKeepCoins() && Rs2Inventory.itemQuantity(ItemID.COINS_995) < COIN_BUFFER) {
             return false;
         }
+
 
         for (String item : selectedFish.getRequiredItems()) {
             if (isConsumable(item)) {
@@ -335,7 +389,11 @@ public class F2pFishingScript extends Script {
                 return false;
             }
         }
+
+        return !shouldKeepCoins() || Rs2Inventory.itemQuantity(ItemID.COINS_995) >= COIN_BUFFER;
+
         return true;
+
     }
 
     private boolean hasItemEquippedOrInventory(String item) {
@@ -376,12 +434,14 @@ public class F2pFishingScript extends Script {
         });
         return isInteracting.get();
 
+
         return Microbot.getClientThread().invoke(() -> {
             if (Microbot.getClient().getLocalPlayer() == null) {
                 return false;
             }
             return Microbot.getClient().getLocalPlayer().isInteracting();
         });
+
 
     }
 
