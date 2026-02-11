@@ -8,13 +8,20 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerConfig;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerRock;
+
+import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
+
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterConfig;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterTree;
+
 import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.F2PFishingSkillPlanner;
 import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.MiningSkillPlanner;
 import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.WoodcuttingSkillPlanner;
+
+import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterMode;
+
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingConfig;
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingScript;
 import net.runelite.client.plugins.microbot.gecooker.GECookerConfig;
@@ -613,6 +620,7 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void applyMiningRockForLevel() {
+
         KSPAutoMinerRock selected = MiningSkillPlanner.configure(configManager);
         currentMiningTask = selected.toString();
     }
@@ -625,6 +633,52 @@ public class KSPAccountBuilderScript extends Script {
     private void applyFishingForLevel() {
         selectedF2PFishOption = F2PFishingSkillPlanner.configure(configManager, random);
         currentFishingTask = selectedF2PFishOption.getDisplayName();
+
+        configManager.setConfiguration("KSPAutoMiner", "mode", KSPAutoMinerMode.MINE_BANK);
+        int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
+        List<KSPAutoMinerRock> availableRocks = Arrays.stream(KSPAutoMinerRock.values())
+                .filter(rock -> miningLevel >= rock.getMiningLevel())
+                .collect(java.util.stream.Collectors.toList());
+        if (availableRocks.isEmpty()) {
+            configManager.setConfiguration("KSPAutoMiner", "rock", KSPAutoMinerRock.COPPER_TIN);
+            currentMiningTask = KSPAutoMinerRock.COPPER_TIN.toString();
+            return;
+        }
+        KSPAutoMinerRock selected = availableRocks.get(random.nextInt(availableRocks.size()));
+        currentMiningTask = selected.toString();
+        configManager.setConfiguration("KSPAutoMiner", "rock", selected);
+    }
+
+    private void applyWoodcuttingTreeForLevel() {
+        configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.PROGRESSIVE_BANK);
+        int woodcuttingLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
+        List<KSPAutoWoodcutterTree> availableTrees = Arrays.stream(KSPAutoWoodcutterTree.values())
+                .filter(tree -> woodcuttingLevel >= tree.getWoodcuttingLevel())
+                .collect(java.util.stream.Collectors.toList());
+        if (availableTrees.isEmpty()) {
+            configManager.setConfiguration("KSPAutoWoodcutter", "tree", KSPAutoWoodcutterTree.TREE);
+            currentWoodcuttingTask = KSPAutoWoodcutterTree.TREE.toString();
+            return;
+        }
+        KSPAutoWoodcutterTree selected = availableTrees.get(random.nextInt(availableTrees.size()));
+        currentWoodcuttingTask = selected.toString();
+        configManager.setConfiguration("KSPAutoWoodcutter", "tree", selected);
+    }
+
+    private void applyFishingForLevel() {
+        configManager.setConfiguration("AutoFishing", "useBank", true);
+        int fishingLevel = Microbot.getClient().getRealSkillLevel(Skill.FISHING);
+        List<F2PFishOption> availableFish = Arrays.stream(F2PFishOption.values())
+                .filter(option -> fishingLevel >= option.requiredLevel)
+                .collect(java.util.stream.Collectors.toList());
+
+        selectedF2PFishOption = availableFish.isEmpty()
+                ? F2PFishOption.SHRIMP
+                : availableFish.get(random.nextInt(availableFish.size()));
+
+        currentFishingTask = selectedF2PFishOption.getDisplayName();
+        configManager.setConfiguration("AutoFishing", "fishToCatch", selectedF2PFishOption.fish);
+
     }
 
     private void startFishing() {
@@ -636,7 +690,11 @@ public class KSPAccountBuilderScript extends Script {
             status = "Restocking fishing supplies";
             return;
         }
+
         if (selectedF2PFishOption.isRequiresKaramja() && handleKaramjaEntryForFishing()) {
+
+        if (selectedF2PFishOption.requiresKaramja && handleKaramjaEntryForFishing()) {
+
             status = "Traveling to Karamja";
             return;
         }
@@ -753,7 +811,11 @@ public class KSPAccountBuilderScript extends Script {
     private void applyCookingForLevel() {
         int cookingLevel = Microbot.getClient().getRealSkillLevel(Skill.COOKING);
         List<F2PCookOption> availableItems = Arrays.stream(F2PCookOption.values())
+
                 .filter(option -> cookingLevel >= option.getRequiredLevel())
+
+                .filter(option -> cookingLevel >= option.requiredLevel)
+
                 .collect(java.util.stream.Collectors.toList());
 
         CookingItem selected = availableItems.isEmpty()
@@ -921,4 +983,8 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
+
 }
+
+}
+

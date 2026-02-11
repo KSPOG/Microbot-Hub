@@ -19,7 +19,9 @@ enum F2PCookOption {
         this.requiredLevel = requiredLevel;
     }
 
+
     int getRequiredLevel() {
         return requiredLevel;
     }
+
 }
