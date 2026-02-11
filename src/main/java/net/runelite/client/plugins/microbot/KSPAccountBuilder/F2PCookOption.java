@@ -18,4 +18,10 @@ enum F2PCookOption {
         this.cookingItem = cookingItem;
         this.requiredLevel = requiredLevel;
     }
+
+
+    int getRequiredLevel() {
+        return requiredLevel;
+    }
+
 }
