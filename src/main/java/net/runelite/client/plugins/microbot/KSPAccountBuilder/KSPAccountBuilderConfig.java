@@ -9,10 +9,12 @@ import net.runelite.client.config.Range;
 @ConfigGroup("KSPAccountBuilder")
 public interface KSPAccountBuilderConfig extends Config {
     @ConfigSection(
+
             name = "Flow",
             description = "Order and timing behavior",
             position = 0
     )
+
     String flowSection = "flow";
 
     @ConfigSection(
@@ -21,6 +23,24 @@ public interface KSPAccountBuilderConfig extends Config {
             position = 1
     )
     String breakSection = "breaks";
+
+
+
+            name = "Targets",
+            description = "Level targets for the account builder",
+            position = 0
+    )
+    String targetsSection = "targets";
+
+    @ConfigSection(
+            name = "Flow",
+            description = "Order and completion behavior",
+            position = 1
+    )
+
+    String flowSection = "flow";
+
+
 
     @ConfigItem(
             keyName = "startSkill",
@@ -32,6 +52,7 @@ public interface KSPAccountBuilderConfig extends Config {
     default KSPAccountBuilderStartSkill startSkill() {
         return KSPAccountBuilderStartSkill.MINING;
     }
+
 
     @ConfigItem(
             keyName = "minSwitchMinutes",
@@ -64,10 +85,48 @@ public interface KSPAccountBuilderConfig extends Config {
             section = breakSection
     )
     default boolean enableCustomBreaks() {
+
+
+
+    @Range(min = 1, max = 99)
+    @ConfigItem(
+            keyName = "targetMiningLevel",
+            name = "Target mining level",
+            description = "Stop mining once this level is reached",
+            position = 1,
+            section = targetsSection
+    )
+    default int targetMiningLevel() {
+        return 30;
+    }
+
+    @Range(min = 1, max = 99)
+    @ConfigItem(
+            keyName = "targetWoodcuttingLevel",
+            name = "Target woodcutting level",
+            description = "Stop woodcutting once this level is reached",
+            position = 2,
+            section = targetsSection
+    )
+    default int targetWoodcuttingLevel() {
+        return 30;
+    }
+
+    @ConfigItem(
+            keyName = "stopWhenComplete",
+            name = "Stop when targets met",
+            description = "Disable the builder after both targets are met",
+            position = 1,
+            section = flowSection
+    )
+    default boolean stopWhenComplete() {
+
+
         return true;
     }
 
     @ConfigItem(
+
             keyName = "minBreakIntervalMinutes",
             name = "Min break interval (minutes)",
             description = "Minimum minutes between breaks",
@@ -92,6 +151,7 @@ public interface KSPAccountBuilderConfig extends Config {
     }
 
     @ConfigItem(
+
             keyName = "minBreakDurationMinutes",
             name = "Min break duration (minutes)",
             description = "Minimum break duration in minutes",
@@ -113,6 +173,61 @@ public interface KSPAccountBuilderConfig extends Config {
     @Range(min = 1, max = 240)
     default int maxBreakDurationMinutes() {
         return 3;
+
+            keyName = "minBreakDurationSeconds",
+            name = "Min break duration (seconds)",
+            description = "Minimum break duration in seconds",
+            position = 3,
+            section = breakSection
+    )
+    @Range(min = 5, max = 600)
+    default int minBreakDurationSeconds() {
+        return 20;
+    }
+
+    @ConfigItem(
+            keyName = "maxBreakDurationSeconds",
+            name = "Max break duration (seconds)",
+            description = "Maximum break duration in seconds",
+            position = 4,
+            section = breakSection
+    )
+    @Range(min = 5, max = 600)
+    default int maxBreakDurationSeconds() {
+        return 60;
+    }
+
+
+            keyName = "minSwitchMinutes",
+            name = "Min switch minutes",
+            description = "Minimum minutes before switching tasks",
+
+            position = 1,
+
+            position = 2,
+
+            section = flowSection
+    )
+    @Range(min = 1, max = 240)
+    default int minSwitchMinutes() {
+        return 30;
+    }
+
+    @ConfigItem(
+            keyName = "maxSwitchMinutes",
+            name = "Max switch minutes",
+            description = "Maximum minutes before switching tasks",
+
+            position = 2,
+
+            position = 3,
+
+            section = flowSection
+    )
+    @Range(min = 1, max = 240)
+    default int maxSwitchMinutes() {
+        return 60;
+
     }
 
 }
