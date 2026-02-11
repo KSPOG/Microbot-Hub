@@ -6,10 +6,12 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
+
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerConfig;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterConfig;
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingConfig;
 import net.runelite.client.plugins.microbot.gecooker.GECookerConfig;
+
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -26,11 +28,13 @@ import java.awt.AWTException;
 )
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
-    public static final String version = "0.3.9";
+
+    public static final String version = "0.3.16";
 
 
     @Inject
     private KSPAccountBuilderConfig config;
+
 
     @Inject
     private KSPAutoMinerConfig minerConfig;
@@ -44,10 +48,12 @@ public class KSPAccountBuilderPlugin extends Plugin {
     @Inject
     private GECookerConfig cookerConfig;
 
+
     @Provides
     KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {
         return configManager.getConfig(KSPAccountBuilderConfig.class);
     }
+
 
     @Provides
     KSPAutoMinerConfig provideMinerConfig(ConfigManager configManager) {
@@ -69,6 +75,7 @@ public class KSPAccountBuilderPlugin extends Plugin {
         return configManager.getConfig(GECookerConfig.class);
     }
 
+
     @Inject
     private OverlayManager overlayManager;
 
@@ -81,7 +88,11 @@ public class KSPAccountBuilderPlugin extends Plugin {
     @Override
     protected void startUp() throws AWTException {
         overlayManager.add(overlay);
+
+        script.run(config);
+
         script.run(config, minerConfig, woodcutterConfig, fishingConfig, cookerConfig);
+
     }
 
     @Override

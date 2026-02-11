@@ -15,10 +15,16 @@ import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
 
 
+import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
+
+
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterConfig;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterTree;
+
+import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterMode;
+
 
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterMode;
 
@@ -32,7 +38,15 @@ import net.runelite.client.plugins.microbot.autofishing.enums.Fish;
 import net.runelite.client.plugins.microbot.gecooker.GECookerConfig;
 import net.runelite.client.plugins.microbot.gecooker.GECookerScript;
 import net.runelite.client.plugins.microbot.gecooker.enums.CookingItem;
+
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
+import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.ui.ClientUI;
+
+import net.runelite.client.config.ConfigManager;
+
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -41,6 +55,9 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+
+import net.runelite.client.plugins.Plugin;
+
 
 import javax.inject.Inject;
 import java.time.Duration;
@@ -55,14 +72,33 @@ public class KSPAccountBuilderScript extends Script {
     public static String status = "Idle";
     public static String stageLabel = "None";
 
+    public static String currentMiningTask = "Unknown";
+    public static String currentWoodcuttingTask = "Unknown";
+    public static String currentFishingTask = "Unknown";
+    public static String currentCookingTask = "Unknown";
+
+
     private static long startTimeMs;
     private static long stageStartTimeMs;
     private static long stageDurationMs;
     private final Random random = new Random();
     private long nextToolCheckMs;
     private static final long TOOL_CHECK_COOLDOWN_MS = 5000L;
+
+    private static final int FISHING_SUPPLY_BUFFER = 150;
+    private static final int FISHING_SUPPLY_BUY_AMOUNT = 1000;
     private static final WorldPoint KARAMJA_CUSTOMS_DOCK = new WorldPoint(2953, 3146, 0);
     private static final WorldPoint PORT_SARIM_DOCK = new WorldPoint(3027, 3217, 0);
+    private static final List<SellFishOrder> RESTOCK_FISH_ORDERS = Arrays.asList(
+            new SellFishOrder(361, "Tuna"),
+            new SellFishOrder(351, "Pike"),
+            new SellFishOrder(347, "Herring"),
+            new SellFishOrder(329, "Salmon")
+    );
+
+    private static final WorldPoint KARAMJA_CUSTOMS_DOCK = new WorldPoint(2953, 3146, 0);
+    private static final WorldPoint PORT_SARIM_DOCK = new WorldPoint(3027, 3217, 0);
+
 
     private Stage currentStage = Stage.NONE;
     private boolean minerRunning;
@@ -70,9 +106,17 @@ public class KSPAccountBuilderScript extends Script {
     private boolean fishingRunning;
     private boolean cookerRunning;
     private F2PFishOption selectedF2PFishOption = F2PFishOption.SHRIMP;
+
+    private static long nextBreakAtMs;
+    private static long breakEndAtMs;
+    private static boolean breakActive;
+    private String originalClientTitle = "RuneLite";
+    private long nextRelogAttemptAtMs;
+
     private long nextBreakAtMs;
     private long breakEndAtMs;
     private boolean breakActive;
+
 
 
     private static final List<ToolRequirement> PICKAXE_REQUIREMENTS = Arrays.asList(
@@ -116,6 +160,13 @@ public class KSPAccountBuilderScript extends Script {
     @Inject
     private ConfigManager configManager;
 
+
+    private KSPAutoMinerConfig minerConfig;
+    private KSPAutoWoodcutterConfig woodcutterConfig;
+    private AutoFishingConfig fishingConfig;
+    private GECookerConfig cookerConfig;
+
+
     private enum Stage {
         MINING,
         WOODCUTTING,
@@ -124,6 +175,17 @@ public class KSPAccountBuilderScript extends Script {
         NONE
     }
 
+
+    public boolean run(KSPAccountBuilderConfig config) {
+        startTimeMs = System.currentTimeMillis();
+        status = "Starting";
+        resetCurrentTasks();
+        this.minerConfig = configManager.getConfig(KSPAutoMinerConfig.class);
+        this.woodcutterConfig = configManager.getConfig(KSPAutoWoodcutterConfig.class);
+        this.fishingConfig = configManager.getConfig(AutoFishingConfig.class);
+        this.cookerConfig = configManager.getConfig(GECookerConfig.class);
+        captureOriginalClientTitle();
+
     public boolean run(KSPAccountBuilderConfig config,
                        KSPAutoMinerConfig minerConfig,
                        KSPAutoWoodcutterConfig woodcutterConfig,
@@ -131,6 +193,7 @@ public class KSPAccountBuilderScript extends Script {
                        GECookerConfig cookerConfig) {
         startTimeMs = System.currentTimeMillis();
         status = "Starting";
+
         KSPAccountBuilderStartSkill startSkill = config.startSkill();
         if (startSkill == KSPAccountBuilderStartSkill.RANDOM) {
             Stage[] startingStages = {Stage.MINING, Stage.WOODCUTTING, Stage.F2P_FISHING, Stage.F2P_COOKER};
@@ -152,7 +215,12 @@ public class KSPAccountBuilderScript extends Script {
 
         scheduleNextBreak(config);
 
+
+
+        scheduleNextBreak(config);
+
         scheduleNextBreak();
+
 
 
 
@@ -161,9 +229,22 @@ public class KSPAccountBuilderScript extends Script {
                 if (!super.run()) {
                     return;
                 }
+
+                if (handleCustomBreak(config)) {
+                    return;
+                }
+
                 if (!Microbot.isLoggedIn()) {
                     return;
                 }
+
+
+                if (!ensureCurrentTaskSupplies()) {
+                    return;
+                }
+
+                if (!minerRunning && !woodcutterRunning && !fishingRunning && !cookerRunning) {
+                    startStageIfNeeded();
 
                 if (handleCustomBreak(config)) {
 
@@ -197,11 +278,24 @@ public class KSPAccountBuilderScript extends Script {
                     return;
 
 
+
                 }
 
                 boolean shouldSwitchByTime = shouldSwitchByTime(config);
 
                 if (shouldSwitchByTime) {
+
+                    if (handleKaramjaExitBeforeSwitch()) {
+                        return;
+                    }
+                    Stage nextStage = getNextStage(currentStage);
+                    stopCurrentStage();
+                    if (!prepareForStageSwitch(nextStage)) {
+                        status = "Banking for switch";
+                        return;
+                    }
+                    currentStage = nextStage;
+
 
 
                 if ((currentStage == Stage.MINING && (miningComplete || shouldSwitchByTime))
@@ -215,6 +309,7 @@ public class KSPAccountBuilderScript extends Script {
                     }
                     stopCurrentStage();
                     currentStage = getNextStage(currentStage);
+
                     stageLabel = currentStage.name();
                     stageStartTimeMs = System.currentTimeMillis();
                     stageDurationMs = selectStageDurationMs(config);
@@ -222,6 +317,18 @@ public class KSPAccountBuilderScript extends Script {
 
                 if (currentStage == Stage.MINING) {
                     status = "Training Mining";
+
+                    startMiner();
+                } else if (currentStage == Stage.WOODCUTTING) {
+                    status = "Training Woodcutting";
+                    startWoodcutter();
+                } else if (currentStage == Stage.F2P_FISHING) {
+                    status = "Training F2P Fishing";
+                    startFishing();
+                } else if (currentStage == Stage.F2P_COOKER) {
+                    status = "Training F2P Cooking";
+                    startCooker();
+
                     startMiner(minerConfig);
                 } else if (currentStage == Stage.WOODCUTTING) {
 
@@ -240,6 +347,7 @@ public class KSPAccountBuilderScript extends Script {
                 } else if (currentStage == Stage.F2P_COOKER) {
                     status = "Training F2P Cooking";
                     startCooker(cookerConfig);
+
                 }
             } catch (Exception ex) {
                 Microbot.log("KSPAccountBuilder error: " + ex.getMessage());
@@ -249,11 +357,27 @@ public class KSPAccountBuilderScript extends Script {
         return true;
     }
 
+
+    private void resetCurrentTasks() {
+        currentMiningTask = "Unknown";
+        currentWoodcuttingTask = "Unknown";
+        currentFishingTask = "Unknown";
+        currentCookingTask = "Unknown";
+    }
+
+    public static String getCurrentTaskSummary() {
+        return String.join(", ", Arrays.asList(currentMiningTask, currentWoodcuttingTask, currentFishingTask, currentCookingTask));
+    }
+
+
     @Override
     public void shutdown() {
         stopAll();
         super.shutdown();
         status = "Stopped";
+
+        restoreClientTitle();
+
     }
 
     public static Duration getRuntime() {
@@ -275,6 +399,21 @@ public class KSPAccountBuilderScript extends Script {
         }
         return Duration.ofMillis(remaining);
     }
+
+
+    public static Duration getTimeUntilNextBreak() {
+        long now = System.currentTimeMillis();
+        if (breakActive) {
+            long remaining = breakEndAtMs - now;
+            return remaining > 0 ? Duration.ofMillis(remaining) : Duration.ZERO;
+        }
+        if (nextBreakAtMs <= 0) {
+            return Duration.ZERO;
+        }
+        long remaining = nextBreakAtMs - now;
+        return remaining > 0 ? Duration.ofMillis(remaining) : Duration.ZERO;
+    }
+
 
     private boolean shouldSwitchByTime(KSPAccountBuilderConfig config) {
         long elapsedMs = System.currentTimeMillis() - stageStartTimeMs;
@@ -300,23 +439,51 @@ public class KSPAccountBuilderScript extends Script {
     private boolean handleCustomBreak(KSPAccountBuilderConfig config) {
         if (!config.enableCustomBreaks()) {
             breakActive = false;
+            nextBreakAtMs = 0L;
+            breakEndAtMs = 0L;
+            restoreClientTitle();
+            return false;
+        }
+
+
+    private boolean handleCustomBreak(KSPAccountBuilderConfig config) {
+        if (!config.enableCustomBreaks()) {
+            breakActive = false;
             return false;
         }
 
     private boolean handleCustomBreak() {
 
+
         long now = System.currentTimeMillis();
 
         if (breakActive) {
             if (now < breakEndAtMs) {
+
+                long remainingMs = breakEndAtMs - now;
+                updateClientTitle(remainingMs);
+                if (Microbot.isLoggedIn()) {
+                    Rs2Player.logout();
+                }
+
                 status = "Custom break";
                 return true;
             }
             breakActive = false;
 
             scheduleNextBreak(config);
+            restoreClientTitle();
+            if (!Microbot.isLoggedIn()) {
+                status = "Break finished - logging in";
+                attemptRelogAfterBreak();
+                return true;
+            }
+
+
+            scheduleNextBreak(config);
 
             scheduleNextBreak();
+
 
             status = "Break finished";
             return false;
@@ -327,8 +494,16 @@ public class KSPAccountBuilderScript extends Script {
             breakActive = true;
 
             breakEndAtMs = now + selectBreakDurationMs(config);
+            updateClientTitle(breakEndAtMs - now);
+            if (Microbot.isLoggedIn()) {
+                Rs2Player.logout();
+            }
+
+
+            breakEndAtMs = now + selectBreakDurationMs(config);
 
             breakEndAtMs = now + selectBreakDurationMs();
+
 
             status = "Custom break";
             return true;
@@ -353,6 +528,104 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private long selectBreakDurationMs(KSPAccountBuilderConfig config) {
+
+        int minMinutes = config.minBreakDurationMinutes();
+        int maxMinutes = config.maxBreakDurationMinutes();
+        int lower = Math.min(minMinutes, maxMinutes);
+        int upper = Math.max(minMinutes, maxMinutes);
+        int chosenMinutes = lower == upper ? lower : lower + random.nextInt(upper - lower + 1);
+        return Duration.ofMinutes(chosenMinutes).toMillis();
+    }
+
+    private void captureOriginalClientTitle() {
+        try {
+            if (ClientUI.getFrame() != null && ClientUI.getFrame().getTitle() != null) {
+                originalClientTitle = ClientUI.getFrame().getTitle();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void updateClientTitle(long remainingMs) {
+        try {
+            long totalSeconds = Math.max(0L, remainingMs / 1000L);
+            long hours = totalSeconds / 3600L;
+            long minutes = (totalSeconds % 3600L) / 60L;
+            long seconds = totalSeconds % 60L;
+            String remaining = String.format("%02d:%02d:%02d", hours, minutes, seconds);
+            if (ClientUI.getFrame() != null) {
+                ClientUI.getFrame().setTitle(String.format("[Break %s] %s", remaining, originalClientTitle));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void restoreClientTitle() {
+        try {
+            if (ClientUI.getFrame() != null) {
+                ClientUI.getFrame().setTitle(originalClientTitle);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void attemptRelogAfterBreak() {
+        long now = System.currentTimeMillis();
+        if (now < nextRelogAttemptAtMs) {
+            return;
+        }
+        nextRelogAttemptAtMs = now + 5000L;
+
+        try {
+            Plugin autoLoginPlugin = (Plugin) Microbot.getPlugin("net.runelite.client.plugins.microbot.accountselector.AutoLoginPlugin");
+            if (autoLoginPlugin == null) {
+                return;
+            }
+            if (!Microbot.isPluginEnabled(autoLoginPlugin.getClass())) {
+                Microbot.getClientThread().runOnSeperateThread(() -> {
+                    Microbot.startPlugin(autoLoginPlugin);
+                    return true;
+                });
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void startStageIfNeeded() {
+        if (currentStage == Stage.MINING) {
+            startMiner();
+        } else if (currentStage == Stage.WOODCUTTING) {
+            startWoodcutter();
+        } else if (currentStage == Stage.F2P_FISHING) {
+            startFishing();
+        } else if (currentStage == Stage.F2P_COOKER) {
+            startCooker();
+        }
+    }
+
+    private boolean prepareForStageSwitch(Stage nextStage) {
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        Rs2Bank.depositAll();
+
+        if (nextStage == Stage.MINING) {
+            boolean hasPickaxe = ensureToolAvailable(true);
+            Rs2Bank.closeBank();
+            return hasPickaxe;
+        }
+
+        if (nextStage == Stage.WOODCUTTING) {
+            boolean hasAxe = ensureToolAvailable(false);
+            Rs2Bank.closeBank();
+            return hasAxe;
+        }
+
+        Rs2Bank.closeBank();
+        return true;
+    }
+
         int minSeconds = config.minBreakDurationSeconds();
         int maxSeconds = config.maxBreakDurationSeconds();
         int lower = Math.min(minSeconds, maxSeconds);
@@ -388,6 +661,7 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
+
     private Stage getNextStage(Stage stage) {
         if (stage == Stage.MINING) {
             return Stage.WOODCUTTING;
@@ -402,6 +676,8 @@ public class KSPAccountBuilderScript extends Script {
     }
 
 
+    private void startMiner() {
+
 
     private boolean isMiningComplete(KSPAccountBuilderConfig config) {
         int level = Microbot.getClient().getRealSkillLevel(Skill.MINING);
@@ -415,6 +691,7 @@ public class KSPAccountBuilderScript extends Script {
 
 
     private void startMiner(KSPAutoMinerConfig minerConfig) {
+
         if (minerRunning) {
             return;
         }
@@ -423,11 +700,19 @@ public class KSPAccountBuilderScript extends Script {
             status = "Missing pickaxe";
             return;
         }
+
+        minerScript.run(this.minerConfig);
+        minerRunning = true;
+    }
+
+    private void startWoodcutter() {
+
         minerScript.run(minerConfig);
         minerRunning = true;
     }
 
     private void startWoodcutter(KSPAutoWoodcutterConfig woodcutterConfig) {
+
         if (woodcutterRunning) {
             return;
         }
@@ -436,7 +721,11 @@ public class KSPAccountBuilderScript extends Script {
             status = "Missing axe";
             return;
         }
+
+        woodcutterScript.run(this.woodcutterConfig);
+
         woodcutterScript.run(woodcutterConfig);
+
         woodcutterRunning = true;
     }
 
@@ -550,9 +839,17 @@ public class KSPAccountBuilderScript extends Script {
                 .collect(java.util.stream.Collectors.toList());
         if (availableRocks.isEmpty()) {
             configManager.setConfiguration("KSPAutoMiner", "rock", KSPAutoMinerRock.COPPER_TIN);
+
+            currentMiningTask = KSPAutoMinerRock.COPPER_TIN.toString();
             return;
         }
         KSPAutoMinerRock selected = availableRocks.get(random.nextInt(availableRocks.size()));
+        currentMiningTask = selected.toString();
+
+            return;
+        }
+        KSPAutoMinerRock selected = availableRocks.get(random.nextInt(availableRocks.size()));
+
         configManager.setConfiguration("KSPAutoMiner", "rock", selected);
     }
 
@@ -560,7 +857,11 @@ public class KSPAccountBuilderScript extends Script {
 
         configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.PROGRESSIVE_BANK);
 
+
+        configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.PROGRESSIVE_BANK);
+
         configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.CHOP_BANK);
+
 
 
         int woodcuttingLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
@@ -569,9 +870,17 @@ public class KSPAccountBuilderScript extends Script {
                 .collect(java.util.stream.Collectors.toList());
         if (availableTrees.isEmpty()) {
             configManager.setConfiguration("KSPAutoWoodcutter", "tree", KSPAutoWoodcutterTree.TREE);
+
+            currentWoodcuttingTask = KSPAutoWoodcutterTree.TREE.toString();
             return;
         }
         KSPAutoWoodcutterTree selected = availableTrees.get(random.nextInt(availableTrees.size()));
+        currentWoodcuttingTask = selected.toString();
+
+            return;
+        }
+        KSPAutoWoodcutterTree selected = availableTrees.get(random.nextInt(availableTrees.size()));
+
         configManager.setConfiguration("KSPAutoWoodcutter", "tree", selected);
     }
 
@@ -587,6 +896,13 @@ public class KSPAccountBuilderScript extends Script {
                 ? F2PFishOption.SHRIMP
                 : availableFish.get(random.nextInt(availableFish.size()));
 
+
+        currentFishingTask = selectedF2PFishOption.getDisplayName();
+        configManager.setConfiguration("AutoFishing", "fishToCatch", selectedF2PFishOption.fish);
+    }
+
+    private void startFishing() {
+
         configManager.setConfiguration("AutoFishing", "fishToCatch", selectedF2PFishOption.fish);
 
 
@@ -600,15 +916,26 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void startFishing(AutoFishingConfig fishingConfig) {
+
         if (fishingRunning) {
             return;
         }
         applyFishingForLevel();
+
+        if (!ensureFishingSupplies()) {
+            status = "Restocking fishing supplies";
+            return;
+        }
+
         if (selectedF2PFishOption.requiresKaramja && handleKaramjaEntryForFishing()) {
             status = "Traveling to Karamja";
             return;
         }
+
+        fishingScript.run(this.fishingConfig);
+
         fishingScript.run(fishingConfig);
+
         fishingRunning = true;
     }
 
@@ -621,6 +948,105 @@ public class KSPAccountBuilderScript extends Script {
     }
 
 
+    private boolean ensureCurrentTaskSupplies() {
+        if (currentStage != Stage.F2P_FISHING || fishingRunning) {
+            return true;
+        }
+        return ensureFishingSupplies();
+    }
+
+    private boolean ensureFishingSupplies() {
+        if (selectedF2PFishOption == null) {
+            return true;
+        }
+
+        List<SupplyOrder> requiredSupplies = selectedF2PFishOption.getSupplyOrders();
+        if (requiredSupplies.isEmpty()) {
+            return true;
+        }
+
+        boolean hasSupplies = requiredSupplies.stream()
+                .allMatch(supply -> (Rs2Inventory.count(supply.itemName) + countBankItem(supply.itemName)) >= FISHING_SUPPLY_BUFFER);
+        if (hasSupplies) {
+            return true;
+        }
+
+        status = "GE restock";
+        return restockAtGrandExchange(requiredSupplies);
+    }
+
+    private int countBankItem(String itemName) {
+        return Rs2Bank.bankItems().stream()
+                .filter(item -> item.getName() != null && item.getName().equalsIgnoreCase(itemName))
+                .mapToInt(Rs2ItemModel::getQuantity)
+                .sum();
+    }
+
+    private boolean restockAtGrandExchange(List<SupplyOrder> suppliesToBuy) {
+        if (!Rs2GrandExchange.walkToGrandExchange()) {
+            return false;
+        }
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        Rs2Bank.depositAll();
+        Rs2Bank.setWithdrawAsNote();
+        for (SellFishOrder fish : RESTOCK_FISH_ORDERS) {
+            if (Rs2Bank.hasItem(fish.itemId)) {
+                Rs2Bank.withdrawAll(fish.itemId);
+            }
+        }
+        Rs2Bank.closeBank();
+
+        if (!Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+        sleepUntil(Rs2GrandExchange::isOpen, 8000);
+
+        for (SellFishOrder fish : RESTOCK_FISH_ORDERS) {
+            int quantity = Rs2Inventory.count(fish.itemName, true);
+            if (quantity <= 0) {
+                continue;
+            }
+            int price = Math.max(1, Rs2GrandExchange.getPrice(fish.itemId));
+            GrandExchangeRequest sellRequest = GrandExchangeRequest.builder()
+                    .action(GrandExchangeAction.SELL)
+                    .itemName(fish.itemName)
+                    .quantity(quantity)
+                    .price(price)
+                    .closeAfterCompletion(false)
+                    .build();
+            Rs2GrandExchange.processOffer(sellRequest);
+            sleepUntil(Rs2GrandExchange::isOpen, 4000);
+        }
+
+        for (SupplyOrder supply : suppliesToBuy) {
+            int quantityNeeded = Math.max(0, FISHING_SUPPLY_BUY_AMOUNT - (Rs2Inventory.count(supply.itemName) + countBankItem(supply.itemName)));
+            if (quantityNeeded <= 0) {
+                continue;
+            }
+            GrandExchangeRequest buyRequest = GrandExchangeRequest.builder()
+                    .action(GrandExchangeAction.BUY)
+                    .itemName(supply.itemName)
+                    .quantity(quantityNeeded)
+                    .percent(5)
+                    .closeAfterCompletion(false)
+                    .build();
+            Rs2GrandExchange.processOffer(buyRequest);
+            sleepUntil(Rs2GrandExchange::isOpen, 4000);
+        }
+
+        if (Rs2GrandExchange.hasBoughtOffer() || Rs2GrandExchange.hasSoldOffer()) {
+            Rs2GrandExchange.collectAllToBank();
+            sleep(600, 1200);
+        }
+        Rs2GrandExchange.closeExchange();
+        return true;
+    }
+
+
+
     private void applyCookingForLevel() {
         int cookingLevel = Microbot.getClient().getRealSkillLevel(Skill.COOKING);
         List<F2PCookOption> availableItems = Arrays.stream(F2PCookOption.values())
@@ -631,15 +1057,46 @@ public class KSPAccountBuilderScript extends Script {
                 ? CookingItem.RAW_SHRIMP
                 : availableItems.get(random.nextInt(availableItems.size())).cookingItem;
 
+
+        currentCookingTask = formatCookingItemName(selected);
+        configManager.setConfiguration("GECooker", "Cook Item", selected);
+    }
+
+    private String formatCookingItemName(CookingItem item) {
+        if (item == null) {
+            return "Unknown";
+        }
+        String readable = item.name().toLowerCase().replace("raw_", "").replace("_", " ");
+        String[] words = readable.split(" ");
+        StringBuilder result = new StringBuilder();
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (result.length() > 0) {
+                result.append(" ");
+            }
+            result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return result.length() == 0 ? item.name() : result.toString();
+    }
+
+    private void startCooker() {
+
         configManager.setConfiguration("GECooker", "Cook Item", selected);
     }
 
     private void startCooker(GECookerConfig cookerConfig) {
+
         if (cookerRunning) {
             return;
         }
         applyCookingForLevel();
+
+        cookerScript.run(this.cookerConfig);
+
         cookerScript.run(cookerConfig);
+
         cookerRunning = true;
     }
 
@@ -774,16 +1231,75 @@ public class KSPAccountBuilderScript extends Script {
 
     private enum F2PFishOption {
         SHRIMP(Fish.SHRIMP_AND_ANCHOVIES, 1, false),
+
+        SARDINE(Fish.SARDINE, 5, false, new SupplyOrder("Fishing bait")),
+        HERRING(Fish.HERRING, 10, false, new SupplyOrder("Fishing bait")),
+        TROUT_SALMON(Fish.TROUT_AND_SALMON, 20, false, new SupplyOrder("Feather")),
+        PIKE(Fish.PIKE, 25, false, new SupplyOrder("Fishing bait")),
+
         SARDINE(Fish.SARDINE, 5, false),
         HERRING(Fish.HERRING, 10, false),
         TROUT_SALMON(Fish.TROUT_AND_SALMON, 20, false),
         PIKE(Fish.PIKE, 25, false),
+
         TUNA_SWORDFISH(Fish.TUNA_AND_SWORDFISH, 35, true),
         LOBSTER(Fish.LOBSTER, 40, true);
 
         private final Fish fish;
         private final int requiredLevel;
         private final boolean requiresKaramja;
+
+        private final List<SupplyOrder> supplyOrders;
+        private final String displayName;
+
+        F2PFishOption(Fish fish, int requiredLevel, boolean requiresKaramja, SupplyOrder... supplyOrders) {
+            this.fish = fish;
+            this.requiredLevel = requiredLevel;
+            this.requiresKaramja = requiresKaramja;
+            this.supplyOrders = Arrays.asList(supplyOrders);
+            this.displayName = buildDisplayName(name());
+        }
+
+        private List<SupplyOrder> getSupplyOrders() {
+            return supplyOrders;
+        }
+
+        private String getDisplayName() {
+            return displayName;
+        }
+
+        private static String buildDisplayName(String enumName) {
+            String[] words = enumName.toLowerCase().split("_");
+            StringBuilder value = new StringBuilder();
+            for (String word : words) {
+                if (word.isEmpty() || "f2p".equals(word)) {
+                    continue;
+                }
+                if (value.length() > 0) {
+                    value.append(" ");
+                }
+                value.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+            }
+            return value.length() == 0 ? enumName : value.toString();
+        }
+    }
+
+    private static final class SupplyOrder {
+        private final String itemName;
+
+        private SupplyOrder(String itemName) {
+            this.itemName = itemName;
+        }
+    }
+
+    private static final class SellFishOrder {
+        private final int itemId;
+        private final String itemName;
+
+        private SellFishOrder(int itemId, String itemName) {
+            this.itemId = itemId;
+            this.itemName = itemName;
+
 
         F2PFishOption(Fish fish, int requiredLevel, boolean requiresKaramja) {
             this.fish = fish;
@@ -804,6 +1320,7 @@ public class KSPAccountBuilderScript extends Script {
         F2PFishOption(Fish fish, int requiredLevel) {
             this.fish = fish;
             this.requiredLevel = requiredLevel;
+
 
 
         }

@@ -25,6 +25,7 @@ public interface KSPAccountBuilderConfig extends Config {
     String breakSection = "breaks";
 
 
+
             name = "Targets",
             description = "Level targets for the account builder",
             position = 0
@@ -38,6 +39,7 @@ public interface KSPAccountBuilderConfig extends Config {
     )
 
     String flowSection = "flow";
+
 
 
     @ConfigItem(
@@ -85,6 +87,7 @@ public interface KSPAccountBuilderConfig extends Config {
     default boolean enableCustomBreaks() {
 
 
+
     @Range(min = 1, max = 99)
     @ConfigItem(
             keyName = "targetMiningLevel",
@@ -118,6 +121,7 @@ public interface KSPAccountBuilderConfig extends Config {
     )
     default boolean stopWhenComplete() {
 
+
         return true;
     }
 
@@ -147,6 +151,29 @@ public interface KSPAccountBuilderConfig extends Config {
     }
 
     @ConfigItem(
+
+            keyName = "minBreakDurationMinutes",
+            name = "Min break duration (minutes)",
+            description = "Minimum break duration in minutes",
+            position = 3,
+            section = breakSection
+    )
+    @Range(min = 1, max = 240)
+    default int minBreakDurationMinutes() {
+        return 1;
+    }
+
+    @ConfigItem(
+            keyName = "maxBreakDurationMinutes",
+            name = "Max break duration (minutes)",
+            description = "Maximum break duration in minutes",
+            position = 4,
+            section = breakSection
+    )
+    @Range(min = 1, max = 240)
+    default int maxBreakDurationMinutes() {
+        return 3;
+
             keyName = "minBreakDurationSeconds",
             name = "Min break duration (seconds)",
             description = "Minimum break duration in seconds",
@@ -200,6 +227,7 @@ public interface KSPAccountBuilderConfig extends Config {
     @Range(min = 1, max = 240)
     default int maxSwitchMinutes() {
         return 60;
+
     }
 
 }
