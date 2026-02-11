@@ -9,6 +9,12 @@ import net.runelite.client.config.Range;
 @ConfigGroup("KSPAccountBuilder")
 public interface KSPAccountBuilderConfig extends Config {
     @ConfigSection(
+
+            name = "Flow",
+            description = "Order and timing behavior",
+            position = 0
+    )
+
             name = "Targets",
             description = "Level targets for the account builder",
             position = 0
@@ -20,6 +26,7 @@ public interface KSPAccountBuilderConfig extends Config {
             description = "Order and completion behavior",
             position = 1
     )
+
     String flowSection = "flow";
 
     @ConfigItem(
@@ -32,6 +39,7 @@ public interface KSPAccountBuilderConfig extends Config {
     default KSPAccountBuilderStartSkill startSkill() {
         return KSPAccountBuilderStartSkill.MINING;
     }
+
 
     @Range(min = 1, max = 99)
     @ConfigItem(
@@ -72,7 +80,11 @@ public interface KSPAccountBuilderConfig extends Config {
             keyName = "minSwitchMinutes",
             name = "Min switch minutes",
             description = "Minimum minutes before switching tasks",
+
+            position = 1,
+
             position = 2,
+
             section = flowSection
     )
     @Range(min = 1, max = 240)
@@ -84,7 +96,11 @@ public interface KSPAccountBuilderConfig extends Config {
             keyName = "maxSwitchMinutes",
             name = "Max switch minutes",
             description = "Maximum minutes before switching tasks",
+
+            position = 2,
+
             position = 3,
+
             section = flowSection
     )
     @Range(min = 1, max = 240)
