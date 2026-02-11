@@ -168,6 +168,10 @@ public class AutoFishingScript extends Script {
     private void handleGettingGear() {
         if (Rs2Bank.walkToBankAndUseBank()) {
             for (String tool : selectedFish.getMethod().getRequiredItems()) {
+                if (isConsumableFishingSupply(tool)) {
+                    ensureConsumableSupply(tool);
+                    continue;
+                }
                 if (!Rs2Inventory.hasItem(tool) && !Rs2Equipment.isWearing(tool)) {
                     withdrawAndEquipItem(tool);
                 }
@@ -180,6 +184,22 @@ public class AutoFishingScript extends Script {
             }
             Rs2Bank.closeBank();
         }
+    }
+
+    private boolean isConsumableFishingSupply(String itemName) {
+        return itemName.equalsIgnoreCase("Feather")
+                || itemName.equalsIgnoreCase("Fishing bait")
+                || itemName.equalsIgnoreCase("Dark fishing bait")
+                || itemName.equalsIgnoreCase("Sandworms")
+                || itemName.equalsIgnoreCase("Raw karambwanji");
+    }
+
+    private void ensureConsumableSupply(String itemName) {
+        if (Rs2Inventory.hasItem(itemName)) {
+            return;
+        }
+        Rs2Bank.withdrawAll(itemName);
+        sleepUntil(() -> Rs2Inventory.hasItem(itemName), 2000);
     }
 
     private void handleDepositing() {
