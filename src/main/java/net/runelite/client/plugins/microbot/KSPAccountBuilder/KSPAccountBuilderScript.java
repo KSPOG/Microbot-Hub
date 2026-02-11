@@ -11,12 +11,20 @@ import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerRock;
 
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
 
+
+import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
+
+
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterConfig;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterTree;
 
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterMode;
+
+
+import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterMode;
+
 
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingConfig;
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingScript;
@@ -141,7 +149,11 @@ public class KSPAccountBuilderScript extends Script {
         stageLabel = currentStage.name();
         stageStartTimeMs = System.currentTimeMillis();
         stageDurationMs = selectStageDurationMs(config);
+
+        scheduleNextBreak(config);
+
         scheduleNextBreak();
+
 
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
@@ -152,11 +164,16 @@ public class KSPAccountBuilderScript extends Script {
                 if (!Microbot.isLoggedIn()) {
                     return;
                 }
+
+                if (handleCustomBreak(config)) {
+
                 if (handleCustomBreak()) {
+
                     return;
                 }
                 if (!minerRunning && !woodcutterRunning && !fishingRunning && !cookerRunning) {
                     startStageIfNeeded(minerConfig, woodcutterConfig, fishingConfig, cookerConfig);
+
 
 
                 if (!minerRunning && !woodcutterRunning && !fishingRunning && !cookerRunning) {
@@ -179,16 +196,19 @@ public class KSPAccountBuilderScript extends Script {
                     }
                     return;
 
+
                 }
 
                 boolean shouldSwitchByTime = shouldSwitchByTime(config);
 
                 if (shouldSwitchByTime) {
 
+
                 if ((currentStage == Stage.MINING && (miningComplete || shouldSwitchByTime))
                         || (currentStage == Stage.WOODCUTTING && (woodcuttingComplete || shouldSwitchByTime))
                         || (currentStage == Stage.F2P_FISHING && shouldSwitchByTime)
                         || (currentStage == Stage.F2P_COOKER && shouldSwitchByTime)) {
+
 
                     if (handleKaramjaExitBeforeSwitch()) {
                         return;
@@ -205,10 +225,12 @@ public class KSPAccountBuilderScript extends Script {
                     startMiner(minerConfig);
                 } else if (currentStage == Stage.WOODCUTTING) {
 
+
                 if (currentStage == Stage.MINING && !miningComplete) {
                     status = "Training Mining";
                     startMiner(minerConfig);
                 } else if (currentStage == Stage.WOODCUTTING && !woodcuttingComplete) {
+
 
                     status = "Training Woodcutting";
                     startWoodcutter(woodcutterConfig);
@@ -274,7 +296,15 @@ public class KSPAccountBuilderScript extends Script {
         return Duration.ofMinutes(chosenMinutes).toMillis();
     }
 
+
+    private boolean handleCustomBreak(KSPAccountBuilderConfig config) {
+        if (!config.enableCustomBreaks()) {
+            breakActive = false;
+            return false;
+        }
+
     private boolean handleCustomBreak() {
+
         long now = System.currentTimeMillis();
 
         if (breakActive) {
@@ -283,7 +313,11 @@ public class KSPAccountBuilderScript extends Script {
                 return true;
             }
             breakActive = false;
+
+            scheduleNextBreak(config);
+
             scheduleNextBreak();
+
             status = "Break finished";
             return false;
         }
@@ -291,13 +325,42 @@ public class KSPAccountBuilderScript extends Script {
         if (nextBreakAtMs > 0 && now >= nextBreakAtMs) {
             stopCurrentStage();
             breakActive = true;
+
+            breakEndAtMs = now + selectBreakDurationMs(config);
+
             breakEndAtMs = now + selectBreakDurationMs();
+
             status = "Custom break";
             return true;
         }
 
         return false;
     }
+
+
+    private void scheduleNextBreak(KSPAccountBuilderConfig config) {
+        if (!config.enableCustomBreaks()) {
+            nextBreakAtMs = 0L;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        int minMinutes = config.minBreakIntervalMinutes();
+        int maxMinutes = config.maxBreakIntervalMinutes();
+        int lower = Math.min(minMinutes, maxMinutes);
+        int upper = Math.max(minMinutes, maxMinutes);
+        int chosenMinutes = lower == upper ? lower : lower + random.nextInt(upper - lower + 1);
+        nextBreakAtMs = now + Duration.ofMinutes(chosenMinutes).toMillis();
+    }
+
+    private long selectBreakDurationMs(KSPAccountBuilderConfig config) {
+        int minSeconds = config.minBreakDurationSeconds();
+        int maxSeconds = config.maxBreakDurationSeconds();
+        int lower = Math.min(minSeconds, maxSeconds);
+        int upper = Math.max(minSeconds, maxSeconds);
+        int chosenSeconds = lower == upper ? lower : lower + random.nextInt(upper - lower + 1);
+        return Duration.ofSeconds(chosenSeconds).toMillis();
+    }
+
 
     private void scheduleNextBreak() {
         long now = System.currentTimeMillis();
@@ -307,6 +370,7 @@ public class KSPAccountBuilderScript extends Script {
     private long selectBreakDurationMs() {
         return Duration.ofSeconds(20 + random.nextInt(41)).toMillis();
     }
+
 
 
     private void startStageIfNeeded(KSPAutoMinerConfig minerConfig,
@@ -338,6 +402,7 @@ public class KSPAccountBuilderScript extends Script {
     }
 
 
+
     private boolean isMiningComplete(KSPAccountBuilderConfig config) {
         int level = Microbot.getClient().getRealSkillLevel(Skill.MINING);
         return level >= config.targetMiningLevel();
@@ -347,6 +412,7 @@ public class KSPAccountBuilderScript extends Script {
         int level = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
         return level >= config.targetWoodcuttingLevel();
     }
+
 
     private void startMiner(KSPAutoMinerConfig minerConfig) {
         if (minerRunning) {
@@ -491,7 +557,11 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void applyWoodcuttingTreeForLevel() {
+
+        configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.PROGRESSIVE_BANK);
+
         configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.CHOP_BANK);
+
 
         int woodcuttingLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
         List<KSPAutoWoodcutterTree> availableTrees = Arrays.stream(KSPAutoWoodcutterTree.values())
@@ -519,11 +589,13 @@ public class KSPAccountBuilderScript extends Script {
 
         configManager.setConfiguration("AutoFishing", "fishToCatch", selectedF2PFishOption.fish);
 
+
         Fish selected = availableFish.isEmpty()
                 ? Fish.SHRIMP_AND_ANCHOVIES
                 : availableFish.get(random.nextInt(availableFish.size())).fish;
 
         configManager.setConfiguration("AutoFishing", "fishToCatch", selected);
+
 
     }
 
@@ -718,6 +790,7 @@ public class KSPAccountBuilderScript extends Script {
             this.requiredLevel = requiredLevel;
             this.requiresKaramja = requiresKaramja;
 
+
         SHRIMP(Fish.SHRIMP_AND_ANCHOVIES, 1),
         SARDINE(Fish.SARDINE, 5),
         HERRING(Fish.HERRING, 10),
@@ -731,6 +804,7 @@ public class KSPAccountBuilderScript extends Script {
         F2PFishOption(Fish fish, int requiredLevel) {
             this.fish = fish;
             this.requiredLevel = requiredLevel;
+
 
         }
     }
