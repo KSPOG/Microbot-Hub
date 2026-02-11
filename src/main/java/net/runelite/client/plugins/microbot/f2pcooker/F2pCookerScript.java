@@ -90,7 +90,7 @@ public class F2pCookerScript extends Script {
 
                 if (!isNearStove()) {
                     status = "Walking to stove area";
-                    Rs2Walker.walkTo(EDGEVILLE_STOVE_POINT, 1);
+                    Rs2Walker.walkTo(EDGEVILLE_STOVE_POINT, 4);
                     return;
                 }
 
