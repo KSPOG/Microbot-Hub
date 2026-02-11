@@ -26,6 +26,7 @@ public interface KSPAccountBuilderConfig extends Config {
 
 
 
+
             name = "Targets",
             description = "Level targets for the account builder",
             position = 0
@@ -39,6 +40,7 @@ public interface KSPAccountBuilderConfig extends Config {
     )
 
     String flowSection = "flow";
+
 
 
 
@@ -85,6 +87,7 @@ public interface KSPAccountBuilderConfig extends Config {
             section = breakSection
     )
     default boolean enableCustomBreaks() {
+
 
 
 
@@ -173,6 +176,7 @@ public interface KSPAccountBuilderConfig extends Config {
     @Range(min = 1, max = 240)
     default int maxBreakDurationMinutes() {
         return 3;
+
 
             keyName = "minBreakDurationSeconds",
             name = "Min break duration (seconds)",

@@ -4,6 +4,11 @@ package net.runelite.client.plugins.microbot.KSPAccountBuilder;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
 
+
+import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
+import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
+
+
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
@@ -27,6 +32,9 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
         panelComponent.setPreferredSize(new Dimension(320, 190));
 
+
+        panelComponent.setPreferredSize(new Dimension(320, 190));
+
         panelComponent.setPreferredSize(new Dimension(240, 150));
 
         panelComponent.getChildren().add(TitleComponent.builder()
@@ -39,21 +47,28 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
                 .right(formatStageLabel(KSPAccountBuilderScript.stageLabel))
 
+
+                .right(formatStageLabel(KSPAccountBuilderScript.stageLabel))
+
                 .right(KSPAccountBuilderScript.stageLabel)
 
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Status:")
-
+<
                 .right(buildDetailedStatus())
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Currently Doing:")
+
+                .right(KSPAccountBuilderScript.getCurrentStageTask())
+
                 .right(KSPAccountBuilderScript.getCurrentTaskSummary())
 
                 .right(KSPAccountBuilderScript.status)
+
 
                 .build());
 
@@ -138,6 +153,7 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
         }
         return label.length() == 0 ? stageLabel : label.toString();
     }
+
 
 
         return super.render(graphics);
