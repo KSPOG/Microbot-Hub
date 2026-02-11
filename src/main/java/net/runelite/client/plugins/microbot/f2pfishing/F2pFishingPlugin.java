@@ -23,12 +23,7 @@ import java.awt.AWTException;
 @Slf4j
 public class F2pFishingPlugin extends Plugin {
 
-    public static final String version = "1.1.7";
-
-
-    public static final String version = "1.1.5";
-
-    public static final String version = "1.1.3";
+    public static final String version = "1.1.9";
 
 
     @Inject
