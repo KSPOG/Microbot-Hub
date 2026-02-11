@@ -139,8 +139,13 @@ public class KSPAccountBuilderScript extends Script {
                 if (!Microbot.isLoggedIn()) {
                     return;
                 }
+
+                if (!minerRunning && !woodcutterRunning && !fishingRunning && !cookerRunning) {
+                    startStageIfNeeded(minerConfig, woodcutterConfig, fishingConfig, cookerConfig);
+
                 if (!minerRunning && !woodcutterRunning && !fishingRunning) {
                     startStageIfNeeded(minerConfig, woodcutterConfig, fishingConfig);
+
                 }
 
                 boolean miningComplete = isMiningComplete(config);
