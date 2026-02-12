@@ -5,11 +5,7 @@ import net.runelite.client.plugins.microbot.autofishing.enums.Fish;
 import java.util.Arrays;
 import java.util.List;
 
-
 public enum F2PFishOption {
-
-enum F2PFishOption {
-
     SHRIMP(Fish.SHRIMP_AND_ANCHOVIES, 1, false),
     SARDINE(Fish.SARDINE, 5, false, new SupplyOrder("Fishing bait")),
     HERRING(Fish.HERRING, 10, false, new SupplyOrder("Fishing bait")),
@@ -33,7 +29,6 @@ enum F2PFishOption {
     }
 
 
-
     public Fish getFish() {
         return fish;
     }
@@ -45,7 +40,6 @@ enum F2PFishOption {
     public boolean isRequiresKaramja() {
         return requiresKaramja;
     }
-
 
     List<SupplyOrder> getSupplyOrders() {
         return supplyOrders;

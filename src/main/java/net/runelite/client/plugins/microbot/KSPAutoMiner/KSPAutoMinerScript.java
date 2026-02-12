@@ -182,12 +182,17 @@ public class KSPAutoMinerScript extends Script {
 
     private void updateTarget(KSPAutoMinerMode mode, KSPAutoMinerRock rockSelection) {
         int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
+
+        int combatLevel = Microbot.getClient().getLocalPlayer() != null
+                ? Microbot.getClient().getLocalPlayer().getCombatLevel()
+                : 3;
+
         if (rockSelection != selectedRock) {
             selectedRock = rockSelection;
             resetOreCounters();
         }
 
-        MiningStage newStage = determineStage(mode, miningLevel);
+        MiningStage newStage = determineStage(mode, miningLevel, combatLevel);
         if (newStage != stage) {
             stage = newStage;
             resetOreCounters();
@@ -227,7 +232,7 @@ public class KSPAutoMinerScript extends Script {
         }
     }
 
-    private MiningStage determineStage(KSPAutoMinerMode mode, int miningLevel) {
+    private MiningStage determineStage(KSPAutoMinerMode mode, int miningLevel, int combatLevel) {
         if (!mode.isProgressiveMode()) {
             return miningLevel < 15 ? MiningStage.TIN_COPPER : MiningStage.IRON;
         }
@@ -242,6 +247,9 @@ public class KSPAutoMinerScript extends Script {
             return MiningStage.COAL;
         }
         if (miningLevel < 55) {
+            if (combatLevel < 64) {
+                return MiningStage.COAL;
+            }
             return MiningStage.GOLD;
         }
         if (miningLevel < 70) {

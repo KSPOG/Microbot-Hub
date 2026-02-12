@@ -8,20 +8,13 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerConfig;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerRock;
-
-import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerMode;
-
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterConfig;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterTree;
-
 import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.F2PFishingSkillPlanner;
 import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.MiningSkillPlanner;
 import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.WoodcuttingSkillPlanner;
-
-import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterMode;
-
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingConfig;
 import net.runelite.client.plugins.microbot.autofishing.AutoFishingScript;
 import net.runelite.client.plugins.microbot.gecooker.GECookerConfig;
@@ -30,6 +23,7 @@ import net.runelite.client.plugins.microbot.gecooker.enums.CookingItem;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
+import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.ui.ClientUI;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
@@ -48,6 +42,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 
 @Slf4j
@@ -58,6 +53,8 @@ public class KSPAccountBuilderScript extends Script {
     public static String currentWoodcuttingTask = "Unknown";
     public static String currentFishingTask = "Unknown";
     public static String currentCookingTask = "Unknown";
+    public static String currentMeleeTask = "Unknown";
+    public static String currentMeleeSkillTask = "Any";
 
     private static long startTimeMs;
     private static long stageStartTimeMs;
@@ -69,6 +66,9 @@ public class KSPAccountBuilderScript extends Script {
     private static final int FISHING_SUPPLY_BUY_AMOUNT = 1000;
     private static final WorldPoint KARAMJA_CUSTOMS_DOCK = new WorldPoint(2953, 3146, 0);
     private static final WorldPoint PORT_SARIM_DOCK = new WorldPoint(3027, 3217, 0);
+    private static final WorldPoint LUMBRIDGE_CHICKEN_PEN = new WorldPoint(3233, 3295, 0);
+    private static final WorldArea LOW_LEVEL_MELEE_AREA = new WorldArea(3014, 3282, 6, 16, 0);
+    private static final WorldPoint LOW_LEVEL_MELEE_CENTER = new WorldPoint(3016, 3289, 0);
     private static final List<SellFishOrder> RESTOCK_FISH_ORDERS = Arrays.asList(
             new SellFishOrder(361, "Tuna"),
             new SellFishOrder(351, "Pike"),
@@ -81,6 +81,7 @@ public class KSPAccountBuilderScript extends Script {
     private boolean woodcutterRunning;
     private boolean fishingRunning;
     private boolean cookerRunning;
+    private boolean meleeRunning;
     private F2PFishOption selectedF2PFishOption = F2PFishOption.SHRIMP;
     private static long nextBreakAtMs;
     private static long breakEndAtMs;
@@ -133,16 +134,19 @@ public class KSPAccountBuilderScript extends Script {
     private KSPAutoWoodcutterConfig woodcutterConfig;
     private AutoFishingConfig fishingConfig;
     private GECookerConfig cookerConfig;
+    private KSPAccountBuilderConfig builderConfig;
 
     private enum Stage {
         MINING,
         WOODCUTTING,
         F2P_FISHING,
         F2P_COOKER,
+        MELEE,
         NONE
     }
 
     public boolean run(KSPAccountBuilderConfig config) {
+        this.builderConfig = config;
         startTimeMs = System.currentTimeMillis();
         status = "Starting";
         resetCurrentTasks();
@@ -153,7 +157,7 @@ public class KSPAccountBuilderScript extends Script {
         captureOriginalClientTitle();
         KSPAccountBuilderStartSkill startSkill = config.startSkill();
         if (startSkill == KSPAccountBuilderStartSkill.RANDOM) {
-            Stage[] startingStages = {Stage.MINING, Stage.WOODCUTTING, Stage.F2P_FISHING, Stage.F2P_COOKER};
+            Stage[] startingStages = {Stage.MINING, Stage.WOODCUTTING, Stage.F2P_FISHING, Stage.F2P_COOKER, Stage.MELEE};
             currentStage = startingStages[random.nextInt(startingStages.length)];
         } else {
             if (startSkill == KSPAccountBuilderStartSkill.WOODCUTTING) {
@@ -162,6 +166,8 @@ public class KSPAccountBuilderScript extends Script {
                 currentStage = Stage.F2P_FISHING;
             } else if (startSkill == KSPAccountBuilderStartSkill.F2P_COOKER) {
                 currentStage = Stage.F2P_COOKER;
+            } else if (startSkill == KSPAccountBuilderStartSkill.MELEE) {
+                currentStage = Stage.MELEE;
             } else {
                 currentStage = Stage.MINING;
             }
@@ -187,11 +193,12 @@ public class KSPAccountBuilderScript extends Script {
                     return;
                 }
 
-                if (!minerRunning && !woodcutterRunning && !fishingRunning && !cookerRunning) {
+                if (!minerRunning && !woodcutterRunning && !fishingRunning && !cookerRunning && !meleeRunning) {
                     startStageIfNeeded();
                 }
 
-                boolean shouldSwitchByTime = shouldSwitchByTime(config);
+                boolean shouldSwitchByTime = !isTaskSwitchLocked()
+                        && (shouldSwitchByTime(config) || shouldSwitchMeleeByTarget());
 
                 if (shouldSwitchByTime) {
                     if (handleKaramjaExitBeforeSwitch()) {
@@ -221,6 +228,9 @@ public class KSPAccountBuilderScript extends Script {
                 } else if (currentStage == Stage.F2P_COOKER) {
                     status = "Training F2P Cooking";
                     startCooker();
+                } else if (currentStage == Stage.MELEE) {
+                    status = "Training Melee (" + currentMeleeSkillTask + ")";
+                    startMelee();
                 }
             } catch (Exception ex) {
                 Microbot.log("KSPAccountBuilder error: " + ex.getMessage());
@@ -235,10 +245,12 @@ public class KSPAccountBuilderScript extends Script {
         currentWoodcuttingTask = "Unknown";
         currentFishingTask = "Unknown";
         currentCookingTask = "Unknown";
+        currentMeleeTask = "Unknown";
+        currentMeleeSkillTask = "Any";
     }
 
     public static String getCurrentTaskSummary() {
-        return String.join(", ", Arrays.asList(currentMiningTask, currentWoodcuttingTask, currentFishingTask, currentCookingTask));
+        return String.join(", ", Arrays.asList(currentMiningTask, currentWoodcuttingTask, currentFishingTask, currentCookingTask, currentMeleeTask));
     }
 
     public static String getCurrentStageTask() {
@@ -254,6 +266,8 @@ public class KSPAccountBuilderScript extends Script {
                 return currentFishingTask;
             case "F2P_COOKER":
                 return currentCookingTask;
+            case "MELEE":
+                return currentMeleeTask + " (" + currentMeleeSkillTask + ")";
             default:
                 return "Unknown";
         }
@@ -300,9 +314,26 @@ public class KSPAccountBuilderScript extends Script {
         return remaining > 0 ? Duration.ofMillis(remaining) : Duration.ZERO;
     }
 
+    private boolean isTaskSwitchLocked() {
+        return builderConfig != null && builderConfig.debugLockTaskSwitching();
+    }
+
     private boolean shouldSwitchByTime(KSPAccountBuilderConfig config) {
         long elapsedMs = System.currentTimeMillis() - stageStartTimeMs;
         return stageDurationMs > 0 && elapsedMs >= stageDurationMs;
+    }
+
+
+    private boolean shouldSwitchMeleeByTarget() {
+        if (currentStage != Stage.MELEE) {
+            return false;
+        }
+        String targetSkill = resolveCurrentMeleeSkillTask();
+        if (!"Skipped".equals(targetSkill)) {
+            return false;
+        }
+        status = "Melee target reached";
+        return true;
     }
 
     private long selectStageDurationMs(KSPAccountBuilderConfig config) {
@@ -453,6 +484,8 @@ public class KSPAccountBuilderScript extends Script {
             startFishing();
         } else if (currentStage == Stage.F2P_COOKER) {
             startCooker();
+        } else if (currentStage == Stage.MELEE) {
+            startMelee();
         }
     }
 
@@ -488,6 +521,9 @@ public class KSPAccountBuilderScript extends Script {
         }
         if (stage == Stage.F2P_FISHING) {
             return Stage.F2P_COOKER;
+        }
+        if (stage == Stage.F2P_COOKER) {
+            return Stage.MELEE;
         }
         return Stage.MINING;
     }
@@ -539,6 +575,7 @@ public class KSPAccountBuilderScript extends Script {
         stopWoodcutter();
         stopFishing();
         stopCooker();
+        stopMelee();
     }
 
     private void stopCurrentStage() {
@@ -550,6 +587,8 @@ public class KSPAccountBuilderScript extends Script {
             stopFishing();
         } else if (currentStage == Stage.F2P_COOKER) {
             stopCooker();
+        } else if (currentStage == Stage.MELEE) {
+            stopMelee();
         }
     }
 
@@ -620,7 +659,6 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void applyMiningRockForLevel() {
-
         KSPAutoMinerRock selected = MiningSkillPlanner.configure(configManager);
         currentMiningTask = selected.toString();
     }
@@ -631,54 +669,8 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void applyFishingForLevel() {
-        selectedF2PFishOption = F2PFishingSkillPlanner.configure(configManager, random);
+        selectedF2PFishOption = F2PFishingSkillPlanner.configure(configManager);
         currentFishingTask = selectedF2PFishOption.getDisplayName();
-
-        configManager.setConfiguration("KSPAutoMiner", "mode", KSPAutoMinerMode.MINE_BANK);
-        int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
-        List<KSPAutoMinerRock> availableRocks = Arrays.stream(KSPAutoMinerRock.values())
-                .filter(rock -> miningLevel >= rock.getMiningLevel())
-                .collect(java.util.stream.Collectors.toList());
-        if (availableRocks.isEmpty()) {
-            configManager.setConfiguration("KSPAutoMiner", "rock", KSPAutoMinerRock.COPPER_TIN);
-            currentMiningTask = KSPAutoMinerRock.COPPER_TIN.toString();
-            return;
-        }
-        KSPAutoMinerRock selected = availableRocks.get(random.nextInt(availableRocks.size()));
-        currentMiningTask = selected.toString();
-        configManager.setConfiguration("KSPAutoMiner", "rock", selected);
-    }
-
-    private void applyWoodcuttingTreeForLevel() {
-        configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.PROGRESSIVE_BANK);
-        int woodcuttingLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
-        List<KSPAutoWoodcutterTree> availableTrees = Arrays.stream(KSPAutoWoodcutterTree.values())
-                .filter(tree -> woodcuttingLevel >= tree.getWoodcuttingLevel())
-                .collect(java.util.stream.Collectors.toList());
-        if (availableTrees.isEmpty()) {
-            configManager.setConfiguration("KSPAutoWoodcutter", "tree", KSPAutoWoodcutterTree.TREE);
-            currentWoodcuttingTask = KSPAutoWoodcutterTree.TREE.toString();
-            return;
-        }
-        KSPAutoWoodcutterTree selected = availableTrees.get(random.nextInt(availableTrees.size()));
-        currentWoodcuttingTask = selected.toString();
-        configManager.setConfiguration("KSPAutoWoodcutter", "tree", selected);
-    }
-
-    private void applyFishingForLevel() {
-        configManager.setConfiguration("AutoFishing", "useBank", true);
-        int fishingLevel = Microbot.getClient().getRealSkillLevel(Skill.FISHING);
-        List<F2PFishOption> availableFish = Arrays.stream(F2PFishOption.values())
-                .filter(option -> fishingLevel >= option.requiredLevel)
-                .collect(java.util.stream.Collectors.toList());
-
-        selectedF2PFishOption = availableFish.isEmpty()
-                ? F2PFishOption.SHRIMP
-                : availableFish.get(random.nextInt(availableFish.size()));
-
-        currentFishingTask = selectedF2PFishOption.getDisplayName();
-        configManager.setConfiguration("AutoFishing", "fishToCatch", selectedF2PFishOption.fish);
-
     }
 
     private void startFishing() {
@@ -690,11 +682,7 @@ public class KSPAccountBuilderScript extends Script {
             status = "Restocking fishing supplies";
             return;
         }
-
         if (selectedF2PFishOption.isRequiresKaramja() && handleKaramjaEntryForFishing()) {
-
-        if (selectedF2PFishOption.requiresKaramja && handleKaramjaEntryForFishing()) {
-
             status = "Traveling to Karamja";
             return;
         }
@@ -811,11 +799,7 @@ public class KSPAccountBuilderScript extends Script {
     private void applyCookingForLevel() {
         int cookingLevel = Microbot.getClient().getRealSkillLevel(Skill.COOKING);
         List<F2PCookOption> availableItems = Arrays.stream(F2PCookOption.values())
-
                 .filter(option -> cookingLevel >= option.getRequiredLevel())
-
-                .filter(option -> cookingLevel >= option.requiredLevel)
-
                 .collect(java.util.stream.Collectors.toList());
 
         CookingItem selected = availableItems.isEmpty()
@@ -860,6 +844,182 @@ public class KSPAccountBuilderScript extends Script {
         }
         cookerScript.shutdown();
         cookerRunning = false;
+    }
+
+    private void startMelee() {
+        Skill targetSkill = resolveCurrentMeleeSkill();
+        currentMeleeTask = "Chicken";
+        currentMeleeSkillTask = targetSkill == null ? "Skipped" : formatSkillName(targetSkill);
+        if (targetSkill == null) {
+            meleeRunning = false;
+            status = "Melee target reached";
+            return;
+        }
+        meleeRunning = true;
+
+        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+        if (currentLocation == null) {
+            return;
+        }
+
+        if (buryBonesIfConfigured()) {
+            return;
+        }
+
+        WorldPoint trainingDestination = shouldUseLowLevelMeleeArea(targetSkill)
+                ? LOW_LEVEL_MELEE_CENTER
+                : LUMBRIDGE_CHICKEN_PEN;
+
+        if (currentLocation.distanceTo(trainingDestination) > 10) {
+            status = "Walking to melee area";
+            Rs2Walker.walkTo(trainingDestination);
+            return;
+        }
+
+        if (targetSkill != null && shouldUseLowLevelMeleeArea(targetSkill)
+                && !LOW_LEVEL_MELEE_AREA.contains(currentLocation)) {
+            status = "Entering low-level melee area";
+            Rs2Walker.walkTo(LOW_LEVEL_MELEE_CENTER);
+            return;
+        }
+
+        if (Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
+            status = "Training " + formatSkillName(targetSkill);
+            return;
+        }
+
+        if (lootMeleeDrops()) {
+            return;
+        }
+
+        Rs2NpcModel meleeTarget = resolveMeleeNpcTarget();
+        if (meleeTarget == null) {
+            status = "Waiting for melee target";
+            return;
+        }
+
+        status = "Attacking " + meleeTarget.getName();
+        Rs2Npc.interact(meleeTarget, "Attack");
+    }
+
+    private boolean lootMeleeDrops() {
+        if (Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
+            return false;
+        }
+
+        if (Rs2GroundItem.loot("Feather", 8)) {
+            status = "Looting feathers";
+            return true;
+        }
+
+        if (Rs2GroundItem.loot("Bones", 8)) {
+            status = "Looting bones";
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean buryBonesIfConfigured() {
+        if (builderConfig == null || !builderConfig.buryBones()) {
+            return false;
+        }
+        if (Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
+            return false;
+        }
+        if (!Rs2Inventory.hasItem("Bones")) {
+            return false;
+        }
+        status = "Burying bones";
+        return Rs2Inventory.interact("Bones", "Bury");
+    }
+
+    private String resolveCurrentMeleeSkillTask() {
+        Skill skill = resolveCurrentMeleeSkill();
+        return skill == null ? "Skipped" : formatSkillName(skill);
+    }
+
+    private Skill resolveCurrentMeleeSkill() {
+        KSPAccountBuilderMeleeSkill configured = builderConfig != null ? builderConfig.meleeSkill() : KSPAccountBuilderMeleeSkill.ANY;
+        if (configured == null || configured == KSPAccountBuilderMeleeSkill.ANY) {
+            if (isSkillTrainable(Skill.ATTACK)) {
+                return Skill.ATTACK;
+            }
+            if (isSkillTrainable(Skill.STRENGTH)) {
+                return Skill.STRENGTH;
+            }
+            if (isSkillTrainable(Skill.DEFENCE)) {
+                return Skill.DEFENCE;
+            }
+            return null;
+        }
+
+        Skill selectedSkill = configured.getSkill();
+        if (selectedSkill == null) {
+            return null;
+        }
+
+        return isSkillTrainable(selectedSkill) ? selectedSkill : null;
+    }
+
+    private boolean shouldUseLowLevelMeleeArea(Skill skill) {
+        if (skill == null || Microbot.getClient() == null) {
+            return false;
+        }
+        return Microbot.getClient().getRealSkillLevel(skill) < 10;
+    }
+
+    private Rs2NpcModel resolveMeleeNpcTarget() {
+        List<String> targetNames = Arrays.asList("Chicken", "Barbarian", "Goblin", "Cow", "Rat");
+        for (String targetName : targetNames) {
+            Rs2NpcModel npc = Rs2Npc.getNpc(targetName);
+            if (npc != null) {
+                return npc;
+            }
+        }
+        return null;
+    }
+
+    private boolean isSkillTrainable(Skill skill) {
+        int target = getMeleeTargetLevel(skill);
+        if (target == 1) {
+            return false;
+        }
+        if (target == 0) {
+            return true;
+        }
+        int currentLevel = Microbot.getClient().getRealSkillLevel(skill);
+        return currentLevel < target;
+    }
+
+    private int getMeleeTargetLevel(Skill skill) {
+        if (skill == Skill.ATTACK) {
+            return builderConfig != null ? builderConfig.attackTargetLevel() : 0;
+        }
+        if (skill == Skill.STRENGTH) {
+            return builderConfig != null ? builderConfig.strengthTargetLevel() : 0;
+        }
+        if (skill == Skill.DEFENCE) {
+            return builderConfig != null ? builderConfig.defenceTargetLevel() : 0;
+        }
+        return 0;
+    }
+
+    private String formatSkillName(Skill skill) {
+        if (skill == Skill.ATTACK) {
+            return "Attack";
+        }
+        if (skill == Skill.STRENGTH) {
+            return "Strength";
+        }
+        if (skill == Skill.DEFENCE) {
+            return "Defence";
+        }
+        return "Any";
+    }
+
+    private void stopMelee() {
+        meleeRunning = false;
     }
 
     private boolean ensureToolAvailable(boolean miningStage) {
@@ -983,8 +1143,4 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
-
 }
-
-}
-

@@ -11,7 +11,7 @@ public final class WoodcuttingSkillPlanner {
     }
 
     public static KSPAutoWoodcutterTree configure(ConfigManager configManager) {
-        configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.PROGRESSIVE_BANK);
+        configManager.setConfiguration("KSPAutoWoodcutter", "mode", KSPAutoWoodcutterMode.CHOP_BANK);
         int woodcuttingLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
 
         KSPAutoWoodcutterTree selected;

@@ -11,8 +11,11 @@ public final class MiningSkillPlanner {
     }
 
     public static KSPAutoMinerRock configure(ConfigManager configManager) {
-        configManager.setConfiguration("KSPAutoMiner", "mode", KSPAutoMinerMode.PROGRESSIVE_BANK);
+        configManager.setConfiguration("KSPAutoMiner", "mode", KSPAutoMinerMode.MINE_BANK);
         int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
+        int combatLevel = Microbot.getClient().getLocalPlayer() != null
+                ? Microbot.getClient().getLocalPlayer().getCombatLevel()
+                : 3;
 
         KSPAutoMinerRock selected;
         if (miningLevel < 15) {
@@ -22,7 +25,7 @@ public final class MiningSkillPlanner {
         } else if (miningLevel < 40) {
             selected = KSPAutoMinerRock.COAL;
         } else if (miningLevel < 55) {
-            selected = KSPAutoMinerRock.GOLD;
+            selected = combatLevel < 64 ? KSPAutoMinerRock.COAL : KSPAutoMinerRock.GOLD;
         } else if (miningLevel < 70) {
             selected = KSPAutoMinerRock.MITHRIL;
         } else {

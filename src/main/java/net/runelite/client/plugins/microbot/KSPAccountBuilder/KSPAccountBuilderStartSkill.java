@@ -5,5 +5,6 @@ public enum KSPAccountBuilderStartSkill {
     WOODCUTTING,
     F2P_FISHING,
     F2P_COOKER,
+    MELEE,
     RANDOM
 }
