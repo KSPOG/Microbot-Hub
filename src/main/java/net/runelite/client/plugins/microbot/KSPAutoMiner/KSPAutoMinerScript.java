@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class KSPAutoMinerScript extends Script {
     private static final WorldPoint START_LOCATION = new WorldPoint(3284, 3365, 0);
-    private static final WorldPoint COAL_LOCATION = new WorldPoint(3303, 3300, 0);
+    private static final WorldPoint COAL_LOCATION = new WorldPoint(3083, 3422, 0);
     private static final WorldPoint GOLD_LOCATION = new WorldPoint(3294, 3286, 0);
     private static final WorldPoint MITHRIL_LOCATION = new WorldPoint(3304, 3304, 0);
     private static final WorldPoint ADAMANT_LOCATION = new WorldPoint(3299, 3317, 0);
@@ -184,21 +184,21 @@ public class KSPAutoMinerScript extends Script {
         int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
         int combatLevel = Microbot.getClient().getLocalPlayer() != null
                 ? Microbot.getClient().getLocalPlayer().getCombatLevel()
-                : 0;
+                : 3;
         if (rockSelection != selectedRock) {
             selectedRock = rockSelection;
             resetOreCounters();
         }
 
-        MiningStage newStage = determineStage(mode, miningLevel);
+        MiningStage newStage = determineStage(mode, miningLevel, combatLevel);
         if (newStage != stage) {
             stage = newStage;
             resetOreCounters();
         }
 
         if (!mode.isProgressiveMode()) {
-            targetLocation = START_LOCATION;
             targetRock = mapRockSelection(rockSelection);
+            targetLocation = mapLocationForRockSelection(rockSelection);
             return;
         }
 
@@ -212,7 +212,7 @@ public class KSPAutoMinerScript extends Script {
                 targetRock = Rock.IRON;
                 break;
             case COAL:
-                targetLocation = combatLevel < 65 ? new WorldPoint(3081, 3421, 0) : COAL_LOCATION;
+                targetLocation = COAL_LOCATION;
                 targetRock = Rock.COAL;
                 break;
             case GOLD:
@@ -230,7 +230,7 @@ public class KSPAutoMinerScript extends Script {
         }
     }
 
-    private MiningStage determineStage(KSPAutoMinerMode mode, int miningLevel) {
+    private MiningStage determineStage(KSPAutoMinerMode mode, int miningLevel, int combatLevel) {
         if (!mode.isProgressiveMode()) {
             return miningLevel < 15 ? MiningStage.TIN_COPPER : MiningStage.IRON;
         }
@@ -245,6 +245,9 @@ public class KSPAutoMinerScript extends Script {
             return MiningStage.COAL;
         }
         if (miningLevel < 55) {
+            if (combatLevel < 64) {
+                return MiningStage.COAL;
+            }
             return MiningStage.GOLD;
         }
         if (miningLevel < 70) {
@@ -258,6 +261,27 @@ public class KSPAutoMinerScript extends Script {
             return Rock.TIN;
         }
         return Rock.COPPER;
+    }
+
+    private WorldPoint mapLocationForRockSelection(KSPAutoMinerRock rockSelection) {
+        if (rockSelection == null) {
+            return START_LOCATION;
+        }
+
+        switch (rockSelection) {
+            case COAL:
+                return COAL_LOCATION;
+            case GOLD:
+                return GOLD_LOCATION;
+            case MITHRIL:
+                return MITHRIL_LOCATION;
+            case ADAMANT:
+                return ADAMANT_LOCATION;
+            case RUNE:
+                return ADAMANT_LOCATION;
+            default:
+                return START_LOCATION;
+        }
     }
 
     private Rock mapRockSelection(KSPAutoMinerRock rockSelection) {
