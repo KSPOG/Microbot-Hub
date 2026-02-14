@@ -4,7 +4,9 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.mining.MiningSetup;
+
 
 import java.util.concurrent.TimeUnit;
 
@@ -14,11 +16,16 @@ public class KSPAccountBuilderScript extends Script {
     @Getter
     private String status = "Idle";
 
+
     private final MiningSetup miningSetup = new MiningSetup();
 
     public boolean run(KSPAccountBuilderConfig config) {
         status = "Starting";
         miningSetup.initialize();
+
+    public boolean run(KSPAccountBuilderConfig config) {
+        status = "Starting";
+
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
@@ -32,12 +39,16 @@ public class KSPAccountBuilderScript extends Script {
                 }
 
                 status = "Skeleton active";
+
                 // TODO: Wire mining setup into account progression workflow.
                 if (!miningSetup.hasRequiredTools()) {
                     return;
                 }
 
                 miningSetup.execute();
+
+                // TODO: Implement account progression workflow.
+
             } catch (Exception ex) {
                 status = "Error";
                 log.error("KSPAccountBuilder encountered an error", ex);
@@ -50,7 +61,9 @@ public class KSPAccountBuilderScript extends Script {
     @Override
     public void shutdown() {
         status = "Stopped";
+
         miningSetup.shutdown();
+
         super.shutdown();
     }
 }
