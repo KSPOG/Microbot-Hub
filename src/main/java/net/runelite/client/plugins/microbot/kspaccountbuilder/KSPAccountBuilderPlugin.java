@@ -25,7 +25,9 @@ import java.awt.AWTException;
 public class KSPAccountBuilderPlugin extends Plugin {
 
 
+
     static final String version = "0.0.3";
+
 
     @Inject
     private KSPAccountBuilderConfig config;
