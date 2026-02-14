@@ -63,4 +63,8 @@ public enum F2PFishOption {
         }
         return value.length() == 0 ? enumName : value.toString();
     }
+
 }
+
+}
+

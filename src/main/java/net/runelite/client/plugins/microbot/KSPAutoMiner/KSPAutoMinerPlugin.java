@@ -47,10 +47,3 @@ public class KSPAutoMinerPlugin extends Plugin {
         overlayManager.add(overlay);
         script.run(config);
     }
-
-    @Override
-    protected void shutDown() {
-        script.shutdown();
-        overlayManager.remove(overlay);
-    }
-}

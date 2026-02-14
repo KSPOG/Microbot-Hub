@@ -23,3 +23,5 @@ enum F2PCookOption {
         return requiredLevel;
     }
 }
+
+}

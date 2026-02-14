@@ -876,7 +876,11 @@ public class KSPAccountBuilderScript extends Script {
             return;
         }
 
+
         if (shouldUseLowLevelMeleeArea(targetSkill)
+
+        if (targetSkill != null && shouldUseLowLevelMeleeArea(targetSkill)
+
                 && !LOW_LEVEL_MELEE_AREA.contains(currentLocation)) {
             status = "Entering low-level melee area";
             Rs2Walker.walkTo(LOW_LEVEL_MELEE_CENTER);
@@ -1143,4 +1147,8 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
+
 }
+
+}
+

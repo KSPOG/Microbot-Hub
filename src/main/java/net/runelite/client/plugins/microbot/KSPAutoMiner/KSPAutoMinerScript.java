@@ -182,9 +182,11 @@ public class KSPAutoMinerScript extends Script {
 
     private void updateTarget(KSPAutoMinerMode mode, KSPAutoMinerRock rockSelection) {
         int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
+
         int combatLevel = Microbot.getClient().getLocalPlayer() != null
                 ? Microbot.getClient().getLocalPlayer().getCombatLevel()
                 : 3;
+
         if (rockSelection != selectedRock) {
             selectedRock = rockSelection;
             resetOreCounters();

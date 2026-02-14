@@ -35,4 +35,8 @@ public final class MiningSkillPlanner {
         configManager.setConfiguration("KSPAutoMiner", "rock", selected);
         return selected;
     }
+
 }
+
+}
+
