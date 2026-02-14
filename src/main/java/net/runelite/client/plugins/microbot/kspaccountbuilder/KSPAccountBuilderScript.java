@@ -17,19 +17,16 @@ public class KSPAccountBuilderScript extends Script {
     @Getter
     private String status = "Idle";
 
-
     @Getter
     private String currentTask = "None";
 
     private Instant startedAt;
-
 
     private final MiningSetup miningSetup = new MiningSetup();
     private final WoodcuttingScript woodcuttingScript = new WoodcuttingScript();
 
     public boolean run(KSPAccountBuilderConfig config) {
         status = "Starting";
-
         currentTask = "Initializing";
         startedAt = Instant.now();
 
@@ -52,28 +49,19 @@ public class KSPAccountBuilderScript extends Script {
 
                 // TODO: Wire mining setup into account progression workflow.
                 if (miningSetup.hasRequiredTools()) {
-
                     currentTask = "Mining";
                     miningSetup.execute();
                     return;
-
-                    miningSetup.execute();
-
                 }
 
                 // TODO: Wire woodcutting setup into account progression workflow.
                 if (woodcuttingScript.hasRequiredTools()) {
-
                     currentTask = "Woodcutting";
                     woodcuttingScript.execute();
                     return;
                 }
 
                 currentTask = "Gathering requirements";
-
-                    woodcuttingScript.execute();
-                }
-
             } catch (Exception ex) {
                 status = "Error";
                 currentTask = "Error";
