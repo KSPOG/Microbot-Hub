@@ -4,8 +4,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
-
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.mining.script.MiningSetup;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script.WoodcuttingScript;
 
 import java.util.concurrent.TimeUnit;
 
@@ -15,19 +15,13 @@ public class KSPAccountBuilderScript extends Script {
     @Getter
     private String status = "Idle";
 
-
     private final MiningSetup miningSetup = new MiningSetup();
+    private final WoodcuttingScript woodcuttingScript = new WoodcuttingScript();
 
     public boolean run(KSPAccountBuilderConfig config) {
         status = "Starting";
         miningSetup.initialize();
-
-
-
-    public boolean run(KSPAccountBuilderConfig config) {
-        status = "Starting";
-
-
+        woodcuttingScript.initialize();
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
@@ -40,18 +34,17 @@ public class KSPAccountBuilderScript extends Script {
                     return;
                 }
 
-                status = "Skeleton active";
+                status = "KSP Account Builder active";
 
                 // TODO: Wire mining setup into account progression workflow.
-                if (!miningSetup.hasRequiredTools()) {
-                    return;
+                if (miningSetup.hasRequiredTools()) {
+                    miningSetup.execute();
                 }
 
-                miningSetup.execute();
-
-
-
-                // TODO: Implement account progression workflow.
+                // TODO: Wire woodcutting setup into account progression workflow.
+                if (woodcuttingScript.hasRequiredTools()) {
+                    woodcuttingScript.execute();
+                }
             } catch (Exception ex) {
                 status = "Error";
                 log.error("KSPAccountBuilder encountered an error", ex);
@@ -65,6 +58,7 @@ public class KSPAccountBuilderScript extends Script {
     public void shutdown() {
         status = "Stopped";
         miningSetup.shutdown();
+        woodcuttingScript.shutdown();
         super.shutdown();
     }
 }
