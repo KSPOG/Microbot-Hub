@@ -1,0 +1,46 @@
+package net.runelite.client.plugins.microbot.kspaccountbuilder;
+
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.Script;
+
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+public class KSPAccountBuilderScript extends Script {
+
+    @Getter
+    private String status = "Idle";
+
+    public boolean run(KSPAccountBuilderConfig config) {
+        status = "Starting";
+
+        mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
+            try {
+                if (!Microbot.isLoggedIn()) {
+                    status = "Waiting for login";
+                    return;
+                }
+
+                if (!super.run()) {
+                    return;
+                }
+
+                status = "Skeleton active";
+                // TODO: Implement account progression workflow.
+            } catch (Exception ex) {
+                status = "Error";
+                log.error("KSPAccountBuilder encountered an error", ex);
+            }
+        }, 0, 1000, TimeUnit.MILLISECONDS);
+
+        return true;
+    }
+
+    @Override
+    public void shutdown() {
+        status = "Stopped";
+        super.shutdown();
+    }
+}
