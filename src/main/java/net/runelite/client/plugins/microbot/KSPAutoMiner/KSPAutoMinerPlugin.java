@@ -22,7 +22,8 @@ import java.awt.AWTException;
 )
 @Slf4j
 public class KSPAutoMinerPlugin extends Plugin {
-    public static final String version = "1.0.4";
+    public static final String version = "0.1.4";
+
 
     @Inject
     private KSPAutoMinerConfig config;
@@ -46,10 +47,3 @@ public class KSPAutoMinerPlugin extends Plugin {
         overlayManager.add(overlay);
         script.run(config);
     }
-
-    @Override
-    protected void shutDown() {
-        script.shutdown();
-        overlayManager.remove(overlay);
-    }
-}

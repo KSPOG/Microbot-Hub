@@ -49,7 +49,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class AutoWoodcuttingPlugin extends Plugin {
+public class AutoWoodcuttingPlugin extends Plugin implements ForestryEventPlugin {
     public static final String version = "1.8.1";
     @Inject
     @Getter(AccessLevel.MODULE)
@@ -430,6 +430,21 @@ public class AutoWoodcuttingPlugin extends Plugin {
         return completedForestryEvents.get();
     }
 
+    @Override
+    public boolean isEnabled() {
+        return Microbot.isPluginEnabled(this);
+    }
+
+    @Override
+    public void setCurrentForestryEvent(ForestryEvents event) {
+        currentForestryEvent = event;
+    }
+
+    @Override
+    public ForestryEvents getCurrentForestryEvent() {
+        return currentForestryEvent;
+    }
+
     public WoodcuttingTree getSelectedTree() {
         if (autoWoodcuttingScript != null) {
             return autoWoodcuttingScript.getActiveTree();
@@ -471,5 +486,25 @@ public class AutoWoodcuttingPlugin extends Plugin {
         }
         
         return success;
+    }
+
+    @Override
+    public List<Rs2NpcModel> getRitualCircles() {
+        return ritualCircles;
+    }
+
+    @Override
+    public GameObject[] getSaplingOrder() {
+        return saplingOrder;
+    }
+
+    @Override
+    public List<GameObject> getSaplingIngredients() {
+        return saplingIngredients;
+    }
+
+    @Override
+    public Rs2TileObjectCache getTileObjectCache() {
+        return rs2TileObjectCache;
     }
 }

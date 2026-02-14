@@ -12,7 +12,7 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 import net.runelite.client.plugins.microbot.woodcutting.enums.WoodcuttingTree;
 
@@ -26,19 +26,19 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Slf4j
 public class HivesEvent implements BlockingEvent {
 
-    private final AutoWoodcuttingPlugin plugin;
+    private final ForestryEventPlugin plugin;
     private final Set<Integer> completedBeehives = new HashSet<>();
     private Rs2NpcModel currentBeehive = null;
     private int initialLogCount = -1;
     
-    public HivesEvent(AutoWoodcuttingPlugin plugin) {
+    public HivesEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             var beehives = Rs2Npc.getNpcs(x -> x.getId() == net.runelite.api.gameval.NpcID.GATHERING_EVENT_BEES_BEEBOX_1 || x.getId() == net.runelite.api.gameval.NpcID.GATHERING_EVENT_BEES_BEEBOX_2);
             WoodcuttingTree tree = plugin.getSelectedTree();
@@ -51,7 +51,7 @@ public class HivesEvent implements BlockingEvent {
 
     @Override
     public boolean execute() {
-        plugin.currentForestryEvent = ForestryEvents.BEE_HIVE;
+        plugin.setCurrentForestryEvent(ForestryEvents.BEE_HIVE);
         completedBeehives.clear();
         WoodcuttingTree tree = plugin.getSelectedTree();
         initialLogCount = tree == null ? 0 : Rs2Inventory.count(tree.getLogID());

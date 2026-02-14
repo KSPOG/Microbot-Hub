@@ -9,7 +9,7 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 import org.slf4j.event.Level;
 
@@ -23,16 +23,16 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Slf4j
 public class RitualEvent implements BlockingEvent {
 
-    private final AutoWoodcuttingPlugin plugin;
+    private final ForestryEventPlugin plugin;
 
-    public RitualEvent(AutoWoodcuttingPlugin plugin) {
+    public RitualEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             Optional<Rs2NpcModel> dryadCache = Rs2Npc
                     .getNpcs(NpcID.GATHERING_EVENT_ENCHANTED_RITUAL_DRYAD)
@@ -47,7 +47,7 @@ public class RitualEvent implements BlockingEvent {
 
     @Override
     public boolean execute() {
-        plugin.currentForestryEvent = ForestryEvents.RITUAL_CIRCLES;
+        plugin.setCurrentForestryEvent(ForestryEvents.RITUAL_CIRCLES);
         Rs2Walker.setTarget(null); // stop walking, stop moving to bank for example
         
         // ensure inventory space for potential petal garland (1/30 chance)
@@ -57,7 +57,7 @@ public class RitualEvent implements BlockingEvent {
         }
         
         while (this.validate()) {
-            var targetCircle = this.solveCircles(plugin.ritualCircles);
+            var targetCircle = this.solveCircles(plugin.getRitualCircles());
             if (targetCircle == null) {
                 Microbot.log("RitualEvent: No target circle found, cannot proceed with the ritual.", Level.INFO);
                 sleepGaussian(600, 150);

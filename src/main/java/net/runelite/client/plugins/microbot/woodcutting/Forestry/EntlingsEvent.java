@@ -9,7 +9,7 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 
 import java.util.Comparator;
@@ -17,15 +17,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class EntlingsEvent implements BlockingEvent {
 
-    private final AutoWoodcuttingPlugin plugin;
-    public EntlingsEvent(AutoWoodcuttingPlugin plugin) {
+    private final ForestryEventPlugin plugin;
+    public EntlingsEvent(ForestryEventPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
+            if (plugin == null || !plugin.isEnabled()) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             var entlings = Rs2Npc.getNpcs(npc -> npc.getId() == NpcID.GATHERING_EVENT_ENTLINGS_NPC_01)
             .collect(Collectors.toList());
@@ -39,7 +39,7 @@ public class EntlingsEvent implements BlockingEvent {
     @Override
     public boolean execute() {
         Microbot.log("EntlingsEvent: Starting Entlings event execution");
-        plugin.currentForestryEvent = ForestryEvents.ENTLING;
+        plugin.setCurrentForestryEvent(ForestryEvents.ENTLING);
         Rs2Walker.setTarget(null); // stop walking, stop moving to bank for example
         
         // ensure inventory space for tree leaves and potential egg nest (20% chance)

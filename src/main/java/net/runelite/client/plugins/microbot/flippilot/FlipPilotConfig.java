@@ -67,6 +67,29 @@ public interface FlipPilotConfig extends Config
     )
     default boolean showOverlay() { return true; }
 
+    @ConfigItem(
+            keyName = "autoFlipEnabled",
+            name = "Enable auto flip",
+            description = "Automatically place GE offers for the top suggestion"
+    )
+    default boolean autoFlipEnabled() { return false; }
+
+    @ConfigItem(
+            keyName = "autoFlipQuantity",
+            name = "Auto flip quantity",
+            description = "Quantity to buy/sell per automated offer"
+    )
+    @Range(min = 1, max = 1000)
+    default int autoFlipQuantity() { return 10; }
+
+    @ConfigItem(
+            keyName = "autoFlipCooldownSeconds",
+            name = "Auto flip cooldown (seconds)",
+            description = "Delay between automated GE actions"
+    )
+    @Range(min = 1, max = 60)
+    default int autoFlipCooldownSeconds() { return 4; }
+
     // Alerts
     @ConfigItem(
             keyName = "alertsEnabled",
