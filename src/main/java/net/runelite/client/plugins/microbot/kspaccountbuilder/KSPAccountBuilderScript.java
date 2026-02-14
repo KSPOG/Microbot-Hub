@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 
-import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.mining.MiningSetup;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.mining.script.MiningSetup;
 
 
 import java.util.concurrent.TimeUnit;
@@ -22,6 +22,7 @@ public class KSPAccountBuilderScript extends Script {
     public boolean run(KSPAccountBuilderConfig config) {
         status = "Starting";
         miningSetup.initialize();
+
 
     public boolean run(KSPAccountBuilderConfig config) {
         status = "Starting";
@@ -46,6 +47,7 @@ public class KSPAccountBuilderScript extends Script {
                 }
 
                 miningSetup.execute();
+
 
                 // TODO: Implement account progression workflow.
 
