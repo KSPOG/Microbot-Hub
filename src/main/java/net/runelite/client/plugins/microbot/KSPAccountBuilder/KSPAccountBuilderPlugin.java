@@ -22,7 +22,11 @@ import java.awt.AWTException;
 )
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
-    public static final String version = "0.3.28";
+
+    public static final String version = "0.3.29";
+
+
+
 
     @Inject
     private KSPAccountBuilderConfig config;
@@ -52,4 +56,8 @@ public class KSPAccountBuilderPlugin extends Plugin {
         script.shutdown();
         overlayManager.remove(overlay);
     }
+
 }
+
+}
+

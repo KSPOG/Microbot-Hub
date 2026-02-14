@@ -28,4 +28,8 @@ public final class WoodcuttingSkillPlanner {
         configManager.setConfiguration("KSPAutoWoodcutter", "tree", selected);
         return selected;
     }
+
 }
+
+}
+

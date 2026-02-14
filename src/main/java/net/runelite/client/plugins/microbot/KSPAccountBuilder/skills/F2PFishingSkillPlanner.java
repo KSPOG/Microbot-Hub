@@ -22,4 +22,8 @@ public final class F2PFishingSkillPlanner {
         configManager.setConfiguration("AutoFishing", "fishToCatch", selected.getFish());
         return selected;
     }
+
 }
+
+}
+
