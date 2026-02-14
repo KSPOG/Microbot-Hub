@@ -6,6 +6,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.AWTException;
@@ -24,13 +25,19 @@ import java.awt.AWTException;
 public class KSPAccountBuilderPlugin extends Plugin {
 
 
-    static final String version = "0.0.1";
+    static final String version = "0.0.3";
 
     @Inject
     private KSPAccountBuilderConfig config;
 
     @Inject
     private KSPAccountBuilderScript script;
+
+    @Inject
+    private OverlayManager overlayManager;
+
+    @Inject
+    private KSPAccountBuilderOverlay overlay;
 
     @Provides
     KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {
@@ -40,6 +47,7 @@ public class KSPAccountBuilderPlugin extends Plugin {
     @Override
     protected void startUp() throws AWTException {
         log.info("Starting KSP Account Builder skeleton.");
+        overlayManager.add(overlay);
         script.run(config);
     }
 
@@ -47,5 +55,6 @@ public class KSPAccountBuilderPlugin extends Plugin {
     protected void shutDown() {
         log.info("Stopping KSP Account Builder skeleton.");
         script.shutdown();
+        overlayManager.remove(overlay);
     }
 }
