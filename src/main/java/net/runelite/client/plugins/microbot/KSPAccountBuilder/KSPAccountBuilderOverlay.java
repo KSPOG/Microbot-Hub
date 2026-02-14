@@ -1,8 +1,8 @@
 package net.runelite.client.plugins.microbot.KSPAccountBuilder;
 
+
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
 import net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterScript;
-import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
@@ -84,9 +84,13 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
         switch (stage) {
             case "MINING":
+
+            case "WOODCUTTING":
+
                 return normalizeStatus(KSPAutoMinerScript.status);
             case "WOODCUTTING":
                 return normalizeStatus(KSPAutoWoodcutterScript.status);
+
             case "F2P_FISHING":
             case "F2P_COOKER":
             case "MELEE":
@@ -135,5 +139,9 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
 }
 
+
 }
+
+}
+
 

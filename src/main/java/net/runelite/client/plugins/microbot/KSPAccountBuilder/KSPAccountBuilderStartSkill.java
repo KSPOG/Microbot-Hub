@@ -8,6 +8,7 @@ public enum KSPAccountBuilderStartSkill {
     MELEE,
     RANDOM
 
+
 }
 
 }

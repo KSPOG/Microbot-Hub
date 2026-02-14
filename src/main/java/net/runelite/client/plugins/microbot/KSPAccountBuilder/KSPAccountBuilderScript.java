@@ -6,6 +6,11 @@ import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+
+import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.F2PFishingSkillPlanner;
+import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.MiningSkillPlanner;
+import net.runelite.client.plugins.microbot.KSPAccountBuilder.skills.WoodcuttingSkillPlanner;
+
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerConfig;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerRock;
 import net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerScript;
@@ -20,6 +25,7 @@ import net.runelite.client.plugins.microbot.autofishing.AutoFishingScript;
 import net.runelite.client.plugins.microbot.gecooker.GECookerConfig;
 import net.runelite.client.plugins.microbot.gecooker.GECookerScript;
 import net.runelite.client.plugins.microbot.gecooker.enums.CookingItem;
+
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
@@ -76,6 +82,12 @@ public class KSPAccountBuilderScript extends Script {
             new SellFishOrder(329, "Salmon")
     );
 
+    private static final String KSP_AUTO_MINER_PLUGIN_CLASS = "net.runelite.client.plugins.microbot.KSPAutoMiner.KSPAutoMinerPlugin";
+    private static final String KSP_AUTO_WOODCUTTER_PLUGIN_CLASS = "net.runelite.client.plugins.microbot.KSPAutoWoodcutter.KSPAutoWoodcutterPlugin";
+    private static final String AUTO_FISHING_PLUGIN_CLASS = "net.runelite.client.plugins.microbot.autofishing.AutoFishingPlugin";
+    private static final String GE_COOKER_PLUGIN_CLASS = "net.runelite.client.plugins.microbot.gecooker.GECookerPlugin";
+
+
     private Stage currentStage = Stage.NONE;
     private boolean minerRunning;
     private boolean woodcutterRunning;
@@ -116,6 +128,10 @@ public class KSPAccountBuilderScript extends Script {
     );
 
     @Inject
+
+    private ConfigManager configManager;
+
+
     private KSPAutoMinerScript minerScript;
 
     @Inject
@@ -134,6 +150,7 @@ public class KSPAccountBuilderScript extends Script {
     private KSPAutoWoodcutterConfig woodcutterConfig;
     private AutoFishingConfig fishingConfig;
     private GECookerConfig cookerConfig;
+
     private KSPAccountBuilderConfig builderConfig;
 
     private enum Stage {
@@ -150,10 +167,12 @@ public class KSPAccountBuilderScript extends Script {
         startTimeMs = System.currentTimeMillis();
         status = "Starting";
         resetCurrentTasks();
+
         this.minerConfig = configManager.getConfig(KSPAutoMinerConfig.class);
         this.woodcutterConfig = configManager.getConfig(KSPAutoWoodcutterConfig.class);
         this.fishingConfig = configManager.getConfig(AutoFishingConfig.class);
         this.cookerConfig = configManager.getConfig(GECookerConfig.class);
+
         captureOriginalClientTitle();
         KSPAccountBuilderStartSkill startSkill = config.startSkill();
         if (startSkill == KSPAccountBuilderStartSkill.RANDOM) {
@@ -537,8 +556,12 @@ public class KSPAccountBuilderScript extends Script {
             status = "Missing pickaxe";
             return;
         }
+
+        minerRunning = startExternalPlugin(KSP_AUTO_MINER_PLUGIN_CLASS);
+
         minerScript.run(this.minerConfig);
         minerRunning = true;
+
     }
 
     private void startWoodcutter() {
@@ -550,15 +573,23 @@ public class KSPAccountBuilderScript extends Script {
             status = "Missing axe";
             return;
         }
+
+        woodcutterRunning = startExternalPlugin(KSP_AUTO_WOODCUTTER_PLUGIN_CLASS);
+
         woodcutterScript.run(this.woodcutterConfig);
         woodcutterRunning = true;
+
     }
 
     private void stopMiner() {
         if (!minerRunning) {
             return;
         }
+
+        stopExternalPlugin(KSP_AUTO_MINER_PLUGIN_CLASS);
+
         minerScript.shutdown();
+
         minerRunning = false;
     }
 
@@ -566,7 +597,11 @@ public class KSPAccountBuilderScript extends Script {
         if (!woodcutterRunning) {
             return;
         }
+
+        stopExternalPlugin(KSP_AUTO_WOODCUTTER_PLUGIN_CLASS);
+
         woodcutterScript.shutdown();
+
         woodcutterRunning = false;
     }
 
@@ -659,6 +694,15 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void applyMiningRockForLevel() {
+
+        String selected = MiningSkillPlanner.configure(configManager);
+        currentMiningTask = selected;
+    }
+
+    private void applyWoodcuttingTreeForLevel() {
+        String selected = WoodcuttingSkillPlanner.configure(configManager);
+        currentWoodcuttingTask = selected;
+
         KSPAutoMinerRock selected = MiningSkillPlanner.configure(configManager);
         currentMiningTask = selected.toString();
     }
@@ -666,11 +710,15 @@ public class KSPAccountBuilderScript extends Script {
     private void applyWoodcuttingTreeForLevel() {
         KSPAutoWoodcutterTree selected = WoodcuttingSkillPlanner.configure(configManager);
         currentWoodcuttingTask = selected.toString();
+
     }
 
     private void applyFishingForLevel() {
         selectedF2PFishOption = F2PFishingSkillPlanner.configure(configManager);
         currentFishingTask = selectedF2PFishOption.getDisplayName();
+
+        configManager.setConfiguration("AutoFishing", "fishToCatch", selectedF2PFishOption.getFishConfigKey());
+
     }
 
     private void startFishing() {
@@ -686,15 +734,23 @@ public class KSPAccountBuilderScript extends Script {
             status = "Traveling to Karamja";
             return;
         }
+
+        fishingRunning = startExternalPlugin(AUTO_FISHING_PLUGIN_CLASS);
+
         fishingScript.run(this.fishingConfig);
         fishingRunning = true;
+
     }
 
     private void stopFishing() {
         if (!fishingRunning) {
             return;
         }
+
+        stopExternalPlugin(AUTO_FISHING_PLUGIN_CLASS);
+
         fishingScript.shutdown();
+
         fishingRunning = false;
     }
 
@@ -802,19 +858,33 @@ public class KSPAccountBuilderScript extends Script {
                 .filter(option -> cookingLevel >= option.getRequiredLevel())
                 .collect(java.util.stream.Collectors.toList());
 
+
+        String selected = availableItems.isEmpty()
+                ? F2PCookOption.SHRIMP.cookItemKey
+                : availableItems.get(random.nextInt(availableItems.size())).cookItemKey;
+
         CookingItem selected = availableItems.isEmpty()
                 ? CookingItem.RAW_SHRIMP
                 : availableItems.get(random.nextInt(availableItems.size())).cookingItem;
+
 
         currentCookingTask = formatCookingItemName(selected);
         configManager.setConfiguration("GECooker", "Cook Item", selected);
     }
 
-    private String formatCookingItemName(CookingItem item) {
+
+    private String formatCookingItemName(String itemKey) {
+        if (itemKey == null) {
+            return "Unknown";
+        }
+        String readable = itemKey.toLowerCase().replace("raw_", "").replace("_", " ");
+      
+      private String formatCookingItemName(CookingItem item) {
         if (item == null) {
             return "Unknown";
         }
         String readable = item.name().toLowerCase().replace("raw_", "").replace("_", " ");
+
         String[] words = readable.split(" ");
         StringBuilder result = new StringBuilder();
         for (String word : words) {
@@ -826,7 +896,11 @@ public class KSPAccountBuilderScript extends Script {
             }
             result.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
         }
+
+        return result.length() == 0 ? itemKey : result.toString();
+
         return result.length() == 0 ? item.name() : result.toString();
+
     }
 
     private void startCooker() {
@@ -834,15 +908,23 @@ public class KSPAccountBuilderScript extends Script {
             return;
         }
         applyCookingForLevel();
+
+        cookerRunning = startExternalPlugin(GE_COOKER_PLUGIN_CLASS);
+
         cookerScript.run(this.cookerConfig);
         cookerRunning = true;
+
     }
 
     private void stopCooker() {
         if (!cookerRunning) {
             return;
         }
+
+        stopExternalPlugin(GE_COOKER_PLUGIN_CLASS);
+
         cookerScript.shutdown();
+
         cookerRunning = false;
     }
 
@@ -879,7 +961,11 @@ public class KSPAccountBuilderScript extends Script {
 
         if (shouldUseLowLevelMeleeArea(targetSkill)
 
+
+        if (shouldUseLowLevelMeleeArea(targetSkill)
+
         if (targetSkill != null && shouldUseLowLevelMeleeArea(targetSkill)
+
 
                 && !LOW_LEVEL_MELEE_AREA.contains(currentLocation)) {
             status = "Entering low-level melee area";
@@ -1026,6 +1112,33 @@ public class KSPAccountBuilderScript extends Script {
         meleeRunning = false;
     }
 
+
+    private boolean startExternalPlugin(String pluginClassName) {
+        try {
+            Plugin plugin = (Plugin) Microbot.getPlugin(pluginClassName);
+            if (plugin == null) {
+                return false;
+            }
+            if (!Microbot.isPluginEnabled(plugin.getClass())) {
+                Microbot.startPlugin(plugin);
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void stopExternalPlugin(String pluginClassName) {
+        try {
+            Plugin plugin = (Plugin) Microbot.getPlugin(pluginClassName);
+            if (plugin != null && Microbot.isPluginEnabled(plugin.getClass())) {
+                Microbot.stopPlugin(plugin);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+
     private boolean ensureToolAvailable(boolean miningStage) {
         if (!Microbot.isLoggedIn() || Microbot.getClient().getLocalPlayer() == null) {
             return false;
@@ -1150,5 +1263,9 @@ public class KSPAccountBuilderScript extends Script {
 
 }
 
+
 }
+
+}
+
 

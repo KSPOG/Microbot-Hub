@@ -23,9 +23,7 @@ import java.awt.AWTException;
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
 
-    public static final String version = "0.3.29";
-
-
+    public static final String version = "0.3.30";
 
 
     @Inject
@@ -59,5 +57,9 @@ public class KSPAccountBuilderPlugin extends Plugin {
 
 }
 
+
 }
+
+}
+
 
