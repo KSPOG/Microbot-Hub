@@ -37,6 +37,7 @@ public final class ItemReqs {
             ADAMANT_AXE,
             RUNE_AXE
 
+
             ItemID.BRONZE_AXE,
             ItemID.STEEL_AXE,
             ItemID.BLACK_AXE,
