@@ -7,7 +7,6 @@ import net.runelite.client.plugins.microbot.Script;
 
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.mining.script.MiningSetup;
 
-
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -24,8 +23,10 @@ public class KSPAccountBuilderScript extends Script {
         miningSetup.initialize();
 
 
+
     public boolean run(KSPAccountBuilderConfig config) {
         status = "Starting";
+
 
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
@@ -49,8 +50,8 @@ public class KSPAccountBuilderScript extends Script {
                 miningSetup.execute();
 
 
-                // TODO: Implement account progression workflow.
 
+                // TODO: Implement account progression workflow.
             } catch (Exception ex) {
                 status = "Error";
                 log.error("KSPAccountBuilder encountered an error", ex);
@@ -63,9 +64,7 @@ public class KSPAccountBuilderScript extends Script {
     @Override
     public void shutdown() {
         status = "Stopped";
-
         miningSetup.shutdown();
-
         super.shutdown();
     }
 }
