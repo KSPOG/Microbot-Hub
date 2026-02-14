@@ -19,7 +19,18 @@ public final class F2PFishingSkillPlanner {
                 .reduce((first, second) -> second)
                 .orElse(F2PFishOption.SHRIMP);
 
+
         configManager.setConfiguration("AutoFishing", "fishToCatch", selected.getFishConfigKey());
         return selected;
     }
 }
+
+        configManager.setConfiguration("AutoFishing", "fishToCatch", selected.getFish());
+        return selected;
+    }
+
+}
+
+}
+
+

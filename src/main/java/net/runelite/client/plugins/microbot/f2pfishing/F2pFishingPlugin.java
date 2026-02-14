@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.KSPAutoMiner;
+package net.runelite.client.plugins.microbot.f2pfishing;
 
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
@@ -12,38 +12,46 @@ import javax.inject.Inject;
 import java.awt.AWTException;
 
 @PluginDescriptor(
-        name = "<html>[<font color=#b8f704>KSP</font>] Auto Miner",
-        description = "Progressive mining with banking or dropping",
-        tags = {"mining", "microbot", "ksp"},
-        version = KSPAutoMinerPlugin.version,
+        name = PluginConstants.DEFAULT_PREFIX + "F2P Fishing",
+        description = "F2P fishing with banking, dropping, and GE restocking",
+        tags = {"fishing", "f2p", "microbot"},
+        version = F2pFishingPlugin.version,
         minClientVersion = "2.0.13",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class KSPAutoMinerPlugin extends Plugin {
-    public static final String version = "0.1.4";
+public class F2pFishingPlugin extends Plugin {
+
+    public static final String version = "1.1.9";
 
 
     @Inject
-    private KSPAutoMinerConfig config;
+    private F2pFishingConfig config;
 
     @Provides
-    KSPAutoMinerConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(KSPAutoMinerConfig.class);
+    F2pFishingConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(F2pFishingConfig.class);
     }
 
     @Inject
     private OverlayManager overlayManager;
 
     @Inject
-    private KSPAutoMinerOverlay overlay;
+    private F2pFishingOverlay overlay;
 
     @Inject
-    private KSPAutoMinerScript script;
+    private F2pFishingScript script;
 
     @Override
     protected void startUp() throws AWTException {
         overlayManager.add(overlay);
         script.run(config);
     }
+
+    @Override
+    protected void shutDown() {
+        script.shutdown();
+        overlayManager.remove(overlay);
+    }
+}

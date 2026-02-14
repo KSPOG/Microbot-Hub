@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.KSPAccountBuilder;
+package net.runelite.client.plugins.microbot.kspmelee;
 
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
@@ -12,40 +12,42 @@ import javax.inject.Inject;
 import java.awt.AWTException;
 
 @PluginDescriptor(
-        name = PluginConstants.KSP + "Account Builder",
-        description = "Builds accounts by training Mining and Woodcutting",
-        tags = {"account", "mining", "woodcutting", "ksp"},
-        version = KSPAccountBuilderPlugin.version,
-        minClientVersion = "2.0.13",
+        name = PluginConstants.KSP + "Melee",
+        description = "Basic melee combat framework plugin.",
+        tags = {"melee", "combat", "ksp"},
+        authors = {"KSP"},
+        version = KSPMeleePlugin.version,
+        minClientVersion = "1.9.8",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class KSPAccountBuilderPlugin extends Plugin {
+public class KSPMeleePlugin extends Plugin {
 
-    public static final String version = "0.3.30";
-
+    static final String version = "1.0.5";
 
     @Inject
-    private KSPAccountBuilderConfig config;
+    private KSPMeleeConfig config;
 
-    @Provides
-    KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(KSPAccountBuilderConfig.class);
-    }
+    @Inject
+    private KSPMeleeScript script;
 
     @Inject
     private OverlayManager overlayManager;
 
     @Inject
-    private KSPAccountBuilderOverlay overlay;
+    private KSPMeleeOverlay overlay;
 
-    @Inject
-    private KSPAccountBuilderScript script;
+    @Provides
+    KSPMeleeConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(KSPMeleeConfig.class);
+    }
 
     @Override
     protected void startUp() throws AWTException {
-        overlayManager.add(overlay);
+        if (overlayManager != null) {
+            overlayManager.add(overlay);
+        }
         script.run(config);
     }
 
@@ -54,12 +56,4 @@ public class KSPAccountBuilderPlugin extends Plugin {
         script.shutdown();
         overlayManager.remove(overlay);
     }
-
 }
-
-
-}
-
-}
-
-

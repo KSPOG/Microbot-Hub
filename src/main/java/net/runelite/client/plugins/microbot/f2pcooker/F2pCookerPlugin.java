@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.KSPAccountBuilder;
+package net.runelite.client.plugins.microbot.f2pcooker;
 
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
@@ -12,36 +12,34 @@ import javax.inject.Inject;
 import java.awt.AWTException;
 
 @PluginDescriptor(
-        name = PluginConstants.KSP + "Account Builder",
-        description = "Builds accounts by training Mining and Woodcutting",
-        tags = {"account", "mining", "woodcutting", "ksp"},
-        version = KSPAccountBuilderPlugin.version,
+        name = PluginConstants.DEFAULT_PREFIX + "F2P Cooker",
+        description = "Cooks F2P fish at the Edgeville stove (3078, 3493, 0) using OSRS wiki level progression",
+        tags = {"cooking", "f2p", "edgeville", "microbot"},
+        version = F2pCookerPlugin.version,
         minClientVersion = "2.0.13",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class KSPAccountBuilderPlugin extends Plugin {
-
-    public static final String version = "0.3.30";
-
+public class F2pCookerPlugin extends Plugin {
+    public static final String version = "1.0.5";
 
     @Inject
-    private KSPAccountBuilderConfig config;
+    private F2pCookerConfig config;
 
-    @Provides
-    KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(KSPAccountBuilderConfig.class);
-    }
+    @Inject
+    private F2pCookerScript script;
 
     @Inject
     private OverlayManager overlayManager;
 
     @Inject
-    private KSPAccountBuilderOverlay overlay;
+    private F2pCookerOverlay overlay;
 
-    @Inject
-    private KSPAccountBuilderScript script;
+    @Provides
+    F2pCookerConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(F2pCookerConfig.class);
+    }
 
     @Override
     protected void startUp() throws AWTException {
@@ -54,12 +52,4 @@ public class KSPAccountBuilderPlugin extends Plugin {
         script.shutdown();
         overlayManager.remove(overlay);
     }
-
 }
-
-
-}
-
-}
-
-

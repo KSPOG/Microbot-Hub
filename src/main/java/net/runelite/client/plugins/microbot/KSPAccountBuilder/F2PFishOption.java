@@ -1,9 +1,13 @@
 package net.runelite.client.plugins.microbot.KSPAccountBuilder;
 
+
+import net.runelite.client.plugins.microbot.autofishing.enums.Fish;
+
 import java.util.Arrays;
 import java.util.List;
 
 public enum F2PFishOption {
+
     SHRIMP("SHRIMP_AND_ANCHOVIES", 1, false),
     SARDINE("SARDINE", 5, false, new SupplyOrder("Fishing bait")),
     HERRING("HERRING", 10, false, new SupplyOrder("Fishing bait")),
@@ -13,21 +17,43 @@ public enum F2PFishOption {
     LOBSTER("LOBSTER", 40, true);
 
     final String fishConfigKey;
+
+    SHRIMP(Fish.SHRIMP_AND_ANCHOVIES, 1, false),
+    SARDINE(Fish.SARDINE, 5, false, new SupplyOrder("Fishing bait")),
+    HERRING(Fish.HERRING, 10, false, new SupplyOrder("Fishing bait")),
+    TROUT_SALMON(Fish.TROUT_AND_SALMON, 20, false, new SupplyOrder("Feather")),
+    PIKE(Fish.PIKE, 25, false, new SupplyOrder("Fishing bait")),
+    TUNA_SWORDFISH(Fish.TUNA_AND_SWORDFISH, 35, true),
+    LOBSTER(Fish.LOBSTER, 40, true);
+
+    final Fish fish;
+
     final int requiredLevel;
     final boolean requiresKaramja;
     private final List<SupplyOrder> supplyOrders;
     private final String displayName;
 
+
     F2PFishOption(String fishConfigKey, int requiredLevel, boolean requiresKaramja, SupplyOrder... supplyOrders) {
         this.fishConfigKey = fishConfigKey;
+
+    F2PFishOption(Fish fish, int requiredLevel, boolean requiresKaramja, SupplyOrder... supplyOrders) {
+        this.fish = fish;
+
         this.requiredLevel = requiredLevel;
         this.requiresKaramja = requiresKaramja;
         this.supplyOrders = Arrays.asList(supplyOrders);
         this.displayName = buildDisplayName(name());
     }
 
+
     public String getFishConfigKey() {
         return fishConfigKey;
+
+
+    public Fish getFish() {
+        return fish;
+
     }
 
     public int getRequiredLevel() {
@@ -60,4 +86,12 @@ public enum F2PFishOption {
         }
         return value.length() == 0 ? enumName : value.toString();
     }
+
 }
+
+
+}
+
+}
+
+

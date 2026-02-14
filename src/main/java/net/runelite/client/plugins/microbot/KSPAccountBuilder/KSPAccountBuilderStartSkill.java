@@ -7,4 +7,8 @@ public enum KSPAccountBuilderStartSkill {
     F2P_COOKER,
     MELEE,
     RANDOM
+
+
+}
+
 }
