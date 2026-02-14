@@ -2,6 +2,9 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcuttin
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.needed.ItemReqs;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 
 /**
  * Skeleton woodcutting workflow for KSPAccountBuilder.
@@ -18,8 +21,18 @@ public class WoodcuttingScript {
     }
 
     public boolean hasRequiredTools() {
-        // TODO: Validate required axe/tool availability and travel needs.
-        return false;
+        final int axeCount = getUsableAxeCount();
+        return axeCount >= ItemReqs.MIN_AXE_COUNT;
+    }
+
+    private int getUsableAxeCount() {
+        int count = 0;
+        for (int axeId : ItemReqs.ACCEPTED_AXE_IDS) {
+            if (Rs2Inventory.hasItem(axeId) || Rs2Equipment.isWearing(axeId)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public void execute() {
