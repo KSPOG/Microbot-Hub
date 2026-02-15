@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -36,4 +37,5 @@ public class KSPAccountBuilderPlugin extends Plugin {
         log.info("Stopping KSP Account Builder plugin.");
         script.shutdown();
     }
+public class KSPAccountBuilderPlugin {
 }

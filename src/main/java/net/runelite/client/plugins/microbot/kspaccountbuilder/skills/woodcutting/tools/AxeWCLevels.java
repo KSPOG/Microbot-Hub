@@ -1,6 +1,16 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools;
 
 public final class AxeWCLevels {
+
+
+package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools;
+
+/**
+ * Woodcutting level requirements for axes used by KSPAccountBuilder.
+ */
+public final class AxeWCLevels {
+
+
     private AxeWCLevels() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -11,4 +21,8 @@ public final class AxeWCLevels {
     public static final int MITHRIL_AXE = 21;
     public static final int ADAMANT_AXE = 31;
     public static final int RUNE_AXE = 41;
+
 }
+
+}
+

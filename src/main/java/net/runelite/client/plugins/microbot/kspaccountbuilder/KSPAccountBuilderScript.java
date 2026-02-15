@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
+
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -76,4 +77,5 @@ public class KSPAccountBuilderScript extends Script {
         woodcuttingScript.shutdown();
         super.shutdown();
     }
+public class KSPAccountBuilderScript {
 }

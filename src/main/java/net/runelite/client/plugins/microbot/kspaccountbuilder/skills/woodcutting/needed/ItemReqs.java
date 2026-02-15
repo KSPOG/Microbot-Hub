@@ -2,7 +2,15 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcuttin
 
 import net.runelite.api.ItemID;
 
+
 public final class ItemReqs {
+
+/**
+ * Inventory requirements checked before travelling to woodcutting areas.
+ */
+public final class ItemReqs {
+
+
     private ItemReqs() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -14,7 +22,17 @@ public final class ItemReqs {
     public static final int ADAMANT_AXE = ItemID.ADAMANT_AXE;
     public static final int RUNE_AXE = ItemID.RUNE_AXE;
 
+
     public static final int MIN_AXE_COUNT = 1;
+
+    /**
+     * Minimum number of usable axes required in inventory/equipment.
+     */
+    public static final int MIN_AXE_COUNT = 1;
+
+    /**
+     * A usable axe must be present before travelling to chop trees.
+     */
 
     public static final int[] ACCEPTED_AXE_IDS = {
             BRONZE_AXE,
@@ -24,4 +42,8 @@ public final class ItemReqs {
             ADAMANT_AXE,
             RUNE_AXE
     };
+
 }
+
+}
+
