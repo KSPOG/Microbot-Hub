@@ -1,9 +1,13 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.levels;
 
+
+public final class TreeLevels {
+
 /**
  * Woodcutting level requirements used by KSPAccountBuilder.
  */
 public final class TreeLevels {
+
 
     private TreeLevels() {
         throw new UnsupportedOperationException("Utility class");
