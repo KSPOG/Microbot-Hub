@@ -72,6 +72,11 @@ public class WoodcuttingScript {
             return;
         }
 
+        if (Rs2Player.isMoving() || Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
+            status = "Waiting for current action";
+            return;
+        }
+
         var tree = Rs2GameObject.findObject(java.util.Arrays.stream(target.getTreeIds()).boxed().toArray(Integer[]::new));
         if (tree == null) {
             status = "Waiting for " + target.getTreeName();
