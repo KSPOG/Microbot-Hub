@@ -51,7 +51,7 @@ public class KSPAccountBuilderScript extends Script {
         currentTask = "Initializing";
         startedAt = Instant.now();
         startupBankingComplete = false;
-        activeTask = BuilderTask.WOODCUTTING;
+        activeTask = getRandomStartingTask();
         nextTaskSwitchAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, config.taskSwitchMinutes())));
 
         woodcuttingScript.initialize();
@@ -113,6 +113,11 @@ public class KSPAccountBuilderScript extends Script {
         }, LOOP_INITIAL_DELAY_MS, LOOP_DELAY_MS, TimeUnit.MILLISECONDS);
 
         return true;
+    }
+
+
+    private BuilderTask getRandomStartingTask() {
+        return ThreadLocalRandom.current().nextBoolean() ? BuilderTask.WOODCUTTING : BuilderTask.COMBAT;
     }
 
     private void executeActiveTask() {
