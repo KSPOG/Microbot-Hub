@@ -1,11 +1,6 @@
-
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools;
 
-/**
- * Woodcutting level requirements for axes used by KSPAccountBuilder.
- */
 public final class AxeWCLevels {
-
     private AxeWCLevels() {
         throw new UnsupportedOperationException("Utility class");
     }

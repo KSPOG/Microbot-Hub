@@ -1,10 +1,6 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools;
 
-/**
- * Attack level requirements to equip axes for KSPAccountBuilder.
- */
 public final class EquipLevels {
-
     private EquipLevels() {
         throw new UnsupportedOperationException("Utility class");
     }
