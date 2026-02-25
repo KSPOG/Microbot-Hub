@@ -1,0 +1,357 @@
+package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script;
+
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Skill;
+import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.areas.Areas;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.levels.TreeLevels;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.needed.ItemReqs;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.trees.TreeID;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools.AxeWCLevels;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools.EquipLevels;
+import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
+import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.Global;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+
+@Slf4j
+public class WoodcuttingScript {
+    private static final String CHOP_ACTION = "Chop down";
+    private static final int TREE_AREA_RADIUS = 10;
+    private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
+
+    private String status = "Idle";
+
+    private static final Axe[] AXE_PRIORITY = new Axe[]{
+            new Axe("Rune axe", ItemReqs.RUNE_AXE, AxeWCLevels.RUNE_AXE, EquipLevels.RUNE_AXE),
+            new Axe("Adamant axe", ItemReqs.ADAMANT_AXE, AxeWCLevels.ADAMANT_AXE, EquipLevels.ADAMANT_AXE),
+            new Axe("Mithril axe", ItemReqs.MITHRIL_AXE, AxeWCLevels.MITHRIL_AXE, EquipLevels.MITHRIL_AXE),
+            new Axe("Black axe", ItemReqs.BLACK_AXE, AxeWCLevels.BLACK_AXE, EquipLevels.BLACK_AXE),
+            new Axe("Steel axe", ItemReqs.STEEL_AXE, AxeWCLevels.STEEL_AXE, EquipLevels.STEEL_AXE),
+            new Axe("Bronze axe", ItemReqs.BRONZE_AXE, AxeWCLevels.BRONZE_AXE, EquipLevels.BRONZE_AXE)
+    };
+
+    public void initialize() {
+        status = "Initializing woodcutting";
+    }
+
+    public void shutdown() {
+        status = "Woodcutting stopped";
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public boolean hasRequiredTools() {
+        for (int axeId : ItemReqs.ACCEPTED_AXE_IDS) {
+            if (Rs2Equipment.isWearing(axeId) || Rs2Inventory.hasItem(axeId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void execute() {
+        if (Rs2Inventory.isFull()) {
+            if (!bankInventoryWhenFull()) {
+                return;
+            }
+        }
+
+        Axe bestPossibleAxe = getBestPossibleAxeForCurrentLevels();
+
+        if (!bankForBestAvailableAxe(bestPossibleAxe)) {
+            log.debug("Unable to secure best woodcutting axe for current levels");
+            return;
+        }
+
+        if (bestPossibleAxe != null && !hasAxeEquippedOrInventory(bestPossibleAxe.getItemId())) {
+            status = "Preparing required tool";
+            return;
+        }
+
+        TreeTarget target = resolveTreeTarget();
+
+        if (Rs2Player.getWorldLocation().distanceTo(target.getLocation()) > TREE_AREA_RADIUS) {
+            status = "Walking to " + target.getTreeName();
+            Rs2Walker.walkTo(target.getLocation());
+            return;
+        }
+
+        var tree = Rs2GameObject.findObject(java.util.Arrays.stream(target.getTreeIds()).boxed().toArray(Integer[]::new));
+        if (tree == null) {
+            status = "Waiting for " + target.getTreeName();
+            return;
+        }
+
+        status = "Chopping " + target.getTreeName();
+        if (Rs2GameObject.interact(tree, CHOP_ACTION)) {
+            Global.sleepUntil(Rs2Player::isAnimating, 3_000);
+            Global.sleepUntil(() -> !Rs2Player.isAnimating(), 30_000);
+        }
+    }
+
+
+    private boolean bankInventoryWhenFull() {
+        status = "Banking";
+
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        if (hasAnyAxeInInventory()) {
+            Rs2Bank.depositAllExcept(java.util.Arrays.stream(ItemReqs.ACCEPTED_AXE_IDS).boxed().toArray(Integer[]::new));
+        } else {
+            Rs2Bank.depositAll();
+        }
+
+        Rs2Bank.closeBank();
+        return !Rs2Inventory.isFull();
+    }
+
+    private boolean hasAnyAxeInInventory() {
+        for (int axeId : ItemReqs.ACCEPTED_AXE_IDS) {
+            if (Rs2Inventory.hasItem(axeId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean bankForBestAvailableAxe(Axe bestPossibleAxe) {
+        status = "Banking";
+
+        if (bestPossibleAxe == null) {
+            return hasRequiredTools();
+        }
+
+        if (hasAxeEquippedOrInventory(bestPossibleAxe.getItemId())) {
+            return true;
+        }
+
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        Rs2Bank.depositAllExcept(java.util.Arrays.stream(ItemReqs.ACCEPTED_AXE_IDS).boxed().toArray(Integer[]::new));
+
+        if (Rs2Bank.hasItem(bestPossibleAxe.getItemId())) {
+            Rs2Bank.withdrawAndEquip(bestPossibleAxe.getItemId());
+            Rs2Bank.closeBank();
+            return Rs2Equipment.isWearing(bestPossibleAxe.getItemId()) || Rs2Inventory.hasItem(bestPossibleAxe.getItemId());
+        }
+
+        withdrawLowerTierAxesForSelling(bestPossibleAxe);
+        status = "Buying " + bestPossibleAxe.getName();
+        Rs2Bank.closeBank();
+        return buyAxeFromGrandExchange(bestPossibleAxe);
+    }
+
+    private void withdrawLowerTierAxesForSelling(Axe bestPossibleAxe) {
+        for (Axe axe : AXE_PRIORITY) {
+            if (axe.getWoodcuttingLevel() >= bestPossibleAxe.getWoodcuttingLevel()) {
+                continue;
+            }
+
+            if (Rs2Bank.hasItem(axe.getItemId())) {
+                Rs2Bank.withdrawOne(axe.getItemId());
+            }
+        }
+    }
+
+    private Axe getBestPossibleAxeForCurrentLevels() {
+        int wcLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
+        int attackLevel = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
+
+        for (Axe axe : AXE_PRIORITY) {
+            if (wcLevel < axe.getWoodcuttingLevel()) {
+                continue;
+            }
+
+            if (attackLevel >= axe.getAttackLevel()) {
+                return axe;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean hasAxeEquippedOrInventory(int axeId) {
+        return Rs2Equipment.isWearing(axeId) || Rs2Inventory.hasItem(axeId);
+    }
+
+    private boolean buyAxeFromGrandExchange(Axe axe) {
+        if (!Rs2GrandExchange.walkToGrandExchange()) {
+            return false;
+        }
+
+        if (!Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+
+        Global.sleepUntil(Rs2GrandExchange::isOpen, 7_000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        if (Rs2GrandExchange.getAvailableSlotsCount() == 0) {
+            Rs2GrandExchange.collectAllToBank();
+            Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
+        }
+
+        if (Rs2GrandExchange.getAvailableSlotsCount() == 0) {
+            return false;
+        }
+
+        sellLowerTierAxesAtGrandExchange(axe);
+
+        if (!ensureExchangeSlotAvailable()) {
+            return false;
+        }
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(axe.getName())
+                .quantity(1)
+                .percent(8)
+                .closeAfterCompletion(false)
+                .build();
+
+        if (!Rs2GrandExchange.processOffer(request)) {
+            return false;
+        }
+
+        Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Bank.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
+        Rs2GrandExchange.collectAllToBank();
+        Rs2GrandExchange.closeExchange();
+        return true;
+    }
+
+    private void sellLowerTierAxesAtGrandExchange(Axe bestPossibleAxe) {
+        for (Axe axe : AXE_PRIORITY) {
+            if (axe.getWoodcuttingLevel() >= bestPossibleAxe.getWoodcuttingLevel()) {
+                continue;
+            }
+
+            int quantity = Rs2Inventory.count(axe.getItemId());
+            if (quantity <= 0) {
+                continue;
+            }
+
+            if (!ensureExchangeSlotAvailable()) {
+                return;
+            }
+
+            int marketPrice = Rs2GrandExchange.getPrice(axe.getItemId());
+            int sellPrice = Math.max(1, marketPrice > 0 ? marketPrice / 2 : 1);
+
+            GrandExchangeRequest sellRequest = GrandExchangeRequest.builder()
+                    .action(GrandExchangeAction.SELL)
+                    .itemName(axe.getName())
+                    .quantity(quantity)
+                    .price(sellPrice)
+                    .closeAfterCompletion(false)
+                    .build();
+
+            if (Rs2GrandExchange.processOffer(sellRequest)) {
+                Global.sleepUntil(() -> !Rs2Inventory.hasItem(axe.getItemId()), 7_000);
+                Rs2GrandExchange.collectAllToBank();
+            }
+        }
+    }
+
+    private boolean ensureExchangeSlotAvailable() {
+        if (Rs2GrandExchange.getAvailableSlotsCount() > 0) {
+            return true;
+        }
+
+        Rs2GrandExchange.collectAllToBank();
+        Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
+        return Rs2GrandExchange.getAvailableSlotsCount() > 0;
+    }
+
+    private TreeTarget resolveTreeTarget() {
+        int wcLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
+        int combatLevel = Microbot.getClientThread().invoke(() ->
+                Microbot.getClient().getLocalPlayer() != null
+                        ? Microbot.getClient().getLocalPlayer().getCombatLevel()
+                        : 0
+        );
+
+        if (wcLevel >= TreeLevels.YEW) {
+            return new TreeTarget("Yew", Areas.YEW, TreeID.YEW);
+        }
+
+        if (wcLevel >= TreeLevels.WILLOW) {
+            return new TreeTarget("Willow", Areas.WILLOW, TreeID.WILLOW);
+        }
+
+        if (wcLevel >= TreeLevels.OAK) {
+            return new TreeTarget("Oak", combatLevel >= 40 ? Areas.OAK_DRAYNOR : Areas.OAK_VARROCK, TreeID.OAK);
+        }
+
+        return new TreeTarget("Tree", Areas.TREE, TreeID.NORMAL);
+    }
+
+    private static final class Axe {
+        private final String name;
+        private final int itemId;
+        private final int woodcuttingLevel;
+        private final int attackLevel;
+
+        private Axe(String name, int itemId, int woodcuttingLevel, int attackLevel) {
+            this.name = name;
+            this.itemId = itemId;
+            this.woodcuttingLevel = woodcuttingLevel;
+            this.attackLevel = attackLevel;
+        }
+
+        private String getName() {
+            return name;
+        }
+
+        private int getItemId() {
+            return itemId;
+        }
+
+        private int getWoodcuttingLevel() {
+            return woodcuttingLevel;
+        }
+
+        private int getAttackLevel() {
+            return attackLevel;
+        }
+    }
+
+    private static final class TreeTarget {
+        private final String treeName;
+        private final WorldPoint location;
+        private final int[] treeIds;
+
+        private TreeTarget(String treeName, WorldPoint location, int[] treeIds) {
+            this.treeName = treeName;
+            this.location = location;
+            this.treeIds = treeIds;
+        }
+
+        private String getTreeName() {
+            return treeName;
+        }
+
+        private WorldPoint getLocation() {
+            return location;
+        }
+
+        private int[] getTreeIds() {
+            return treeIds;
+        }
+    }
+}
