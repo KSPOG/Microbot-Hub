@@ -16,14 +16,14 @@ import java.awt.AWTException;
         description = "KSP account progression plugin scaffold.",
         tags = {"ksp", "account", "builder"},
         authors = {"KSP"},
-        version = KSPAccountBuilderPlugin.version,
+        version = KSPAccountBuilderPlugin.VERSION,
         minClientVersion = "2.0.13",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
-    static final String version = "0.0.31";
+    public static final String VERSION = "0.0.32";
 
     @Inject
     private KSPAccountBuilderScript script;
