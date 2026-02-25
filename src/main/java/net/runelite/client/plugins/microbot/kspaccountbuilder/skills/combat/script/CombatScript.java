@@ -110,6 +110,7 @@ public class CombatScript {
             if (!buyFromGrandExchange(neededPurchases)) {
                 return false;
             }
+
         }
 
         return withdrawNeededCombatItems();
@@ -121,6 +122,7 @@ public class CombatScript {
 
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
             return false;
+
         }
 
         Rs2Bank.depositAll();
@@ -166,6 +168,77 @@ public class CombatScript {
         if (!Rs2Bank.hasItem(itemName)) {
             return;
         }
+
+
+        }
+
+
+        }
+
+        return withdrawNeededCombatItems();
+    }
+
+
+    private boolean withdrawNeededCombatItems() {
+        status = "Withdrawing combat setup";
+
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+
+        Rs2Bank.depositAll();
+
+        String bestWeapon = getBestWeaponForCurrentAttackLevel();
+        withdrawAndEquipIfAvailable(bestWeapon);
+
+        for (String armourPiece : getBestArmourForCurrentDefenceLevel()) {
+            withdrawAndEquipIfAvailable(armourPiece);
+        }
+
+
+        withdrawAndEquipIfAvailable("Amulet of power");
+
+
+        withdrawTeamCapeIfAvailable();
+        Rs2Bank.withdrawX("Trout", Gear.MIN_TROUT_REQUIRED, true);
+
+        Rs2Bank.closeBank();
+
+        boolean hasWeapon = Rs2Equipment.isWearing(bestWeapon) || Rs2Inventory.hasItem(bestWeapon);
+        boolean hasRequiredArmour = getBestArmourForCurrentDefenceLevel().stream()
+                .allMatch(piece -> Rs2Equipment.isWearing(piece) || Rs2Inventory.hasItem(piece));
+
+        boolean hasAmuletOfPower = Rs2Equipment.isWearing("Amulet of power") || Rs2Inventory.hasItem("Amulet of power");
+        boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
+
+        if (!hasWeapon || !hasRequiredArmour || !hasAmuletOfPower || !hasFood) {
+
+        boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
+
+        if (!hasWeapon || !hasRequiredArmour || !hasFood) {
+
+            status = "Missing combat withdrawals";
+            return false;
+        }
+
+        status = "Combat supplies ready";
+        return true;
+    }
+
+    private void withdrawAndEquipIfAvailable(String itemName) {
+        if (itemName == null || itemName.isBlank()) {
+            return;
+        }
+
+        if (Rs2Equipment.isWearing(itemName) || Rs2Inventory.hasItem(itemName)) {
+            return;
+        }
+
+        if (!Rs2Bank.hasItem(itemName)) {
+            return;
+        }
+
 
         Rs2Bank.withdrawAndEquip(itemName);
     }
