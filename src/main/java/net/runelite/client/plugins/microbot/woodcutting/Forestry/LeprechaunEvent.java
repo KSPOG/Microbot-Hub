@@ -12,7 +12,7 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 import org.slf4j.event.Level;
 
@@ -23,16 +23,16 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepGaussian;
 @Slf4j
 public class LeprechaunEvent implements BlockingEvent {
 
-    private final ForestryEventPlugin plugin;
+    private final AutoWoodcuttingPlugin plugin;
 
-    public LeprechaunEvent(ForestryEventPlugin plugin) {
+    public LeprechaunEvent(AutoWoodcuttingPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !plugin.isEnabled()) return false;
+            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             Optional<Rs2NpcModel> leprechaun =  Rs2Npc
                     .getNpcs(NpcID.GATHERING_EVENT_WOODCUTTING_LEPRECHAUN)
@@ -47,7 +47,7 @@ public class LeprechaunEvent implements BlockingEvent {
     @Override
     public boolean execute() {
         Microbot.log("LeprechaunEvent: Executing Leprechaun event");
-        plugin.setCurrentForestryEvent(ForestryEvents.RAINBOW);
+        plugin.currentForestryEvent = ForestryEvents.RAINBOW;
         Rs2Walker.setTarget(null); // stop walking, stop moving to bank for example
         while (this.validate()) {
             log.info("LeprechaunEvent: Leprechaun event still valid, continuing execution get opbject");

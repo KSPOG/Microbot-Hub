@@ -8,22 +8,22 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import net.runelite.client.plugins.microbot.woodcutting.ForestryEventPlugin;
+import net.runelite.client.plugins.microbot.woodcutting.AutoWoodcuttingPlugin;
 import net.runelite.client.plugins.microbot.woodcutting.enums.ForestryEvents;
 import org.slf4j.event.Level;
 
 @Slf4j
 public class FoxEvent implements BlockingEvent {
 
-    private final ForestryEventPlugin plugin;
-    public FoxEvent(ForestryEventPlugin plugin) {
+    private final AutoWoodcuttingPlugin plugin;
+    public FoxEvent(AutoWoodcuttingPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Override
     public boolean validate() {
         try{
-            if (plugin == null || !plugin.isEnabled()) return false;
+            if (plugin == null || !Microbot.isPluginEnabled(plugin)) return false;
             if (Microbot.getClient() == null || !Microbot.isLoggedIn()) return false;
             var outDoorFox = Rs2Npc.getNpc(NpcID.GATHERING_EVENT_POACHERS_FOX_OUTDOORS);
             var indoorFox = Rs2Npc.getNpc(NpcID.GATHERING_EVENT_POACHERS_FOX_INDOORS);
@@ -37,7 +37,7 @@ public class FoxEvent implements BlockingEvent {
     @Override
     public boolean execute() {
         Microbot.log("FoxEvent: Executing Fox event");
-        plugin.setCurrentForestryEvent(ForestryEvents.FOX_TRAP);
+        plugin.currentForestryEvent = ForestryEvents.FOX_TRAP;
         Rs2Walker.setTarget(null); // stop walking
         
         // ensure inventory space for potential fox whistle (1/30 chance)
