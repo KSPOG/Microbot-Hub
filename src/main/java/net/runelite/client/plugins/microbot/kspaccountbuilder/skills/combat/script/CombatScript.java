@@ -92,6 +92,10 @@ public class CombatScript {
             }
         }
 
+        if (!hasItemAnywhere("Amulet of power")) {
+            neededPurchases.add("Amulet of power");
+        }
+
         if (!hasAnyTeamCape()) {
             neededPurchases.add("Team-1 cape");
         }
@@ -106,6 +110,7 @@ public class CombatScript {
             if (!buyFromGrandExchange(neededPurchases)) {
                 return false;
             }
+
         }
 
         return withdrawNeededCombatItems();
@@ -119,6 +124,21 @@ public class CombatScript {
             return false;
         }
 
+
+        }
+
+        return withdrawNeededCombatItems();
+    }
+
+
+    private boolean withdrawNeededCombatItems() {
+        status = "Withdrawing combat setup";
+
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+
         Rs2Bank.depositAll();
 
         String bestWeapon = getBestWeaponForCurrentAttackLevel();
@@ -128,6 +148,10 @@ public class CombatScript {
             withdrawAndEquipIfAvailable(armourPiece);
         }
 
+
+        withdrawAndEquipIfAvailable("Amulet of power");
+
+
         withdrawTeamCapeIfAvailable();
         Rs2Bank.withdrawX("Trout", Gear.MIN_TROUT_REQUIRED, true);
 
@@ -136,9 +160,16 @@ public class CombatScript {
         boolean hasWeapon = Rs2Equipment.isWearing(bestWeapon) || Rs2Inventory.hasItem(bestWeapon);
         boolean hasRequiredArmour = getBestArmourForCurrentDefenceLevel().stream()
                 .allMatch(piece -> Rs2Equipment.isWearing(piece) || Rs2Inventory.hasItem(piece));
+
+        boolean hasAmuletOfPower = Rs2Equipment.isWearing("Amulet of power") || Rs2Inventory.hasItem("Amulet of power");
+        boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
+
+        if (!hasWeapon || !hasRequiredArmour || !hasAmuletOfPower || !hasFood) {
+
         boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
 
         if (!hasWeapon || !hasRequiredArmour || !hasFood) {
+
             status = "Missing combat withdrawals";
             return false;
         }
@@ -246,14 +277,16 @@ public class CombatScript {
     }
 
     private boolean hasAnyTeamCape() {
-        if (Rs2Equipment.isWearing("Team-")) {
-            return true;
-        }
+        for (String matcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (Rs2Equipment.isWearing(matcher)) {
+                return true;
+            }
 
-        if (Rs2Inventory.items().anyMatch(item -> item != null
-                && item.getName() != null
-                && isTeamCapeName(item.getName()))) {
-            return true;
+            if (Rs2Inventory.items().anyMatch(item -> item != null
+                    && item.getName() != null
+                    && item.getName().toLowerCase().contains(matcher.toLowerCase()))) {
+                return true;
+            }
         }
 
         return Rs2Bank.bankItems().stream().anyMatch(item -> item.getName() != null && isTeamCapeName(item.getName()));
