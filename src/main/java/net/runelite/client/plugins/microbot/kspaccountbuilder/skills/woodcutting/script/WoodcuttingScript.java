@@ -26,6 +26,10 @@ public class WoodcuttingScript {
     private static final String CHOP_ACTION = "Chop down";
     private static final int TREE_AREA_RADIUS = 10;
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
+    private static final int MIN_BUY_PRICE_GP = 50;
+    private static final int MIN_SELL_PRICE_GP = 25;
+    private static final double BUY_PRICE_MARKUP_MULTIPLIER = 1.20;
+    private static final double SELL_PRICE_DISCOUNT_MULTIPLIER = 0.95;
 
     private String status = "Idle";
 
@@ -69,6 +73,11 @@ public class WoodcuttingScript {
         if (Rs2Player.getWorldLocation().distanceTo(target.getLocation()) > TREE_AREA_RADIUS) {
             status = "Walking to " + target.getTreeName();
             Rs2Walker.walkTo(target.getLocation());
+            return;
+        }
+
+        if (Rs2Player.isMoving() || Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
+            status = "Waiting for current action";
             return;
         }
 
@@ -226,11 +235,13 @@ public class WoodcuttingScript {
             return false;
         }
 
+        int buyPrice = getBuyOfferPrice(axe);
+
         GrandExchangeRequest request = GrandExchangeRequest.builder()
                 .action(GrandExchangeAction.BUY)
                 .itemName(axe.getName())
                 .quantity(1)
-                .percent(8)
+                .price(buyPrice)
                 .closeAfterCompletion(false)
                 .build();
 
@@ -259,7 +270,7 @@ public class WoodcuttingScript {
                 return;
             }
 
-            int sellPrice = 1;
+            int sellPrice = getSellOfferPrice(axe);
 
             GrandExchangeRequest sellRequest = GrandExchangeRequest.builder()
                     .action(GrandExchangeAction.SELL)
@@ -274,6 +285,27 @@ public class WoodcuttingScript {
                 Rs2GrandExchange.collectAllToBank();
             }
         }
+    }
+
+
+    private int getBuyOfferPrice(Axe axe) {
+        int marketPrice = Microbot.getItemManager().getItemPrice(axe.getItemId());
+        if (marketPrice <= 0) {
+            log.debug("Missing market price for {} ({}), falling back to min buy price", axe.getName(), axe.getItemId());
+            return MIN_BUY_PRICE_GP;
+        }
+
+        return Math.max(MIN_BUY_PRICE_GP, (int) Math.ceil(marketPrice * BUY_PRICE_MARKUP_MULTIPLIER));
+    }
+
+    private int getSellOfferPrice(Axe axe) {
+        int marketPrice = Microbot.getItemManager().getItemPrice(axe.getItemId());
+        if (marketPrice <= 0) {
+            log.debug("Missing market price for {} ({}), falling back to min sell price", axe.getName(), axe.getItemId());
+            return MIN_SELL_PRICE_GP;
+        }
+
+        return Math.max(MIN_SELL_PRICE_GP, (int) Math.floor(marketPrice * SELL_PRICE_DISCOUNT_MULTIPLIER));
     }
 
     private boolean ensureExchangeSlotAvailable() {

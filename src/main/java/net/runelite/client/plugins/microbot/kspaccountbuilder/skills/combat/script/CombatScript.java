@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldArea;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.areas.MobArea;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.needed.Gear;
@@ -14,6 +15,8 @@ import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequ
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,19 +33,17 @@ public class CombatScript {
     private String status = "Idle";
 
     public CombatTrainingTarget resolveTrainingTarget() {
-        int attack = getLevel(Skill.ATTACK);
-        int strength = getLevel(Skill.STRENGTH);
-        int defence = getLevel(Skill.DEFENCE);
+        int lowestCombatLevel = getLowestMeleeCombatLevel();
 
-        if (attack < 5 && strength < 5 && defence < 5) {
+        if (lowestCombatLevel < 5) {
             return CombatTrainingTarget.GOBLINS;
         }
 
-        if (attack < 20 && strength < 20 && defence < 20) {
+        if (lowestCombatLevel < 20) {
             return CombatTrainingTarget.COWS;
         }
 
-        if (attack < 30 && strength < 30 && defence < 30) {
+        if (lowestCombatLevel < 30) {
             return CombatTrainingTarget.AL_KHARID_GUARDS;
         }
 
@@ -50,12 +51,31 @@ public class CombatScript {
     }
 
     public void execute() {
-        if (!prepareCombatSuppliesAndUpgrades()) {
-            return;
-        }
+        try {
+            if (!prepareCombatSuppliesAndUpgrades()) {
+                return;
+            }
 
-        CombatTrainingTarget target = resolveTrainingTarget();
-        status = target.getStatusText();
+            CombatTrainingTarget target = resolveTrainingTarget();
+            if (target == CombatTrainingTarget.COMBAT_COMPLETE) {
+                status = target.getStatusText();
+                return;
+            }
+
+            WorldArea targetArea = target.getArea();
+            WorldPoint playerLocation = Rs2Player.getWorldLocation();
+            if (targetArea != null && playerLocation != null && !targetArea.contains(playerLocation)) {
+                status = "Walking to " + target.name().replace('_', ' ').toLowerCase();
+                Rs2Walker.walkTo(getAreaCenter(targetArea));
+                return;
+            }
+
+            status = target.getStatusText() + " | Focus " + getLowestMeleeSkillDisplay()
+                    + " (A/S/D: " + getLevel(Skill.ATTACK) + "/" + getLevel(Skill.STRENGTH) + "/" + getLevel(Skill.DEFENCE) + ")";
+        } catch (Exception ex) {
+            log.error("CombatScript execution failure", ex);
+            status = "Combat action failed, retrying";
+        }
     }
 
     public boolean prepareCombatSuppliesAndUpgrades() {
@@ -96,6 +116,34 @@ public class CombatScript {
 
     public boolean shouldLootCowhide(CombatTrainingTarget target) {
         return target == CombatTrainingTarget.COWS;
+    }
+
+
+    private WorldPoint getAreaCenter(WorldArea area) {
+        int centerX = area.getX() + (area.getWidth() / 2);
+        int centerY = area.getY() + (area.getHeight() / 2);
+        return new WorldPoint(centerX, centerY, area.getPlane());
+    }
+
+    private int getLowestMeleeCombatLevel() {
+        return Math.min(getLevel(Skill.ATTACK), Math.min(getLevel(Skill.STRENGTH), getLevel(Skill.DEFENCE)));
+    }
+
+    private String getLowestMeleeSkillDisplay() {
+        int attack = getLevel(Skill.ATTACK);
+        int strength = getLevel(Skill.STRENGTH);
+        int defence = getLevel(Skill.DEFENCE);
+
+        int minimum = Math.min(attack, Math.min(strength, defence));
+        if (attack == minimum) {
+            return "Attack";
+        }
+
+        if (strength == minimum) {
+            return "Strength";
+        }
+
+        return "Defence";
     }
 
     private int getLevel(Skill skill) {
