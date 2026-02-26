@@ -77,8 +77,12 @@ public class FiremakingScript {
 
     private boolean handleProductSelectionDialogue() {
 
+        if (!isProductSelectionDialogueOpen()) {
+
+
 
         if (!Rs2Widget.hasWidget("Product selection") && !Rs2Widget.hasWidget("How many would you like to burn?")) {
+
 
             return false;
         }
@@ -108,11 +112,13 @@ public class FiremakingScript {
     }
 
 
+
         Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
         Global.sleepUntil(() -> !Rs2Widget.hasWidget("Product selection")
                 && !Rs2Widget.hasWidget("How many would you like to burn?"), 2_000);
         return true;
     }
+
 
 
     private boolean handleBurnSelectionWidget(int bestLogId) {

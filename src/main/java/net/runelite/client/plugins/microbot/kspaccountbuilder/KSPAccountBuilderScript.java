@@ -105,7 +105,7 @@ public class KSPAccountBuilderScript extends Script {
 
                 rotateTaskIfNeeded(config);
 
-                if (config.enableAntiban() && Rs2AntibanSettings.actionCooldownActive) {
+                if (config.enableAntiban() && activeTask != BuilderTask.FIREMAKING && Rs2AntibanSettings.actionCooldownActive) {
                     status = "Antiban cooldown";
                     return;
                 }
@@ -113,7 +113,11 @@ public class KSPAccountBuilderScript extends Script {
                 executeActiveTask();
 
                 if (config.enableAntiban()) {
-                    applyAntibanCycle();
+                    if (activeTask == BuilderTask.FIREMAKING) {
+                        Rs2AntibanSettings.actionCooldownActive = false;
+                    } else {
+                        applyAntibanCycle();
+                    }
                 }
             } catch (Exception ex) {
                 status = "Error";
@@ -150,6 +154,8 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void executeActiveTask() {
+        updateNaturalMouseForActiveTask();
+
         switch (activeTask) {
             case COMBAT:
                 currentTask = "Combat";
@@ -168,6 +174,10 @@ public class KSPAccountBuilderScript extends Script {
                 status = woodcuttingScript.getStatus();
                 break;
         }
+    }
+
+    private void updateNaturalMouseForActiveTask() {
+        Rs2AntibanSettings.naturalMouse = activeTask == BuilderTask.COMBAT || activeTask == BuilderTask.FIREMAKING;
     }
 
     private void rotateTaskIfNeeded(KSPAccountBuilderConfig config) {
@@ -359,6 +369,7 @@ public class KSPAccountBuilderScript extends Script {
         restoreTitle();
         woodcuttingScript.shutdown();
         firemakingScript.shutdown();
+        Rs2AntibanSettings.naturalMouse = false;
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
     }
