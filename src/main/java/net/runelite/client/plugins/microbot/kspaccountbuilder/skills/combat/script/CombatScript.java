@@ -1,7 +1,6 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script;
 
 import lombok.Getter;
-import net.runelite.api.Actor;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Actor;
 import net.runelite.api.Skill;
@@ -10,6 +9,7 @@ import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.areas.MobArea;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.loot.Loot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.needed.Gear;
@@ -18,7 +18,6 @@ import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.sell.Sel
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
-import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.grounditem.LootingParameters;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
@@ -42,30 +41,15 @@ public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
     private static final int LOOT_RADIUS = 8;
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
-    private static final long REPOSITION_COOLDOWN_MS = 3_500L;
-    private static final int BURY_WAIT_TIMEOUT_MS = 1_200;
-    private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 1_800;
-
-    private static final long LOOT_WAIT_AFTER_KILL_MS = 2_500L;
-
-    private String status = "Idle";
-    private long lastRepositionAttemptAt = 0L;
-    private int cachedTargetNpcIndex = -1;
-    private long waitForLootUntilMs = 0L;
-
-
-    private static final long LOOT_WAIT_AFTER_KILL_MS = 2_500L;
+    private static final long REPOSITION_COOLDOWN_MS = 500L;
+    private static final int BURY_WAIT_TIMEOUT_MS = 250;
+    private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 500;
+    private static final long LOOT_WAIT_AFTER_KILL_MS = 300L;
 
     private String status = "Idle";
     private long lastRepositionAttemptAt = 0L;
     private int cachedTargetNpcIndex = -1;
     private long waitForLootUntilMs = 0L;
-
-
-    private String status = "Idle";
-    private long lastRepositionAttemptAt = 0L;
-
-
 
     public void execute() {
         try {
@@ -88,18 +72,12 @@ public class CombatScript {
                 return;
             }
 
-
             updateCombatTargetTracking();
-
-
-            updateCombatTargetTracking();
-
 
             if (Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isInCombat() || Rs2Combat.inCombat()) {
                 status = "Fighting in " + target.getDisplayName();
                 return;
             }
-
 
             if (shouldWaitForLoot(target)) {
                 if (lootDropsInArea(target)) {
@@ -109,7 +87,6 @@ public class CombatScript {
                 }
                 return;
             }
-
 
             if (Rs2Player.isMoving()) {
                 status = "Moving in " + target.getDisplayName();
@@ -155,11 +132,7 @@ public class CombatScript {
 
     private boolean ensureCombatLoadout() {
         if (hasCombatSetupReady()) {
-
             clearLootWaitState();
-
-            waitForLootUntilMs = 0L;
-
             return true;
         }
 
@@ -215,12 +188,10 @@ public class CombatScript {
         return missing;
     }
 
-
     private void clearLootWaitState() {
         cachedTargetNpcIndex = -1;
         waitForLootUntilMs = 0L;
     }
-
 
     private void updateCombatTargetTracking() {
         Actor interacting = Rs2Player.getInteracting();
@@ -244,11 +215,7 @@ public class CombatScript {
 
     private boolean shouldWaitForLoot(CombatTrainingTarget target) {
         if (waitForLootUntilMs <= 0L || System.currentTimeMillis() >= waitForLootUntilMs) {
-
             clearLootWaitState();
-
-            waitForLootUntilMs = 0L;
-
             return false;
         }
 
@@ -257,11 +224,7 @@ public class CombatScript {
         }
 
         if (!hasAnyGroundItemsNearby() && (Rs2Inventory.getBones() == null || Rs2Inventory.getBones().isEmpty())) {
-
             clearLootWaitState();
-
-            waitForLootUntilMs = 0L;
-
             return false;
         }
 
@@ -269,34 +232,13 @@ public class CombatScript {
     }
 
     private boolean lootDropsInArea(CombatTrainingTarget target) {
-
-        if (!isPlayerInTargetArea(target.getArea())) {
-
-
-
-
         if (!isPlayerInTargetArea(target.getArea()) || Rs2Player.isInCombat() || Rs2Combat.inCombat()) {
-
             return false;
         }
 
         if (!hasAnyGroundItemsNearby()) {
             return buryBonesInInventory();
         }
-
-
-
-
-        if (!isPlayerInTargetArea(target.getArea())) {
-            return false;
-        }
-
-
-        if (!hasAnyGroundItemsNearby()) {
-            return buryBonesInInventory();
-        }
-
-
 
         if (buryBonesInInventory()) {
             return true;
@@ -311,23 +253,9 @@ public class CombatScript {
         }
 
         if (Loot.lootCoins(LOOT_RADIUS)) {
-
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
             clearLootWaitState();
-
-
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
-            waitForLootUntilMs = 0L;
-
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
-
-
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
-
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
-
-
-
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 400);
             return true;
         }
 
@@ -344,25 +272,18 @@ public class CombatScript {
         return false;
     }
 
-
-
-
     private boolean hasAnyGroundItemsNearby() {
         return Rs2GroundItem.getAll(LOOT_RADIUS).length > 0;
     }
 
-
     private boolean buryBonesInInventory() {
-
         List<Rs2ItemModel> bones = Rs2Inventory.getBones();
         if (bones == null || bones.isEmpty()) {
             return false;
         }
         if (Rs2Inventory.interact(bones.get(0), "bury")) {
             sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.getBones().size() < bones.size(), BURY_WAIT_TIMEOUT_MS);
-
             clearLootWaitState();
-
             return true;
         }
         return false;
@@ -372,12 +293,7 @@ public class CombatScript {
         LootingParameters params = new LootingParameters(LOOT_RADIUS, 1, 1, 0, false, true, itemName);
         if (Rs2GroundItem.lootItemsBasedOnNames(params)) {
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
-
             clearLootWaitState();
-
-
-            waitForLootUntilMs = 0L;
-
             return true;
         }
         return false;
@@ -391,17 +307,8 @@ public class CombatScript {
                         && n.getWorldLocation() != null
                         && target.getArea().contains(n.getWorldLocation())
                         && isNpcAvailableForAttack(n))
-
                 .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
                         .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
-
-
-                .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
-                        .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
-
-                .min(Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
-
-
                 .orElse(null);
 
         if (npc == null) {
@@ -414,7 +321,7 @@ public class CombatScript {
 
         cachedTargetNpcIndex = npc.getIndex();
         waitForLootUntilMs = 0L;
-        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 3_000);
+        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 700);
         return Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving();
     }
 
@@ -430,16 +337,8 @@ public class CombatScript {
                         && n.getWorldLocation() != null
                         && target.getArea().contains(n.getWorldLocation())
                         && isNpcAvailableForAttack(n))
-
                 .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
                         .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
-
-
-                .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
-                        .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
-
-                .min(Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
-
                 .orElse(null);
 
         if (nearest == null || nearest.getWorldLocation() == null) {
@@ -451,7 +350,7 @@ public class CombatScript {
         }
 
         Rs2Walker.walkTo(nearest.getWorldLocation());
-        sleepUntil(Rs2Player::isMoving, 2_000);
+        sleepUntil(Rs2Player::isMoving, 800);
         return Rs2Player.isMoving();
     }
 
@@ -478,7 +377,7 @@ public class CombatScript {
 
         lastRepositionAttemptAt = now;
         Rs2Walker.walkTo(center);
-        sleepUntil(Rs2Player::isMoving, 2_000);
+        sleepUntil(Rs2Player::isMoving, 800);
         return Rs2Player.isMoving();
     }
 
@@ -516,7 +415,6 @@ public class CombatScript {
         }
         Rs2Bank.withdrawAndEquip(itemName);
     }
-
 
     private boolean hasAnyTeamCapeAnywhere() {
         if (hasAnyTeamCapeInInventoryOrEquipped()) {
