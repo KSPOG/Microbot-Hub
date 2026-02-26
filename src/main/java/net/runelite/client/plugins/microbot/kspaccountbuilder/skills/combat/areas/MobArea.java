@@ -9,10 +9,10 @@ public final class MobArea {
     }
 
     /**
-     * Goblins area bounds: (3223,3242) to (3257,3246), plane 0.
+     * Goblins area bounds: (3245,3227) to (3257,3241), plane 0.
      */
     public static final WorldArea GOBLINS =
-            new WorldArea(new WorldPoint(3223, 3242, 0), 35, 5);
+            new WorldArea(new WorldPoint(3245, 3227, 0), 13, 15);
 
     /**
      * Cows area bounds: (3253,3255) to (3265,3296), plane 0.

@@ -20,6 +20,11 @@ import java.awt.event.KeyEvent;
 @Slf4j
 public class FiremakingScript {
     private static final int CAMPFIRE_SEARCH_RADIUS = 20;
+    private static final String[] PRODUCT_SELECTION_PROMPTS = {
+            "Product selection",
+            "How many would you like to burn?",
+            "How many would you like to make?"
+    };
 
     private String status = "Idle";
 
@@ -71,16 +76,44 @@ public class FiremakingScript {
 
 
     private boolean handleProductSelectionDialogue() {
+
+
         if (!Rs2Widget.hasWidget("Product selection") && !Rs2Widget.hasWidget("How many would you like to burn?")) {
+
             return false;
         }
 
         status = "Confirming product selection";
+
+
+        // Handle both old/new production UIs: try clickable options first, then keyboard fallback.
+        Rs2Widget.clickWidget("All");
+        Rs2Widget.clickWidget("Continue");
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+
+        Global.sleepUntil(() -> !isProductSelectionDialogueOpen()
+                || Rs2Player.isAnimating()
+                || Rs2Player.isInteracting(), 2_500);
+        return true;
+    }
+
+    private boolean isProductSelectionDialogueOpen() {
+        for (String prompt : PRODUCT_SELECTION_PROMPTS) {
+            if (Rs2Widget.hasWidget(prompt)) {
+                return true;
+            }
+        }
+
+        return Rs2Widget.isProductionWidgetOpen();
+    }
+
+
         Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
         Global.sleepUntil(() -> !Rs2Widget.hasWidget("Product selection")
                 && !Rs2Widget.hasWidget("How many would you like to burn?"), 2_000);
         return true;
     }
+
 
     private boolean handleBurnSelectionWidget(int bestLogId) {
         if (!Rs2Widget.hasWidget("What would you like to burn?")) {
