@@ -216,52 +216,72 @@ public class WoodcuttingScript {
             return false;
         }
 
-        try {
-            Global.sleepUntil(Rs2GrandExchange::isOpen, 7_000);
-            if (!Rs2GrandExchange.isOpen()) {
-                return false;
-            }
+        Global.sleepUntil(Rs2GrandExchange::isOpen, 7_000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
 
-            if (!ensureExchangeSlotAvailable()) {
-                log.debug("No GE slots available for buying {}", axe.getName());
-                return false;
-            }
+        if (!ensureExchangeSlotAvailable()) {
+            log.debug("No GE slots available for buying {}", axe.getName());
+            return false;
+        }
 
-            sellLowerTierAxesAtGrandExchange(axe);
+        sellLowerTierAxesAtGrandExchange(axe);
 
-            if (!ensureExchangeSlotAvailable()) {
-                log.debug("No GE slots available after selling lower tier axes while buying {}", axe.getName());
-                return false;
-            }
+        if (!ensureExchangeSlotAvailable()) {
+            log.debug("No GE slots available after selling lower tier axes while buying {}", axe.getName());
+            return false;
+        }
 
-            int buyPrice = getBuyOfferPrice(axe);
+        int buyPrice = getBuyOfferPrice(axe);
 
-            GrandExchangeRequest request = GrandExchangeRequest.builder()
-                    .action(GrandExchangeAction.BUY)
-                    .itemName(axe.getName())
-                    .quantity(1)
-                    .price(buyPrice)
-                    .closeAfterCompletion(false)
-                    .build();
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(axe.getName())
+                .quantity(1)
+                .price(buyPrice)
+                .closeAfterCompletion(false)
+                .build();
+
+
+        if (!placeBuyOffer(request, axe)) {
+            return false;
+        }
 
             if (!placeBuyOffer(request, axe)) {
                 return false;
             }
 
-            boolean boughtAxe = Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
-            if (!boughtAxe) {
-                Rs2GrandExchange.abortAllOffers(true);
-            }
 
-            Rs2GrandExchange.collectAllToBank();
-            if (Rs2Inventory.hasItem(axe.getItemId())) {
+        boolean boughtAxe = Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
+        if (!boughtAxe) {
+            Rs2GrandExchange.abortAllOffers(true);
+        }
+
+        Rs2GrandExchange.collectAllToBank();
+        if (Rs2Inventory.hasItem(axe.getItemId())) {
+            return true;
+        }
+
+        // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
+        Rs2Bank.closeBank();
+        return hasAxeInBank;
+    }
+
+    private boolean placeBuyOffer(GrandExchangeRequest request, Axe axe) {
+        for (int attempt = 1; attempt <= BUY_OFFER_RETRY_COUNT; attempt++) {
+            if (Rs2GrandExchange.processOffer(request)) {
                 return true;
             }
 
-            // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
-            if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
-                return false;
-            }
+            log.debug("Failed to create buy offer for {} on attempt {}/{}", axe.getName(), attempt, BUY_OFFER_RETRY_COUNT);
+            Global.sleep(600, 900);
+
 
             boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
             Rs2Bank.closeBank();
@@ -277,6 +297,7 @@ public class WoodcuttingScript {
 
             log.debug("Failed to create buy offer for {} on attempt {}/{}", axe.getName(), attempt, BUY_OFFER_RETRY_COUNT);
             Global.sleep(600, 900);
+
 
             if (!Rs2GrandExchange.isOpen()) {
                 if (!Rs2GrandExchange.openExchange()) {

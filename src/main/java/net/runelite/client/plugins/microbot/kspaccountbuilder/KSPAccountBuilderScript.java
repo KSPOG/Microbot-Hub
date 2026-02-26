@@ -105,7 +105,7 @@ public class KSPAccountBuilderScript extends Script {
 
                 rotateTaskIfNeeded(config);
 
-                if (config.enableAntiban() && activeTask != BuilderTask.FIREMAKING && Rs2AntibanSettings.actionCooldownActive) {
+                if (config.enableAntiban() && activeTask == BuilderTask.WOODCUTTING && Rs2AntibanSettings.actionCooldownActive) {
                     status = "Antiban cooldown";
                     return;
                 }
@@ -113,7 +113,7 @@ public class KSPAccountBuilderScript extends Script {
                 executeActiveTask();
 
                 if (config.enableAntiban()) {
-                    if (activeTask == BuilderTask.FIREMAKING) {
+                    if (activeTask != BuilderTask.WOODCUTTING) {
                         Rs2AntibanSettings.actionCooldownActive = false;
                     } else {
                         applyAntibanCycle();
@@ -231,6 +231,11 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private boolean prepareForTaskStart() {
+        if (hasRequiredSuppliesForActiveTask()) {
+            status = "Ready (inventory already prepared)";
+            return true;
+        }
+
         status = "Banking before task";
 
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
@@ -242,6 +247,18 @@ public class KSPAccountBuilderScript extends Script {
         Rs2Bank.depositEquipment();
         status = "Ready (bank open)";
         return true;
+    }
+
+    private boolean hasRequiredSuppliesForActiveTask() {
+        switch (activeTask) {
+            case COMBAT:
+                return combatScript.hasCombatSetupReady();
+            case FIREMAKING:
+                return firemakingScript.hasRequiredSuppliesInInventory();
+            case WOODCUTTING:
+            default:
+                return woodcuttingScript.hasRequiredTools();
+        }
     }
 
     private void initializeBreakScheduling(KSPAccountBuilderConfig config) {

@@ -141,7 +141,7 @@ public class CombatScript {
         return withdrawNeededCombatItems();
     }
 
-    private boolean hasCombatSetupReady() {
+    public boolean hasCombatSetupReady() {
         String bestWeapon = getBestWeaponForCurrentAttackLevel();
         boolean hasWeapon = Rs2Equipment.isWearing(bestWeapon) || Rs2Inventory.hasItem(bestWeapon);
         boolean hasRequiredArmour = getBestArmourForCurrentDefenceLevel().stream()
