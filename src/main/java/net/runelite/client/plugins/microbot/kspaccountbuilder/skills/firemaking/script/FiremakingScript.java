@@ -80,6 +80,9 @@ public class FiremakingScript {
         if (!isProductSelectionDialogueOpen()) {
 
 
+        if (!isProductSelectionDialogueOpen()) {
+
+
 
         if (!Rs2Widget.hasWidget("Product selection") && !Rs2Widget.hasWidget("How many would you like to burn?")) {
 
@@ -123,37 +126,45 @@ public class FiremakingScript {
 
     private boolean handleBurnSelectionWidget(int bestLogId) {
         if (!Rs2Widget.hasWidget("What would you like to burn?")) {
+
             return false;
         }
 
-        status = "Selecting burn quantity and logs";
+        status = "Confirming product selection";
 
-        // New burn interface requires selecting quantity and then selecting the log option.
-        Rs2Widget.clickWidget("All");
+        // Per request: use keyboard confirmation on selection dialogue.
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
 
-        String logName = getLogName(bestLogId);
-        boolean clickedLog = Rs2Widget.clickWidget(logName);
-        if (!clickedLog) {
-            // Fallback to generic logs label in case naming differs by client/build.
-            Rs2Widget.clickWidget("Logs");
+        Global.sleepUntil(() -> !isProductSelectionDialogueOpen()
+                || Rs2Player.isAnimating()
+                || Rs2Player.isInteracting(), 2_500);
+        return true;
+    }
+
+    private boolean isProductSelectionDialogueOpen() {
+        for (String prompt : PRODUCT_SELECTION_PROMPTS) {
+            if (Rs2Widget.hasWidget(prompt)) {
+                return true;
+            }
         }
+
+        return Rs2Widget.isProductionWidgetOpen();
+    }
+
+    private boolean handleBurnSelectionWidget(int ignoredBestLogId) {
+        if (!Rs2Widget.hasWidget("What would you like to burn?")) {
+            return false;
+        }
+
+        status = "Confirming burn selection";
+
+        // Per request: use keyboard confirmation instead of clicking selection options.
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
 
         Global.sleepUntil(() -> !Rs2Widget.hasWidget("What would you like to burn?")
                 || Rs2Player.isAnimating()
                 || Rs2Player.isInteracting(), 3_000);
         return true;
-    }
-
-    private String getLogName(int logId) {
-        if (logId == Needed.WILLOW_LOGS) {
-            return "Willow logs";
-        }
-
-        if (logId == Needed.OAK_LOGS) {
-            return "Oak logs";
-        }
-
-        return "Logs";
     }
 
     private boolean hasRequiredSupplies(int bestLogId) {
