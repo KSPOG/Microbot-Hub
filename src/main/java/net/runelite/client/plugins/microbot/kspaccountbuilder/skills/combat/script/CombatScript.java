@@ -174,12 +174,18 @@ public class CombatScript {
     }
 
     private boolean lootDropsInArea(CombatTrainingTarget target) {
+
         if (!isPlayerInTargetArea(target.getArea()) || Rs2Player.isInCombat() || Rs2Combat.inCombat()) {
             return false;
         }
 
         if (!hasAnyGroundItemsNearby()) {
             return buryBonesInInventory();
+        }
+
+
+        if (!isPlayerInTargetArea(target.getArea())) {
+            return false;
         }
 
         if (buryBonesInInventory()) {
@@ -195,7 +201,11 @@ public class CombatScript {
         }
 
         if (Loot.lootCoins(LOOT_RADIUS)) {
+
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
+
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+
             return true;
         }
 
@@ -214,9 +224,11 @@ public class CombatScript {
 
 
 
+
     private boolean hasAnyGroundItemsNearby() {
         return Rs2GroundItem.getAll(LOOT_RADIUS).length > 0;
     }
+
 
     private boolean buryBonesInInventory() {
 
