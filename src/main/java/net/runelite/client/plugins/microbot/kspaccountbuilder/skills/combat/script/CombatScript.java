@@ -41,10 +41,26 @@ public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
     private static final int LOOT_RADIUS = 8;
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
+
     private static final long REPOSITION_COOLDOWN_MS = 500L;
     private static final int BURY_WAIT_TIMEOUT_MS = 250;
     private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 500;
     private static final long LOOT_WAIT_AFTER_KILL_MS = 300L;
+
+    private static final long REPOSITION_COOLDOWN_MS = 1_500L;
+    private static final int BURY_WAIT_TIMEOUT_MS = 700;
+    private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 1_000;
+
+    private static final long LOOT_WAIT_AFTER_KILL_MS = 1_200L;
+
+    private String status = "Idle";
+    private long lastRepositionAttemptAt = 0L;
+    private int cachedTargetNpcIndex = -1;
+    private long waitForLootUntilMs = 0L;
+
+
+    private static final long LOOT_WAIT_AFTER_KILL_MS = 1_200L;
+
 
     private String status = "Idle";
     private long lastRepositionAttemptAt = 0L;
@@ -255,7 +271,23 @@ public class CombatScript {
         if (Loot.lootCoins(LOOT_RADIUS)) {
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
             clearLootWaitState();
+
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 400);
+
+
+
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
+            waitForLootUntilMs = 0L;
+
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
+
+
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
+
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 1_000);
+
+
+
             return true;
         }
 
@@ -321,7 +353,11 @@ public class CombatScript {
 
         cachedTargetNpcIndex = npc.getIndex();
         waitForLootUntilMs = 0L;
+
         sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 700);
+
+        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 1_500);
+
         return Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving();
     }
 
