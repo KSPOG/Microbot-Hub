@@ -110,7 +110,7 @@ public class KSPAccountBuilderScript extends Script {
                     return;
                 }
 
-                executeActiveTask();
+                executeActiveTask(config);
 
                 if (config.enableAntiban()) {
                     if (activeTask != BuilderTask.WOODCUTTING) {
@@ -153,12 +153,13 @@ public class KSPAccountBuilderScript extends Script {
         return enabledTasks.get(ThreadLocalRandom.current().nextInt(enabledTasks.size()));
     }
 
-    private void executeActiveTask() {
+    private void executeActiveTask(KSPAccountBuilderConfig config) {
         updateNaturalMouseForActiveTask();
 
         switch (activeTask) {
             case COMBAT:
                 currentTask = "Combat";
+                combatScript.configureLooting(config.enableBoneBury(), config.enableCoinLooting());
                 combatScript.execute();
                 status = combatScript.getStatus();
                 break;

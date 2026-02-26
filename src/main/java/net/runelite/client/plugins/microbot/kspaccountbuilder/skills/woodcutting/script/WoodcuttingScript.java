@@ -248,6 +248,22 @@ public class WoodcuttingScript {
             return false;
         }
 
+        boolean boughtAxe = Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
+        if (!boughtAxe) {
+            Rs2GrandExchange.abortAllOffers(true);
+        }
+
+        Rs2GrandExchange.collectAllToBank();
+        if (Rs2Inventory.hasItem(axe.getItemId())) {
+            return true;
+        }
+
+
+
+        if (!placeBuyOffer(request, axe)) {
+            return false;
+        }
+
             if (!placeBuyOffer(request, axe)) {
                 return false;
             }
@@ -262,6 +278,7 @@ public class WoodcuttingScript {
         if (Rs2Inventory.hasItem(axe.getItemId())) {
             return true;
         }
+
 
         // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
@@ -283,6 +300,7 @@ public class WoodcuttingScript {
             Global.sleep(600, 900);
 
 
+
             boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
             Rs2Bank.closeBank();
             return hasAxeInBank;
@@ -297,6 +315,7 @@ public class WoodcuttingScript {
 
             log.debug("Failed to create buy offer for {} on attempt {}/{}", axe.getName(), attempt, BUY_OFFER_RETRY_COUNT);
             Global.sleep(600, 900);
+
 
 
             if (!Rs2GrandExchange.isOpen()) {
