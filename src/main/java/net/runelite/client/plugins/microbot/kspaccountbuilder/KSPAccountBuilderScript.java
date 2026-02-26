@@ -110,14 +110,11 @@ public class KSPAccountBuilderScript extends Script {
                     return;
                 }
 
+                applyTaskSpecificAntibanPolicy(config);
                 executeActiveTask(config);
 
-                if (config.enableAntiban()) {
-                    if (activeTask != BuilderTask.WOODCUTTING) {
-                        Rs2AntibanSettings.actionCooldownActive = false;
-                    } else {
-                        applyAntibanCycle();
-                    }
+                if (config.enableAntiban() && activeTask == BuilderTask.WOODCUTTING) {
+                    applyAntibanCycle();
                 }
             } catch (Exception ex) {
                 status = "Error";
@@ -153,13 +150,28 @@ public class KSPAccountBuilderScript extends Script {
         return enabledTasks.get(ThreadLocalRandom.current().nextInt(enabledTasks.size()));
     }
 
+    private void applyTaskSpecificAntibanPolicy(KSPAccountBuilderConfig config) {
+        if (!config.enableAntiban()) {
+            return;
+        }
+
+        if (activeTask == BuilderTask.WOODCUTTING) {
+            Rs2AntibanSettings.actionCooldownChance = Math.max(0.0, Math.min(1.0, config.actionCooldownChance()));
+            return;
+        }
+
+        // Disable action cooldown entirely for non-woodcutting tasks (combat/firemaking)
+        // so antiban cooldown state does not interrupt combat loops.
+        Rs2AntibanSettings.actionCooldownActive = false;
+        Rs2AntibanSettings.actionCooldownChance = 0.0;
+    }
+
     private void executeActiveTask(KSPAccountBuilderConfig config) {
         updateNaturalMouseForActiveTask();
 
         switch (activeTask) {
             case COMBAT:
                 currentTask = "Combat";
-                combatScript.configureLooting(config.enableBoneBury(), config.enableCoinLooting());
                 combatScript.execute();
                 status = combatScript.getStatus();
                 break;
