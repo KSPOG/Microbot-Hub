@@ -17,6 +17,7 @@ import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
+import net.runelite.client.plugins.microbot.util.grounditem.LootingParameters;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
@@ -34,6 +35,9 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Getter
 public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
+    private static final int LOOT_RADIUS = 8;
+    private boolean boneBuryEnabled = true;
+    private boolean coinLootingEnabled = true;
     private String status = "Idle";
 
     public CombatTrainingTarget resolveTrainingTarget() {
@@ -52,6 +56,11 @@ public class CombatScript {
         }
 
         return CombatTrainingTarget.COMBAT_COMPLETE;
+    }
+
+    public void configureLooting(boolean enableBoneBury, boolean enableCoinLooting) {
+        this.boneBuryEnabled = enableBoneBury;
+        this.coinLootingEnabled = enableCoinLooting;
     }
 
     public void execute() {
@@ -141,7 +150,7 @@ public class CombatScript {
         return withdrawNeededCombatItems();
     }
 
-    private boolean hasCombatSetupReady() {
+    public boolean hasCombatSetupReady() {
         String bestWeapon = getBestWeaponForCurrentAttackLevel();
         boolean hasWeapon = Rs2Equipment.isWearing(bestWeapon) || Rs2Inventory.hasItem(bestWeapon);
         boolean hasRequiredArmour = getBestArmourForCurrentDefenceLevel().stream()
@@ -242,13 +251,30 @@ public class CombatScript {
     }
 
     private boolean lootGroundItems() {
+        if (boneBuryEnabled && buryBonesInInventory()) {
+            status = "Burying bones";
+            return true;
+        }
+
         if (Rs2Inventory.isFull()) {
             return false;
         }
 
+        if (boneBuryEnabled && lootByName("bones")) {
+            return true;
+        }
+
+        if (coinLootingEnabled && lootCoins()) {
+            return true;
+        }
+
         for (int lootId : Loot.DEFAULT_LOOT) {
-            if (Rs2GroundItem.pickup(lootId)) {
-                sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+            String itemName = Microbot.getItemManager().getItemComposition(lootId).getName();
+            if (itemName == null || itemName.isBlank()) {
+                continue;
+            }
+
+            if (lootByName(itemName)) {
                 return true;
             }
         }
@@ -256,35 +282,55 @@ public class CombatScript {
         return false;
     }
 
-    private boolean attackTrainingNpc(CombatTrainingTarget target) {
-        WorldArea targetArea = target.getArea();
-        Rs2NpcModel npcTarget = Rs2Npc.getNpcs(npc ->
-                        npc != null
-                                && npc.getName() != null
-                                && matchesTargetNpc(npc.getName(), target.getNpcs())
-                                && !npc.isDead()
-                                && (targetArea == null || targetArea.contains(npc.getWorldLocation())))
-                .min(java.util.Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
-                .orElse(null);
-
-        if (npcTarget == null) {
+    private boolean buryBonesInInventory() {
+        List<Rs2ItemModel> bones = Rs2Inventory.getBones();
+        if (bones == null || bones.isEmpty()) {
             return false;
         }
 
-        if (!Rs2Npc.interact(npcTarget, "Attack")) {
-            return false;
+        if (Rs2Inventory.interact(bones.get(0), "bury")) {
+            sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.getBones().size() < bones.size(), 2_000);
+            return true;
         }
 
-        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), 3_000);
-        return true;
+        return false;
     }
 
-    private boolean matchesTargetNpc(String npcName, String[] targetNames) {
-        for (String targetName : targetNames) {
-            if (npcName.equalsIgnoreCase(targetName)) {
-                return true;
-            }
+    private boolean lootByName(String nameMatcher) {
+        LootingParameters params = new LootingParameters(
+                LOOT_RADIUS,
+                1,
+                1,
+                0,
+                false,
+                true,
+                nameMatcher
+        );
+
+        if (Rs2GroundItem.lootItemsBasedOnNames(params)) {
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+            return true;
         }
+
+        return false;
+    }
+
+    private boolean lootCoins() {
+        LootingParameters params = new LootingParameters(
+                LOOT_RADIUS,
+                1,
+                1,
+                0,
+                false,
+                true,
+                "coins"
+        );
+
+        if (Rs2GroundItem.lootCoins(params)) {
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+            return true;
+        }
+
         return false;
     }
 

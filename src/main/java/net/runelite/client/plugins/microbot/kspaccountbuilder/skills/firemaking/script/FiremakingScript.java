@@ -167,6 +167,11 @@ public class FiremakingScript {
         return true;
     }
 
+    public boolean hasRequiredSuppliesInInventory() {
+        int bestLogId = resolveBestLogForCurrentLevel();
+        return hasRequiredSupplies(bestLogId);
+    }
+
     private boolean hasRequiredSupplies(int bestLogId) {
         return Rs2Inventory.hasItem(Needed.TINDERBOX)
                 && Rs2Inventory.hasItem(bestLogId)
