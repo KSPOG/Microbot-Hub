@@ -13,14 +13,18 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 
-
-
-import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import java.awt.event.KeyEvent;
 
 @Slf4j
 public class FiremakingScript {
     private static final int CAMPFIRE_SEARCH_RADIUS = 20;
+    private static final String[] PRODUCT_SELECTION_PROMPTS = {
+            "Product selection",
+            "How many would you like to burn?",
+            "How many would you like to make?"
+    };
 
     private String status = "Idle";
 
@@ -43,6 +47,10 @@ public class FiremakingScript {
         }
 
         int bestLogId = resolveBestLogForCurrentLevel();
+
+        if (handleProductSelectionDialogue()) {
+            return;
+        }
 
         if (handleBurnSelectionWidget(bestLogId)) {
             return;
@@ -67,39 +75,46 @@ public class FiremakingScript {
     }
 
 
-    private boolean handleBurnSelectionWidget(int bestLogId) {
+    private boolean handleProductSelectionDialogue() {
+        if (!isProductSelectionDialogueOpen()) {
+            return false;
+        }
+
+        status = "Confirming product selection";
+
+        // Per request: use keyboard confirmation on selection dialogue.
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+
+        Global.sleepUntil(() -> !isProductSelectionDialogueOpen()
+                || Rs2Player.isAnimating()
+                || Rs2Player.isInteracting(), 2_500);
+        return true;
+    }
+
+    private boolean isProductSelectionDialogueOpen() {
+        for (String prompt : PRODUCT_SELECTION_PROMPTS) {
+            if (Rs2Widget.hasWidget(prompt)) {
+                return true;
+            }
+        }
+
+        return Rs2Widget.isProductionWidgetOpen();
+    }
+
+    private boolean handleBurnSelectionWidget(int ignoredBestLogId) {
         if (!Rs2Widget.hasWidget("What would you like to burn?")) {
             return false;
         }
 
-        status = "Selecting burn quantity and logs";
+        status = "Confirming burn selection";
 
-        // New burn interface requires selecting quantity and then selecting the log option.
-        Rs2Widget.clickWidget("All");
-
-        String logName = getLogName(bestLogId);
-        boolean clickedLog = Rs2Widget.clickWidget(logName);
-        if (!clickedLog) {
-            // Fallback to generic logs label in case naming differs by client/build.
-            Rs2Widget.clickWidget("Logs");
-        }
+        // Per request: use keyboard confirmation instead of clicking selection options.
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
 
         Global.sleepUntil(() -> !Rs2Widget.hasWidget("What would you like to burn?")
                 || Rs2Player.isAnimating()
                 || Rs2Player.isInteracting(), 3_000);
         return true;
-    }
-
-    private String getLogName(int logId) {
-        if (logId == Needed.WILLOW_LOGS) {
-            return "Willow logs";
-        }
-
-        if (logId == Needed.OAK_LOGS) {
-            return "Oak logs";
-        }
-
-        return "Logs";
     }
 
     private boolean hasRequiredSupplies(int bestLogId) {

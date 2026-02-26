@@ -37,6 +37,13 @@ public interface KSPAccountBuilderConfig extends Config {
     )
     String breakSection = "breakHandler";
 
+    @ConfigSection(
+            name = "Debug Skills",
+            description = "Enable or disable specific skills for debugging",
+            position = 4
+    )
+    String debugSkillsSection = "debugSkills";
+
     @ConfigItem(
             keyName = "enableAntiban",
             name = "Enable antiban",
@@ -146,4 +153,38 @@ public interface KSPAccountBuilderConfig extends Config {
     default int maxBreakMinutes() {
         return 60;
     }
+
+    @ConfigItem(
+            keyName = "debugEnableWoodcutting",
+            name = "Enable Woodcutting",
+            description = "Allow woodcutting task in rotation (debug)",
+            position = 0,
+            section = debugSkillsSection
+    )
+    default boolean debugEnableWoodcutting() {
+        return true;
+    }
+
+    @ConfigItem(
+            keyName = "debugEnableCombat",
+            name = "Enable Combat",
+            description = "Allow combat task in rotation (debug)",
+            position = 1,
+            section = debugSkillsSection
+    )
+    default boolean debugEnableCombat() {
+        return true;
+    }
+
+    @ConfigItem(
+            keyName = "debugEnableFiremaking",
+            name = "Enable Firemaking",
+            description = "Allow firemaking task in rotation (debug)",
+            position = 2,
+            section = debugSkillsSection
+    )
+    default boolean debugEnableFiremaking() {
+        return true;
+    }
+
 }
