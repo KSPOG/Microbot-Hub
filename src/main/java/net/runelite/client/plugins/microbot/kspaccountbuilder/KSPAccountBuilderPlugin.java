@@ -25,10 +25,7 @@ import java.awt.AWTException;
 public class KSPAccountBuilderPlugin extends Plugin {
 
 
-    public static final String VERSION = "0.0.53";
-
-
-    public static final String VERSION = "0.0.52";
+    public static final String VERSION = "0.0.54";
 
 
 
