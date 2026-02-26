@@ -37,9 +37,11 @@ public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
     private static final int LOOT_RADIUS = 8;
     private static final int NPC_SEARCH_RADIUS = 20;
+    private static final int REPOSITION_COOLDOWN_MS = 3_500;
     private boolean boneBuryEnabled = true;
     private boolean coinLootingEnabled = true;
     private String status = "Idle";
+    private long lastRepositionAttemptAt = 0L;
 
     public CombatTrainingTarget resolveTrainingTarget() {
         int lowestCombatLevel = getLowestMeleeCombatLevel();
@@ -98,6 +100,11 @@ public class CombatScript {
 
             if (attackTrainingNpc(target)) {
                 status = "Attacking " + target.name().replace('_', ' ').toLowerCase();
+                return;
+            }
+
+            if (moveTowardsTargetNpc(target) || repositionWithinTrainingArea(targetArea)) {
+                status = "Repositioning in " + target.name().replace('_', ' ').toLowerCase();
                 return;
             }
 
@@ -355,6 +362,63 @@ public class CombatScript {
         }
 
         sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), 3_000);
+        return true;
+    }
+
+    private boolean moveTowardsTargetNpc(CombatTrainingTarget target) {
+        if (Rs2Player.isMoving()) {
+            return false;
+        }
+
+        Rs2NpcModel nearbyTarget = Rs2Npc.getNpcs(npc ->
+                        npc != null
+                                && npc.getName() != null
+                                && matchesTargetNpc(npc.getName(), target.getNpcs())
+                                && !npc.isDead()
+                                && npc.getWorldLocation() != null)
+                .min(java.util.Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
+                .orElse(null);
+
+        if (nearbyTarget == null || nearbyTarget.getWorldLocation() == null) {
+            return false;
+        }
+
+        if (nearbyTarget.getDistanceFromPlayer() <= 6) {
+            return false;
+        }
+
+        Rs2Walker.walkTo(nearbyTarget.getWorldLocation());
+        sleepUntil(Rs2Player::isMoving, 2_000);
+        return true;
+    }
+
+    private boolean repositionWithinTrainingArea(WorldArea targetArea) {
+        if (targetArea == null || Rs2Player.isMoving()) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastRepositionAttemptAt < REPOSITION_COOLDOWN_MS) {
+            return false;
+        }
+
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        WorldPoint areaCenter = getAreaCenter(targetArea);
+        if (playerLocation == null || areaCenter == null) {
+            return false;
+        }
+
+        if (!targetArea.contains(playerLocation)) {
+            return false;
+        }
+
+        WorldPoint destination = playerLocation.distanceTo(areaCenter) > 2
+                ? areaCenter
+                : new WorldPoint(targetArea.getX() + 1, targetArea.getY() + 1, targetArea.getPlane());
+
+        lastRepositionAttemptAt = now;
+        Rs2Walker.walkTo(destination);
+        sleepUntil(Rs2Player::isMoving, 2_000);
         return true;
     }
 
