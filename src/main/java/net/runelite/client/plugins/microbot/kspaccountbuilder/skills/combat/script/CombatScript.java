@@ -74,10 +74,12 @@ public class CombatScript {
                 return;
             }
 
+
             if (lootGroundItems()) {
                 status = "Looting drops";
                 return;
             }
+
 
             if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
                 status = "Engaged in combat";
@@ -251,6 +253,38 @@ public class CombatScript {
             }
         }
 
+        return false;
+    }
+
+    private boolean attackTrainingNpc(CombatTrainingTarget target) {
+        WorldArea targetArea = target.getArea();
+        Rs2NpcModel npcTarget = Rs2Npc.getNpcs(npc ->
+                        npc != null
+                                && npc.getName() != null
+                                && matchesTargetNpc(npc.getName(), target.getNpcs())
+                                && !npc.isDead()
+                                && (targetArea == null || targetArea.contains(npc.getWorldLocation())))
+                .min(java.util.Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
+                .orElse(null);
+
+        if (npcTarget == null) {
+            return false;
+        }
+
+        if (!Rs2Npc.interact(npcTarget, "Attack")) {
+            return false;
+        }
+
+        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), 3_000);
+        return true;
+    }
+
+    private boolean matchesTargetNpc(String npcName, String[] targetNames) {
+        for (String targetName : targetNames) {
+            if (npcName.equalsIgnoreCase(targetName)) {
+                return true;
+            }
+        }
         return false;
     }
 
