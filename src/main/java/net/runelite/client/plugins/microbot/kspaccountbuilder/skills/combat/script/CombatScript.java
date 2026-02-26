@@ -101,6 +101,11 @@ public class CombatScript {
                 return;
             }
 
+            if (repositionWithinTrainingArea(targetArea)) {
+                status = "Repositioning in " + target.name().replace('_', ' ').toLowerCase();
+                return;
+            }
+
             status = target.getStatusText() + " | Focus " + getLowestMeleeSkillDisplay()
                     + " (A/S/D: " + getLevel(Skill.ATTACK) + "/" + getLevel(Skill.STRENGTH) + "/" + getLevel(Skill.DEFENCE) + ")";
         } catch (Exception ex) {
@@ -355,6 +360,26 @@ public class CombatScript {
         }
 
         sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), 3_000);
+        return true;
+    }
+
+    private boolean repositionWithinTrainingArea(WorldArea targetArea) {
+        if (targetArea == null || Rs2Player.isMoving()) {
+            return false;
+        }
+
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        WorldPoint areaCenter = getAreaCenter(targetArea);
+        if (playerLocation == null || areaCenter == null) {
+            return false;
+        }
+
+        if (!targetArea.contains(playerLocation) || playerLocation.distanceTo(areaCenter) <= 5) {
+            return false;
+        }
+
+        Rs2Walker.walkTo(areaCenter);
+        sleepUntil(Rs2Player::isMoving, 2_000);
         return true;
     }
 
