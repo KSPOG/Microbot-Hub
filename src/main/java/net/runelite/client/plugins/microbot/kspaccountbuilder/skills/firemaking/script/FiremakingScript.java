@@ -16,6 +16,10 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
 
+
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+
+
 @Slf4j
 public class FiremakingScript {
     private static final int CAMPFIRE_SEARCH_RADIUS = 20;

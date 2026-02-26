@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script;
+package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
@@ -249,10 +249,21 @@ public class WoodcuttingScript {
             return false;
         }
 
-        Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Bank.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
+        Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
         Rs2GrandExchange.collectAllToBank();
         Rs2GrandExchange.closeExchange();
-        return true;
+        if (Rs2Inventory.hasItem(axe.getItemId())) {
+            return true;
+        }
+
+        // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
+        Rs2Bank.closeBank();
+        return hasAxeInBank;
     }
 
     private void sellLowerTierAxesAtGrandExchange(Axe bestPossibleAxe) {
@@ -315,6 +326,11 @@ public class WoodcuttingScript {
 
         Rs2GrandExchange.collectAllToBank();
         Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
+        if (Rs2GrandExchange.getAvailableSlotsCount() == 0) {
+            Rs2GrandExchange.abortAllOffers(true);
+            Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
+        }
+
         return Rs2GrandExchange.getAvailableSlotsCount() > 0;
     }
 

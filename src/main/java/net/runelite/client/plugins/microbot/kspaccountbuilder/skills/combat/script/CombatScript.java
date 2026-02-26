@@ -134,6 +134,7 @@ public class CombatScript {
         return hasWeapon && hasRequiredArmour && hasAmuletOfPower && hasTeamCape && hasFood;
 
 
+
     private boolean withdrawNeededCombatItems() {
         status = "Withdrawing combat setup";
 
@@ -169,12 +170,6 @@ public class CombatScript {
 
         withdrawAndEquipIfAvailable("Amulet of power");
 
-
-
-        withdrawAndEquipIfAvailable("Amulet of power");
-
-
-
         withdrawTeamCapeIfAvailable();
         Rs2Bank.withdrawX("Trout", Gear.MIN_TROUT_REQUIRED, true);
 
@@ -188,6 +183,45 @@ public class CombatScript {
         boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
 
         if (!hasWeapon || !hasRequiredArmour || !hasAmuletOfPower || !hasFood) {
+
+            status = "Missing combat withdrawals";
+            return false;
+        }
+
+        status = "Combat supplies ready";
+        return true;
+    }
+
+    private void withdrawAndEquipIfAvailable(String itemName) {
+        if (itemName == null || itemName.isBlank()) {
+            return;
+        }
+
+        if (Rs2Equipment.isWearing(itemName) || Rs2Inventory.hasItem(itemName)) {
+            return;
+        }
+
+        if (!Rs2Bank.hasItem(itemName)) {
+            return;
+        }
+
+        Rs2Bank.withdrawAndEquip(itemName);
+    }
+
+    private void withdrawTeamCapeIfAvailable() {
+        for (String matcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (Rs2Equipment.isWearing(matcher) || Rs2Inventory.hasItem(matcher)) {
+                return;
+            }
+
+            if (Rs2Bank.hasItem(matcher)) {
+                Rs2Bank.withdrawAndEquip(matcher);
+                return;
+            }
+        }
+
+        Rs2Bank.withdrawAndEquip("Team-1 cape");
+
 
             status = "Missing combat withdrawals";
             return false;
