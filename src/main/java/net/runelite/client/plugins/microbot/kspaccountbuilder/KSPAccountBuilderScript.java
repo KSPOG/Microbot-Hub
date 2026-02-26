@@ -4,9 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script.WoodcuttingScript;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.firemaking.script.FiremakingScript;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.WoodcuttingScript;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.PlayStyle;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.ui.ClientUI;
@@ -28,6 +30,7 @@ public class KSPAccountBuilderScript extends Script {
 
     private final WoodcuttingScript woodcuttingScript = new WoodcuttingScript();
     private final CombatScript combatScript = new CombatScript();
+    private final FiremakingScript firemakingScript = new FiremakingScript();
 
     private volatile boolean startupBankingComplete;
     private volatile BuilderTask activeTask = BuilderTask.WOODCUTTING;
@@ -55,11 +58,13 @@ public class KSPAccountBuilderScript extends Script {
         nextTaskSwitchAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, config.taskSwitchMinutes())));
 
         woodcuttingScript.initialize();
+        firemakingScript.initialize();
         initializeBreakScheduling(config);
 
         Rs2Antiban.resetAntibanSettings();
         if (config.enableAntiban()) {
             Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
+            Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
             Rs2AntibanSettings.actionCooldownChance = Math.max(0.0, Math.min(1.0, config.actionCooldownChance()));
         }
 
@@ -102,6 +107,8 @@ public class KSPAccountBuilderScript extends Script {
                 executeActiveTask();
 
                 if (config.enableAntiban()) {
+                    // Defensive re-apply in case another script/util reset antiban runtime state.
+                    Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
                     Rs2Antiban.actionCooldown();
                     Rs2Antiban.takeMicroBreakByChance();
                 }
@@ -117,20 +124,29 @@ public class KSPAccountBuilderScript extends Script {
 
 
     private BuilderTask getRandomStartingTask() {
-        return ThreadLocalRandom.current().nextBoolean() ? BuilderTask.WOODCUTTING : BuilderTask.COMBAT;
+        BuilderTask[] tasks = BuilderTask.values();
+        return tasks[ThreadLocalRandom.current().nextInt(tasks.length)];
     }
 
     private void executeActiveTask() {
-        if (activeTask == BuilderTask.COMBAT) {
-            currentTask = "Combat";
-            combatScript.execute();
-            status = combatScript.getStatus();
-            return;
+        switch (activeTask) {
+            case COMBAT:
+                currentTask = "Combat";
+                combatScript.execute();
+                status = combatScript.getStatus();
+                break;
+            case FIREMAKING:
+                currentTask = "Firemaking";
+                firemakingScript.execute();
+                status = firemakingScript.getStatus();
+                break;
+            case WOODCUTTING:
+            default:
+                currentTask = "Woodcutting";
+                woodcuttingScript.execute();
+                status = woodcuttingScript.getStatus();
+                break;
         }
-
-        currentTask = "Woodcutting";
-        woodcuttingScript.execute();
-        status = woodcuttingScript.getStatus();
     }
 
     private void rotateTaskIfNeeded(KSPAccountBuilderConfig config) {
@@ -138,7 +154,9 @@ public class KSPAccountBuilderScript extends Script {
             return;
         }
 
-        activeTask = (activeTask == BuilderTask.WOODCUTTING) ? BuilderTask.COMBAT : BuilderTask.WOODCUTTING;
+        BuilderTask[] tasks = BuilderTask.values();
+        int nextIndex = (activeTask.ordinal() + 1) % tasks.length;
+        activeTask = tasks[nextIndex];
         nextTaskSwitchAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, config.taskSwitchMinutes())));
     }
 
@@ -280,12 +298,14 @@ public class KSPAccountBuilderScript extends Script {
         nextBreakAt = null;
         restoreTitle();
         woodcuttingScript.shutdown();
+        firemakingScript.shutdown();
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
     }
 
     private enum BuilderTask {
         WOODCUTTING,
-        COMBAT
+        COMBAT,
+        FIREMAKING
     }
 }

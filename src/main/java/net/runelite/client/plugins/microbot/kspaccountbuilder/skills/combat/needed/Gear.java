@@ -11,6 +11,8 @@ public final class Gear {
 
     public static final int MIN_TROUT_REQUIRED = 5;
 
+    public static final int AMULET_OF_POWER = ItemID.AMULET_OF_POWER;
+
     public static final int[] FOOD_REQUIREMENTS = {
             ItemID.TROUT
     };
