@@ -17,6 +17,8 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
+import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +69,16 @@ public class CombatScript {
             if (targetArea != null && playerLocation != null && !targetArea.contains(playerLocation)) {
                 status = "Walking to " + target.name().replace('_', ' ').toLowerCase();
                 Rs2Walker.walkTo(getAreaCenter(targetArea));
+                return;
+            }
+
+            if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
+                status = "Engaged in combat";
+                return;
+            }
+
+            if (attackTrainingNpc(target)) {
+                status = "Attacking " + target.name().replace('_', ' ').toLowerCase();
                 return;
             }
 
@@ -220,6 +232,38 @@ public class CombatScript {
         return target == CombatTrainingTarget.COWS;
     }
 
+
+    private boolean attackTrainingNpc(CombatTrainingTarget target) {
+        WorldArea targetArea = target.getArea();
+        Rs2NpcModel npcTarget = Rs2Npc.getNpcs(npc ->
+                        npc != null
+                                && npc.getName() != null
+                                && matchesTargetNpc(npc.getName(), target.getNpcs())
+                                && !npc.isDead()
+                                && (targetArea == null || targetArea.contains(npc.getWorldLocation())))
+                .min(java.util.Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
+                .orElse(null);
+
+        if (npcTarget == null) {
+            return false;
+        }
+
+        if (!Rs2Npc.interact(npcTarget, "Attack")) {
+            return false;
+        }
+
+        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), 3_000);
+        return true;
+    }
+
+    private boolean matchesTargetNpc(String npcName, String[] targetNames) {
+        for (String targetName : targetNames) {
+            if (npcName.equalsIgnoreCase(targetName)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private WorldPoint getAreaCenter(WorldArea area) {
         int centerX = area.getX() + (area.getWidth() / 2);
