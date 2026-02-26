@@ -11,7 +11,9 @@ import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools.AxeWCLevels;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools.EquipLevels;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.buy.Buy;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
+import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.sell.Sell;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.Global;
@@ -28,6 +30,8 @@ public class WoodcuttingScript {
     private static final int MIN_SELL_PRICE_GP = 25;
     private static final double BUY_PRICE_MARKUP_MULTIPLIER = 1.20;
     private static final double SELL_PRICE_DISCOUNT_MULTIPLIER = 0.95;
+    private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
+    private static final int BUY_OFFER_RETRY_COUNT = 3;
 
     private String status = "Idle";
 
@@ -205,15 +209,6 @@ public class WoodcuttingScript {
     }
 
 
-    private boolean buyAxeFromGrandExchange(Axe bestPossibleAxe) {
-        sellLowerTierAxesAtGrandExchange(bestPossibleAxe);
-
-        int buyPrice = getBuyOfferPrice(bestPossibleAxe);
-        boolean bought = Buy.buyItemToBank(bestPossibleAxe.getName(), 1, buyPrice);
-        if (!bought) {
-            return false;
-        }
-
     private boolean buyAxeFromGrandExchange(Axe axe) {
         if (!Rs2GrandExchange.walkToGrandExchange()) {
             return false;
@@ -270,9 +265,20 @@ public class WoodcuttingScript {
             return false;
         }
 
-        boolean hasAxeInBank = Rs2Bank.hasItem(bestPossibleAxe.getItemId());
+        boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
         Rs2Bank.closeBank();
         return hasAxeInBank;
+    }
+
+
+    private boolean ensureExchangeSlotAvailable() {
+        if (Rs2GrandExchange.getAvailableSlotsCount() > 0) {
+            return true;
+        }
+
+        Rs2GrandExchange.collectAllToBank();
+        Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
+        return Rs2GrandExchange.getAvailableSlotsCount() > 0;
     }
 
 
