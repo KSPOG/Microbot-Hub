@@ -8,6 +8,7 @@ import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.firemaking.
 import net.runelite.client.plugins.microbot.util.Global;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.buy.Buy;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -57,7 +58,7 @@ public class FiremakingScript {
         }
 
         if (!hasRequiredSupplies(bestLogId)) {
-            withdrawRequiredSuppliesFromGrandExchangeBank(bestLogId);
+            restockSupplies(bestLogId);
             return;
         }
 
@@ -76,57 +77,7 @@ public class FiremakingScript {
 
 
     private boolean handleProductSelectionDialogue() {
-
         if (!isProductSelectionDialogueOpen()) {
-
-
-        if (!isProductSelectionDialogueOpen()) {
-
-
-
-        if (!Rs2Widget.hasWidget("Product selection") && !Rs2Widget.hasWidget("How many would you like to burn?")) {
-
-
-            return false;
-        }
-
-        status = "Confirming product selection";
-
-
-        // Handle both old/new production UIs: try clickable options first, then keyboard fallback.
-        Rs2Widget.clickWidget("All");
-        Rs2Widget.clickWidget("Continue");
-        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
-
-        Global.sleepUntil(() -> !isProductSelectionDialogueOpen()
-                || Rs2Player.isAnimating()
-                || Rs2Player.isInteracting(), 2_500);
-        return true;
-    }
-
-    private boolean isProductSelectionDialogueOpen() {
-        for (String prompt : PRODUCT_SELECTION_PROMPTS) {
-            if (Rs2Widget.hasWidget(prompt)) {
-                return true;
-            }
-        }
-
-        return Rs2Widget.isProductionWidgetOpen();
-    }
-
-
-
-        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
-        Global.sleepUntil(() -> !Rs2Widget.hasWidget("Product selection")
-                && !Rs2Widget.hasWidget("How many would you like to burn?"), 2_000);
-        return true;
-    }
-
-
-
-    private boolean handleBurnSelectionWidget(int bestLogId) {
-        if (!Rs2Widget.hasWidget("What would you like to burn?")) {
-
             return false;
         }
 
@@ -167,26 +118,38 @@ public class FiremakingScript {
         return true;
     }
 
-    public boolean hasRequiredSuppliesInInventory() {
-        int bestLogId = resolveBestLogForCurrentLevel();
-        return hasRequiredSupplies(bestLogId);
-    }
-
     private boolean hasRequiredSupplies(int bestLogId) {
         return Rs2Inventory.hasItem(Needed.TINDERBOX)
                 && Rs2Inventory.hasItem(bestLogId)
                 && Rs2Inventory.count(bestLogId) > 0;
     }
 
-    private void withdrawRequiredSuppliesFromGrandExchangeBank(int bestLogId) {
+    private void restockSupplies(int bestLogId) {
+        if (!withdrawRequiredSuppliesFromGrandExchangeBank(bestLogId)) {
+            status = "Buying firemaking supplies";
+
+            if (!Rs2Inventory.hasItem(Needed.TINDERBOX)) {
+                Buy.buyItemToBank("Tinderbox", Needed.TINDERBOX_COUNT);
+            }
+
+            String logName = getLogName(bestLogId);
+            if (!logName.isEmpty()) {
+                Buy.buyItemToBank(logName, Needed.LOG_COUNT);
+            }
+
+            withdrawRequiredSuppliesFromGrandExchangeBank(bestLogId);
+        }
+    }
+
+    private boolean withdrawRequiredSuppliesFromGrandExchangeBank(int bestLogId) {
         status = "Walking to Grand Exchange bank";
         if (!Rs2GrandExchange.walkToGrandExchange()) {
-            return;
+            return false;
         }
 
         status = "Opening Grand Exchange bank";
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
-            return;
+            return false;
         }
 
         status = "Withdrawing tinderbox and best logs";
@@ -199,16 +162,33 @@ public class FiremakingScript {
         Rs2Bank.withdrawX(bestLogId, Needed.LOG_COUNT);
         Global.sleepUntil(() -> Rs2Inventory.hasItem(bestLogId), 3_000);
 
-        if (!Rs2Inventory.hasItem(Needed.TINDERBOX) || !Rs2Inventory.hasItem(bestLogId)) {
+        boolean hasSupplies = Rs2Inventory.hasItem(Needed.TINDERBOX) && Rs2Inventory.hasItem(bestLogId);
+        if (!hasSupplies) {
             status = "Missing required firemaking supplies in bank";
             log.debug("Missing required items. Tinderbox present: {}, log {} present: {}",
                     Rs2Inventory.hasItem(Needed.TINDERBOX),
                     bestLogId,
                     Rs2Inventory.hasItem(bestLogId));
-            return;
         }
 
         Rs2Bank.closeBank();
+        return hasSupplies;
+    }
+
+    private String getLogName(int logId) {
+        if (logId == Needed.WILLOW_LOGS) {
+            return "Willow logs";
+        }
+
+        if (logId == Needed.OAK_LOGS) {
+            return "Oak logs";
+        }
+
+        if (logId == Needed.LOGS) {
+            return "Logs";
+        }
+
+        return "";
     }
 
     private boolean tendActiveForestersCampfire(int bestLogId) {
