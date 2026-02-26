@@ -11,6 +11,8 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.areas.MobArea;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.loot.Loot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.needed.Gear;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.buy.Buy;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.sell.Sell;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
@@ -27,7 +29,6 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -40,6 +41,18 @@ public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
     private static final int LOOT_RADIUS = 8;
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
+
+    private static final long REPOSITION_COOLDOWN_MS = 3_500L;
+
+    private boolean boneBuryEnabled = true;
+    private boolean coinLootingEnabled = true;
+    private String status = "Idle";
+    private boolean wasInCombatLastTick = false;
+    private WorldPoint lastKillLocation;
+    private long lastKillAt = 0L;
+    private long lastRepositionAttemptAt = 0L;
+
+
 
     private static final long REPOSITION_COOLDOWN_MS = 3_500L;
 
@@ -64,6 +77,7 @@ public class CombatScript {
     private WorldPoint lastKillLocation;
     private long lastKillAt = 0L;
     private long lastRepositionAttemptAt = 0L;
+
 
 
     public void configureLooting(boolean enableBoneBury, boolean enableCoinLooting) {
@@ -91,6 +105,9 @@ public class CombatScript {
                 return;
             }
 
+            updateKillWindow(target);
+
+            if (Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
 
             updateKillWindow(target);
 
@@ -98,9 +115,13 @@ public class CombatScript {
 
             if (Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving()) {
 
+
                 status = "Fighting in " + target.getDisplayName();
                 return;
             }
+
+
+            if (lootDropsInArea(target)) {
 
 
             if (lootDropsInArea(target)) {
@@ -116,11 +137,17 @@ public class CombatScript {
                 return;
             }
 
+            if (moveTowardsTargetNpc(target)) {
+                status = "Moving to target in " + target.getDisplayName();
+                return;
+            }
+
 
             if (moveTowardsTargetNpc(target)) {
                 status = "Moving to target in " + target.getDisplayName();
                 return;
             }
+
 
             if (repositionWithinTrainingArea(target.getArea())) {
                 status = "Repositioning in " + target.getDisplayName();
@@ -144,14 +171,76 @@ public class CombatScript {
         boolean hasTeamCape = hasAnyTeamCapeInInventoryOrEquipped();
         boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
         return hasWeapon && hasArmour && hasAmulet && hasTeamCape && hasFood;
+
         boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
         return hasWeapon && hasArmour && hasFood;
+
     }
 
     private boolean ensureCombatLoadout() {
         if (hasCombatSetupReady()) {
             return true;
         }
+
+
+        // If we already carry needed items in inventory, don't force banking.
+        if (hasInventoryLoadoutWithoutFood() && countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED) {
+            return true;
+        }
+
+        if (!refreshBankCache()) {
+            status = "Unable to read bank";
+            return false;
+        }
+
+        List<String> purchases = getMissingPurchaseItems();
+        int firemakingLevel = getLevel(Skill.FIREMAKING);
+
+        if (Sell.hasSellableOverflowInBank(firemakingLevel)
+                && !Sell.sellConfiguredBankOverflow(firemakingLevel)) {
+            return false;
+        }
+
+        for (String item : purchases) {
+            int quantity = "Trout".equalsIgnoreCase(item) ? GE_TROUT_RESTOCK_AMOUNT : 1;
+            if (!Buy.buyItemToBank(item, quantity)) {
+                log.warn("Failed buying item: {}", item);
+            }
+        }
+
+        if (!withdrawCombatSetup()) {
+            status = "Could not withdraw combat setup";
+            return false;
+        }
+
+        return hasCombatSetupReady();
+    }
+
+    private List<String> getMissingPurchaseItems() {
+        List<String> missing = new ArrayList<>();
+
+        if (countBankItem("Trout") < Gear.MIN_TROUT_REQUIRED && !Rs2Inventory.hasItem("Trout", true)) {
+            missing.add("Trout");
+        }
+
+        for (String item : getRequiredUpgradeItems()) {
+            boolean owned = "Team-1 cape".equalsIgnoreCase(item)
+                    ? hasAnyTeamCapeAnywhere()
+                    : hasItemAnywhere(item);
+            if (!owned) {
+                missing.add(item);
+            }
+        }
+
+        return missing;
+    }
+
+    private boolean lootDropsInArea(CombatTrainingTarget target) {
+        if (!isPlayerInTargetArea(target.getArea()) || !canLootFromRecentKill(target)) {
+            return false;
+        }
+
+
 
         // If we already carry needed items in inventory, don't force banking.
         if (hasInventoryLoadoutWithoutFood() && countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED) {
@@ -207,6 +296,7 @@ public class CombatScript {
 
             return false;
         }
+
 
         if (boneBuryEnabled && buryBonesInInventory()) {
             return true;
@@ -306,7 +396,6 @@ public class CombatScript {
         return Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving();
     }
 
-
     private boolean moveTowardsTargetNpc(CombatTrainingTarget target) {
         if (Rs2Player.isMoving()) {
             return false;
@@ -364,6 +453,12 @@ public class CombatScript {
         Rs2Bank.depositAll();
         Rs2Bank.depositEquipment();
 
+
+        withdrawAndEquip(getBestWeaponForAttack());
+        for (String piece : getBestArmourForDefence()) {
+            withdrawAndEquip(piece);
+
+
         withdrawAndEquip(getBestWeaponForAttack());
         for (String piece : getBestArmourForDefence()) {
             withdrawAndEquip(piece);
@@ -408,7 +503,14 @@ public class CombatScript {
     private boolean withdrawCombatSetup() {
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
             return false;
+
         }
+        withdrawAndEquip("Amulet of power");
+        withdrawAnyTeamCape();
+
+
+        Rs2Bank.withdrawX("Trout", Gear.MIN_TROUT_REQUIRED, true);
+
 
         Rs2Bank.depositAll();
         Rs2Bank.depositEquipment();
@@ -438,6 +540,22 @@ public class CombatScript {
         Rs2Bank.withdrawAndEquip(itemName);
     }
 
+
+
+    private boolean hasAnyTeamCapeAnywhere() {
+        if (hasAnyTeamCapeInInventoryOrEquipped()) {
+            return true;
+        }
+
+        return Rs2Bank.bankItems().stream()
+                .anyMatch(item -> item.getName() != null && isTeamCapeName(item.getName()));
+    }
+
+    private boolean hasAnyTeamCapeInInventoryOrEquipped() {
+        for (String matcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (Rs2Equipment.isWearing(matcher) || Rs2Inventory.hasItem(matcher, true)) {
+                return true;
+
     private boolean sellConfiguredBankOverflow() {
         if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
             status = "Walking to GE";
@@ -458,6 +576,7 @@ public class CombatScript {
 
             if (!ensureExchangeSlotAvailable()) {
                 continue;
+
             }
 
             GrandExchangeRequest request = GrandExchangeRequest.builder()
@@ -476,6 +595,25 @@ public class CombatScript {
         Rs2GrandExchange.closeExchange();
         return true;
     }
+
+
+    private void withdrawAnyTeamCape() {
+        if (hasAnyTeamCapeInInventoryOrEquipped()) {
+            return;
+        }
+
+        for (String matcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (Rs2Bank.hasItem(matcher)) {
+                Rs2Bank.withdrawAndEquip(matcher);
+                sleepUntil(this::hasAnyTeamCapeInInventoryOrEquipped, 2_000);
+                return;
+            }
+        }
+
+        if (Rs2Bank.hasItem("Team-1 cape")) {
+            Rs2Bank.withdrawAndEquip("Team-1 cape");
+            sleepUntil(this::hasAnyTeamCapeInInventoryOrEquipped, 2_000);
+        }
 
     private boolean buyFromGrandExchange(String itemName, int quantity) {
         if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
@@ -508,12 +646,20 @@ public class CombatScript {
         Rs2GrandExchange.collectAllToBank();
         Rs2GrandExchange.closeExchange();
         return hasItemAnywhere(itemName);
+
     }
 
     private boolean refreshBankCache() {
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
             return false;
         }
+
+
+        sleepUntil(() -> !Rs2Bank.bankItems().isEmpty(), 5_000);
+        Rs2Bank.closeBank();
+        sleepUntil(() -> !Rs2Bank.isOpen(), 3_000);
+        return true;
+
 
         sleepUntil(() -> !Rs2Bank.bankItems().isEmpty(), 5_000);
         Rs2Bank.closeBank();
@@ -529,6 +675,7 @@ public class CombatScript {
         Rs2GrandExchange.collectAllToBank();
         sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
         return Rs2GrandExchange.getAvailableSlotsCount() > 0;
+
     }
 
     private void setBalancedMeleeStyle() {
@@ -541,6 +688,7 @@ public class CombatScript {
             targetSkill = Skill.STRENGTH;
         } else if (defence < attack && defence <= strength) {
             targetSkill = Skill.DEFENCE;
+
         }
 
         int currentStyle = Microbot.getVarbitPlayerValue(VarPlayer.ATTACK_STYLE);
@@ -555,6 +703,23 @@ public class CombatScript {
             Rs2Tab.switchToCombatOptionsTab();
             sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.COMBAT, 2_000);
         }
+
+
+        }
+
+        int currentStyle = Microbot.getVarbitPlayerValue(VarPlayer.ATTACK_STYLE);
+        WidgetInfo desired = getStyleWidgetForSkill(targetSkill);
+        int desiredStyle = styleIndexForSkill(targetSkill);
+
+        if (currentStyle == desiredStyle) {
+            return;
+        }
+
+        if (Rs2Tab.getCurrentTab() != InterfaceTab.COMBAT) {
+            Rs2Tab.switchToCombatOptionsTab();
+            sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.COMBAT, 2_000);
+        }
+
 
         Rs2Combat.setAttackStyle(desired);
     }
@@ -580,6 +745,19 @@ public class CombatScript {
     }
 
     private CombatTrainingTarget resolveTrainingTarget() {
+
+        int lowestMelee = Math.min(getLevel(Skill.ATTACK), Math.min(getLevel(Skill.STRENGTH), getLevel(Skill.DEFENCE)));
+
+        if (lowestMelee < 5) {
+            return CombatTrainingTarget.GOBLINS;
+        }
+
+        if (lowestMelee < 10) {
+            return CombatTrainingTarget.COWS;
+        }
+
+        if (lowestMelee >= 20) {
+
         int attack = getLevel(Skill.ATTACK);
         int strength = getLevel(Skill.STRENGTH);
         int defence = getLevel(Skill.DEFENCE);
@@ -593,6 +771,7 @@ public class CombatScript {
         }
 
         if (attack >= 20 && strength >= 20 && defence >= 20) {
+
             return CombatTrainingTarget.AL_KHARID_GUARDS;
         }
 
@@ -603,6 +782,10 @@ public class CombatScript {
         List<String> items = new ArrayList<>();
         items.add(getBestWeaponForAttack());
         items.addAll(getBestArmourForDefence());
+
+        items.add("Amulet of power");
+        items.add("Team-1 cape");
+
         return items;
     }
 
@@ -628,6 +811,69 @@ public class CombatScript {
     private boolean isPlayerInTargetArea(WorldArea area) {
         WorldPoint location = Rs2Player.getWorldLocation();
         return area != null && location != null && area.contains(location);
+
+    }
+
+    private WorldPoint getAreaCenter(WorldArea area) {
+        return new WorldPoint(area.getX() + (area.getWidth() / 2), area.getY() + (area.getHeight() / 2), area.getPlane());
+    }
+
+    private boolean matchesAnyTarget(String npcName, String[] targetNames) {
+        String normalized = npcName.trim().toLowerCase();
+        for (String target : targetNames) {
+            String needle = target.trim().toLowerCase();
+            if (normalized.equals(needle) || normalized.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isTeamCapeName(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase();
+        return lower.contains("team-") || lower.contains("team cape");
+    }
+
+    private boolean hasInventoryLoadoutWithoutFood() {
+        String weapon = getBestWeaponForAttack();
+        boolean hasWeapon = hasItemInInventoryOrEquipped(weapon);
+        boolean hasArmour = getBestArmourForDefence().stream().allMatch(this::hasItemInInventoryOrEquipped);
+        boolean hasAmulet = hasItemInInventoryOrEquipped("Amulet of power");
+        boolean hasTeamCape = hasAnyTeamCapeInInventoryOrEquipped();
+        return hasWeapon && hasArmour && hasAmulet && hasTeamCape;
+    }
+
+    private boolean hasItemInInventoryOrEquipped(String item) {
+        return Rs2Inventory.hasItem(item, true) || Rs2Equipment.isWearing(item);
+    }
+
+    private boolean hasItemAnywhere(String item) {
+        return hasItemInInventoryOrEquipped(item) || countBankItem(item) > 0;
+    }
+
+    private int countInventoryItem(String itemName) {
+        return (int) Rs2Inventory.items()
+                .filter(i -> i != null && i.getName() != null && i.getName().equalsIgnoreCase(itemName))
+                .mapToInt(Rs2ItemModel::getQuantity)
+                .sum();
+    }
+
+    private int countBankItem(String itemName) {
+        return Rs2Bank.bankItems().stream()
+                .filter(i -> i.getName() != null && i.getName().equalsIgnoreCase(itemName))
+                .mapToInt(Rs2ItemModel::getQuantity)
+                .sum();
+    }
+
+    private int getLevel(Skill skill) {
+        if (Microbot.getClient() == null) {
+            return 1;
+        }
+        return Microbot.getClient().getRealSkillLevel(skill);
+
     }
 
     private WorldPoint getAreaCenter(WorldArea area) {
@@ -948,6 +1194,7 @@ public class CombatScript {
             return 1;
         }
         return Microbot.getClient().getRealSkillLevel(skill);
+
     }
 
     @Getter
