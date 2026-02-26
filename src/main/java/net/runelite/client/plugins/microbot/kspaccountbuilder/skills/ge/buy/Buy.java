@@ -121,7 +121,7 @@ public final class Buy {
         }
 
         sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || !Rs2GrandExchange.isOpen(), BUY_WAIT_TIMEOUT_MS);
-        Rs2GrandExchange.collectAll();
+        Rs2GrandExchange.collectAll(false);
         Rs2GrandExchange.closeExchange();
         return true;
     }
