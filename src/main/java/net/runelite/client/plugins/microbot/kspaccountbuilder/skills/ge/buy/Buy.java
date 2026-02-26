@@ -121,7 +121,7 @@ public final class Buy {
         }
 
         sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || !Rs2GrandExchange.isOpen(), BUY_WAIT_TIMEOUT_MS);
-        Rs2GrandExchange.collectAll(false);
+        collectOffersToInventory();
         Rs2GrandExchange.closeExchange();
         return true;
     }
@@ -241,6 +241,15 @@ public final class Buy {
         }
 
         Rs2GrandExchange.collectAllToBank();
+        sleepUntil(() -> !Rs2GrandExchange.hasBoughtOffer() && !Rs2GrandExchange.hasSoldOffer(), 5000);
+    }
+
+    private static void collectOffersToInventory() {
+        if (!Rs2GrandExchange.hasBoughtOffer() && !Rs2GrandExchange.hasSoldOffer()) {
+            return;
+        }
+
+        Rs2GrandExchange.collectAll(false);
         sleepUntil(() -> !Rs2GrandExchange.hasBoughtOffer() && !Rs2GrandExchange.hasSoldOffer(), 5000);
     }
 

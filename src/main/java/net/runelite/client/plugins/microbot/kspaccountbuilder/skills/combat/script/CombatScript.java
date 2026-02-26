@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script;
 
 import lombok.Getter;
+import net.runelite.api.Actor;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
@@ -41,19 +42,11 @@ public class CombatScript {
     private static final int LOOT_RADIUS = 8;
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
     private static final long REPOSITION_COOLDOWN_MS = 3_500L;
+    private static final int BURY_WAIT_TIMEOUT_MS = 1_200;
+    private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 1_800;
 
-    private boolean boneBuryEnabled = true;
-    private boolean coinLootingEnabled = true;
     private String status = "Idle";
-    private boolean wasInCombatLastTick = false;
-    private WorldPoint lastKillLocation;
-    private long lastKillAt = 0L;
     private long lastRepositionAttemptAt = 0L;
-
-    public void configureLooting(boolean enableBoneBury, boolean enableCoinLooting) {
-        this.boneBuryEnabled = enableBoneBury;
-        this.coinLootingEnabled = enableCoinLooting;
-    }
 
     public void execute() {
         try {
@@ -75,10 +68,14 @@ public class CombatScript {
                 return;
             }
 
-            updateKillWindow(target);
 
-            if (Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
+            if (Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isInCombat() || Rs2Combat.inCombat()) {
                 status = "Fighting in " + target.getDisplayName();
+                return;
+            }
+
+            if (Rs2Player.isMoving()) {
+                status = "Moving in " + target.getDisplayName();
                 return;
             }
 
@@ -177,11 +174,15 @@ public class CombatScript {
     }
 
     private boolean lootDropsInArea(CombatTrainingTarget target) {
-        if (!isPlayerInTargetArea(target.getArea()) || !canLootFromRecentKill(target)) {
+        if (!isPlayerInTargetArea(target.getArea()) || Rs2Player.isInCombat() || Rs2Combat.inCombat()) {
             return false;
         }
 
-        if (boneBuryEnabled && buryBonesInInventory()) {
+        if (!hasAnyGroundItemsNearby()) {
+            return buryBonesInInventory();
+        }
+
+        if (buryBonesInInventory()) {
             return true;
         }
 
@@ -189,12 +190,12 @@ public class CombatScript {
             return false;
         }
 
-        if (boneBuryEnabled && lootByName("bones")) {
+        if (lootByName("bones")) {
             return true;
         }
 
-        if (coinLootingEnabled && Rs2GroundItem.lootCoins(new LootingParameters(LOOT_RADIUS, 1, 1, 0, false, true, "coins"))) {
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+        if (Loot.lootCoins(LOOT_RADIUS)) {
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
             return true;
         }
 
@@ -212,37 +213,19 @@ public class CombatScript {
     }
 
 
-    private void updateKillWindow(CombatTrainingTarget target) {
-        boolean nowInCombat = Rs2Player.isInteracting() || Rs2Player.isAnimating();
-        if (wasInCombatLastTick && !nowInCombat && isPlayerInTargetArea(target.getArea())) {
-            lastKillLocation = Rs2Player.getWorldLocation();
-            lastKillAt = System.currentTimeMillis();
-        }
-        wasInCombatLastTick = nowInCombat;
-    }
 
-    private boolean canLootFromRecentKill(CombatTrainingTarget target) {
-        if (lastKillLocation == null) {
-            return false;
-        }
-
-        if (System.currentTimeMillis() - lastKillAt > 25_000) {
-            return false;
-        }
-
-        WorldPoint playerLocation = Rs2Player.getWorldLocation();
-        return playerLocation != null
-                && target.getArea().contains(lastKillLocation)
-                && playerLocation.distanceTo(lastKillLocation) <= LOOT_RADIUS + 2;
+    private boolean hasAnyGroundItemsNearby() {
+        return Rs2GroundItem.getAll(LOOT_RADIUS).length > 0;
     }
 
     private boolean buryBonesInInventory() {
+
         List<Rs2ItemModel> bones = Rs2Inventory.getBones();
         if (bones == null || bones.isEmpty()) {
             return false;
         }
         if (Rs2Inventory.interact(bones.get(0), "bury")) {
-            sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.getBones().size() < bones.size(), 2_000);
+            sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.getBones().size() < bones.size(), BURY_WAIT_TIMEOUT_MS);
             return true;
         }
         return false;
@@ -251,7 +234,7 @@ public class CombatScript {
     private boolean lootByName(String itemName) {
         LootingParameters params = new LootingParameters(LOOT_RADIUS, 1, 1, 0, false, true, itemName);
         if (Rs2GroundItem.lootItemsBasedOnNames(params)) {
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
             return true;
         }
         return false;
@@ -263,7 +246,8 @@ public class CombatScript {
                         && matchesAnyTarget(n.getName(), target.getNpcs())
                         && !n.isDead()
                         && n.getWorldLocation() != null
-                        && target.getArea().contains(n.getWorldLocation()))
+                        && target.getArea().contains(n.getWorldLocation())
+                        && isNpcAvailableForAttack(n))
                 .min(Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
                 .orElse(null);
 
@@ -289,7 +273,8 @@ public class CombatScript {
                         && matchesAnyTarget(n.getName(), target.getNpcs())
                         && !n.isDead()
                         && n.getWorldLocation() != null
-                        && target.getArea().contains(n.getWorldLocation()))
+                        && target.getArea().contains(n.getWorldLocation())
+                        && isNpcAvailableForAttack(n))
                 .min(Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
                 .orElse(null);
 
@@ -304,6 +289,11 @@ public class CombatScript {
         Rs2Walker.walkTo(nearest.getWorldLocation());
         sleepUntil(Rs2Player::isMoving, 2_000);
         return Rs2Player.isMoving();
+    }
+
+    private boolean isNpcAvailableForAttack(Rs2NpcModel npc) {
+        Actor interacting = npc.getInteracting();
+        return interacting == null || interacting == Microbot.getClient().getLocalPlayer();
     }
 
     private boolean repositionWithinTrainingArea(WorldArea area) {
