@@ -41,6 +41,10 @@ public class CombatScript {
     private static final int LOOT_RADIUS = 8;
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
 
+    private static final long REPOSITION_COOLDOWN_MS = 3_500L;
+
+
+
     private static final String[] SELLABLE_BANK_ITEMS_KEEP_ONE = {
             "Goblin mail",
             "Chef's hat",
@@ -55,6 +59,12 @@ public class CombatScript {
     private boolean boneBuryEnabled = true;
     private boolean coinLootingEnabled = true;
     private String status = "Idle";
+
+    private boolean wasInCombatLastTick = false;
+    private WorldPoint lastKillLocation;
+    private long lastKillAt = 0L;
+    private long lastRepositionAttemptAt = 0L;
+
 
     public void configureLooting(boolean enableBoneBury, boolean enableCoinLooting) {
         this.boneBuryEnabled = enableBoneBury;
@@ -81,12 +91,22 @@ public class CombatScript {
                 return;
             }
 
+
+            updateKillWindow(target);
+
+            if (Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
+
             if (Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving()) {
+
                 status = "Fighting in " + target.getDisplayName();
                 return;
             }
 
+
+            if (lootDropsInArea(target)) {
+
             if (lootDropsInArea()) {
+
                 status = "Looting drops";
                 return;
             }
@@ -95,6 +115,18 @@ public class CombatScript {
                 status = "Attacking " + target.getDisplayName();
                 return;
             }
+
+
+            if (moveTowardsTargetNpc(target)) {
+                status = "Moving to target in " + target.getDisplayName();
+                return;
+            }
+
+            if (repositionWithinTrainingArea(target.getArea())) {
+                status = "Repositioning in " + target.getDisplayName();
+                return;
+            }
+
 
             status = "Waiting for targets in " + target.getDisplayName();
         } catch (Exception ex) {
@@ -107,6 +139,11 @@ public class CombatScript {
         String weapon = getBestWeaponForAttack();
         boolean hasWeapon = hasItemInInventoryOrEquipped(weapon);
         boolean hasArmour = getBestArmourForDefence().stream().allMatch(this::hasItemInInventoryOrEquipped);
+
+        boolean hasAmulet = hasItemInInventoryOrEquipped("Amulet of power");
+        boolean hasTeamCape = hasAnyTeamCapeInInventoryOrEquipped();
+        boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
+        return hasWeapon && hasArmour && hasAmulet && hasTeamCape && hasFood;
         boolean hasFood = countInventoryItem("Trout") >= Gear.MIN_TROUT_REQUIRED;
         return hasWeapon && hasArmour && hasFood;
     }
@@ -139,7 +176,14 @@ public class CombatScript {
 
         List<String> upgradeItems = getRequiredUpgradeItems();
         for (String item : upgradeItems) {
+
+            boolean alreadyOwned = "Team-1 cape".equalsIgnoreCase(item)
+                    ? hasAnyTeamCapeAnywhere()
+                    : hasItemAnywhere(item);
+            if (!alreadyOwned) {
+
             if (!hasItemAnywhere(item)) {
+
                 if (!buyFromGrandExchange(item, 1)) {
                     log.warn("Failed buying upgrade: {}", item);
                 }
@@ -154,8 +198,13 @@ public class CombatScript {
         return hasCombatSetupReady();
     }
 
+
+    private boolean lootDropsInArea(CombatTrainingTarget target) {
+        if (!isPlayerInTargetArea(target.getArea()) || !canLootFromRecentKill(target)) {
+
     private boolean lootDropsInArea() {
         if (!isPlayerInTargetArea(resolveTrainingTarget().getArea())) {
+
             return false;
         }
 
@@ -187,6 +236,31 @@ public class CombatScript {
         }
 
         return false;
+    }
+
+
+    private void updateKillWindow(CombatTrainingTarget target) {
+        boolean nowInCombat = Rs2Player.isInteracting() || Rs2Player.isAnimating();
+        if (wasInCombatLastTick && !nowInCombat && isPlayerInTargetArea(target.getArea())) {
+            lastKillLocation = Rs2Player.getWorldLocation();
+            lastKillAt = System.currentTimeMillis();
+        }
+        wasInCombatLastTick = nowInCombat;
+    }
+
+    private boolean canLootFromRecentKill(CombatTrainingTarget target) {
+        if (lastKillLocation == null) {
+            return false;
+        }
+
+        if (System.currentTimeMillis() - lastKillAt > 25_000) {
+            return false;
+        }
+
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        return playerLocation != null
+                && target.getArea().contains(lastKillLocation)
+                && playerLocation.distanceTo(lastKillLocation) <= LOOT_RADIUS + 2;
     }
 
     private boolean buryBonesInInventory() {
@@ -228,9 +302,108 @@ public class CombatScript {
             return false;
         }
 
-        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), 3_000);
+        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 3_000);
+        return Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving();
+    }
+
+
+    private boolean moveTowardsTargetNpc(CombatTrainingTarget target) {
+        if (Rs2Player.isMoving()) {
+            return false;
+        }
+
+        Rs2NpcModel nearest = Rs2Npc.getNpcs(n -> n != null
+                        && n.getName() != null
+                        && matchesAnyTarget(n.getName(), target.getNpcs())
+                        && !n.isDead()
+                        && n.getWorldLocation() != null
+                        && target.getArea().contains(n.getWorldLocation()))
+                .min(Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
+                .orElse(null);
+
+        if (nearest == null || nearest.getWorldLocation() == null) {
+            return false;
+        }
+
+        if (nearest.getDistanceFromPlayer() <= 2) {
+            return false;
+        }
+
+        Rs2Walker.walkTo(nearest.getWorldLocation());
+        sleepUntil(Rs2Player::isMoving, 2_000);
+        return Rs2Player.isMoving();
+    }
+
+    private boolean repositionWithinTrainingArea(WorldArea area) {
+        if (area == null || Rs2Player.isMoving()) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - lastRepositionAttemptAt < REPOSITION_COOLDOWN_MS) {
+            return false;
+        }
+
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        WorldPoint center = getAreaCenter(area);
+        if (playerLocation == null || center == null || !area.contains(playerLocation)) {
+            return false;
+        }
+
+        lastRepositionAttemptAt = now;
+        Rs2Walker.walkTo(center);
+        sleepUntil(Rs2Player::isMoving, 2_000);
+        return Rs2Player.isMoving();
+    }
+
+    private boolean withdrawCombatSetup() {
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        Rs2Bank.depositAll();
+        Rs2Bank.depositEquipment();
+
+        withdrawAndEquip(getBestWeaponForAttack());
+        for (String piece : getBestArmourForDefence()) {
+            withdrawAndEquip(piece);
+        }
+        withdrawAndEquip("Amulet of power");
+        withdrawAnyTeamCape();
+
+        Rs2Bank.withdrawX("Trout", Gear.MIN_TROUT_REQUIRED, true);
+
+        Rs2Bank.closeBank();
+        sleepUntil(() -> !Rs2Bank.isOpen(), 3_000);
         return true;
     }
+
+    private void withdrawAndEquip(String itemName) {
+        if (itemName == null || itemName.isBlank()) {
+            return;
+        }
+        if (hasItemInInventoryOrEquipped(itemName)) {
+            return;
+        }
+        if (!Rs2Bank.hasItem(itemName)) {
+            return;
+        }
+        Rs2Bank.withdrawAndEquip(itemName);
+    }
+
+
+    private boolean hasAnyTeamCapeAnywhere() {
+        if (hasAnyTeamCapeInInventoryOrEquipped()) {
+            return true;
+        }
+
+        return Rs2Bank.bankItems().stream()
+                .anyMatch(item -> item.getName() != null && isTeamCapeName(item.getName()));
+    }
+
+    private boolean hasAnyTeamCapeInInventoryOrEquipped() {
+        for (String matcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (Rs2Equipment.isWearing(matcher) || Rs2Inventory.hasItem(matcher, true)) {
 
     private boolean withdrawCombatSetup() {
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
@@ -466,17 +639,286 @@ public class CombatScript {
         for (String target : targetNames) {
             String needle = target.trim().toLowerCase();
             if (normalized.equals(needle) || normalized.contains(needle)) {
+
                 return true;
             }
         }
         return false;
     }
 
+
+    private void withdrawAnyTeamCape() {
+        if (hasAnyTeamCapeInInventoryOrEquipped()) {
+            return;
+        }
+
+        for (String matcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (Rs2Bank.hasItem(matcher)) {
+                Rs2Bank.withdrawAndEquip(matcher);
+                sleepUntil(this::hasAnyTeamCapeInInventoryOrEquipped, 2_000);
+                return;
+            }
+        }
+
+        if (Rs2Bank.hasItem("Team-1 cape")) {
+            Rs2Bank.withdrawAndEquip("Team-1 cape");
+            sleepUntil(this::hasAnyTeamCapeInInventoryOrEquipped, 2_000);
+        }
+    }
+
+    private boolean sellConfiguredBankOverflow() {
+        if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
+            status = "Walking to GE";
+            return false;
+        }
+
+        sleepUntil(Rs2GrandExchange::isOpen, 7_000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        for (String itemName : SELLABLE_BANK_ITEMS_KEEP_ONE) {
+            int amountInBank = countBankItem(itemName);
+            int toSell = Math.max(0, amountInBank - 1);
+            if (toSell <= 0) {
+                continue;
+            }
+
+            if (!ensureExchangeSlotAvailable()) {
+                continue;
+            }
+
+            GrandExchangeRequest request = GrandExchangeRequest.builder()
+                    .action(GrandExchangeAction.SELL)
+                    .itemName(itemName)
+                    .quantity(toSell)
+                    .percent(-5)
+                    .closeAfterCompletion(false)
+                    .build();
+
+            Rs2GrandExchange.processOffer(request);
+            sleepUntil(() -> Rs2GrandExchange.hasSoldOffer() || Rs2GrandExchange.hasBoughtOffer(), BUY_WAIT_TIMEOUT_MS);
+            Rs2GrandExchange.collectAllToBank();
+        }
+
+        Rs2GrandExchange.closeExchange();
+        return true;
+    }
+
+    private boolean buyFromGrandExchange(String itemName, int quantity) {
+        if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+
+        sleepUntil(Rs2GrandExchange::isOpen, 7_000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        if (!ensureExchangeSlotAvailable()) {
+            return false;
+        }
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(itemName)
+                .quantity(quantity)
+                .percent(8)
+                .closeAfterCompletion(false)
+                .build();
+
+        boolean offered = Rs2GrandExchange.processOffer(request);
+        if (!offered) {
+            return false;
+        }
+
+        sleepUntil(() -> hasItemAnywhere(itemName) || Rs2GrandExchange.hasBoughtOffer(), BUY_WAIT_TIMEOUT_MS);
+        Rs2GrandExchange.collectAllToBank();
+        Rs2GrandExchange.closeExchange();
+        return hasItemAnywhere(itemName);
+    }
+
+    private boolean refreshBankCache() {
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        sleepUntil(() -> !Rs2Bank.bankItems().isEmpty(), 5_000);
+        Rs2Bank.closeBank();
+        sleepUntil(() -> !Rs2Bank.isOpen(), 3_000);
+        return true;
+    }
+
+    private boolean ensureExchangeSlotAvailable() {
+        if (Rs2GrandExchange.getAvailableSlotsCount() > 0) {
+            return true;
+
     private boolean hasInventoryLoadoutWithoutFood() {
         String weapon = getBestWeaponForAttack();
         boolean hasWeapon = hasItemInInventoryOrEquipped(weapon);
         boolean hasArmour = getBestArmourForDefence().stream().allMatch(this::hasItemInInventoryOrEquipped);
         return hasWeapon && hasArmour;
+    }
+
+    private boolean hasItemInInventoryOrEquipped(String item) {
+        return Rs2Inventory.hasItem(item, true) || Rs2Equipment.isWearing(item);
+    }
+
+    private boolean hasItemAnywhere(String item) {
+        return hasItemInInventoryOrEquipped(item) || countBankItem(item) > 0;
+    }
+
+    private int countInventoryItem(String itemName) {
+        return (int) Rs2Inventory.items()
+                .filter(i -> i != null && i.getName() != null && i.getName().equalsIgnoreCase(itemName))
+                .mapToInt(Rs2ItemModel::getQuantity)
+                .sum();
+    }
+
+    private int countBankItem(String itemName) {
+        return Rs2Bank.bankItems().stream()
+                .filter(i -> i.getName() != null && i.getName().equalsIgnoreCase(itemName))
+                .mapToInt(Rs2ItemModel::getQuantity)
+                .sum();
+    }
+
+    private int getLevel(Skill skill) {
+        if (Microbot.getClient() == null) {
+            return 1;
+
+        }
+        return Microbot.getClient().getRealSkillLevel(skill);
+    }
+
+    private void setBalancedMeleeStyle() {
+        int attack = getLevel(Skill.ATTACK);
+        int strength = getLevel(Skill.STRENGTH);
+        int defence = getLevel(Skill.DEFENCE);
+
+        Skill targetSkill = Skill.ATTACK;
+        if (strength < attack && strength <= defence) {
+            targetSkill = Skill.STRENGTH;
+        } else if (defence < attack && defence <= strength) {
+            targetSkill = Skill.DEFENCE;
+        }
+
+        int currentStyle = Microbot.getVarbitPlayerValue(VarPlayer.ATTACK_STYLE);
+        WidgetInfo desired = getStyleWidgetForSkill(targetSkill);
+        int desiredStyle = styleIndexForSkill(targetSkill);
+
+        if (currentStyle == desiredStyle) {
+            return;
+        }
+
+        if (Rs2Tab.getCurrentTab() != InterfaceTab.COMBAT) {
+            Rs2Tab.switchToCombatOptionsTab();
+            sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.COMBAT, 2_000);
+        }
+
+        Rs2Combat.setAttackStyle(desired);
+    }
+
+    private WidgetInfo getStyleWidgetForSkill(Skill skill) {
+        if (skill == Skill.STRENGTH) {
+            return WidgetInfo.COMBAT_STYLE_TWO;
+        }
+        if (skill == Skill.DEFENCE) {
+            return WidgetInfo.COMBAT_STYLE_FOUR;
+        }
+        return WidgetInfo.COMBAT_STYLE_ONE;
+    }
+
+    private int styleIndexForSkill(Skill skill) {
+        if (skill == Skill.STRENGTH) {
+            return 1;
+        }
+        if (skill == Skill.DEFENCE) {
+            return 3;
+        }
+        return 0;
+    }
+
+    private CombatTrainingTarget resolveTrainingTarget() {
+        int lowestMelee = Math.min(getLevel(Skill.ATTACK), Math.min(getLevel(Skill.STRENGTH), getLevel(Skill.DEFENCE)));
+
+        if (lowestMelee < 5) {
+            return CombatTrainingTarget.GOBLINS;
+        }
+
+        if (lowestMelee < 10) {
+            return CombatTrainingTarget.COWS;
+        }
+
+        if (lowestMelee >= 20) {
+            return CombatTrainingTarget.AL_KHARID_GUARDS;
+        }
+
+        return CombatTrainingTarget.COWS;
+    }
+
+    private List<String> getRequiredUpgradeItems() {
+        List<String> items = new ArrayList<>();
+        items.add(getBestWeaponForAttack());
+        items.addAll(getBestArmourForDefence());
+        items.add("Amulet of power");
+        items.add("Team-1 cape");
+        return items;
+    }
+
+    private String getBestWeaponForAttack() {
+        int attack = getLevel(Skill.ATTACK);
+        if (attack >= 20) return "Mithril scimitar";
+        if (attack >= 10) return "Black scimitar";
+        if (attack >= 5) return "Steel scimitar";
+        return "Iron scimitar";
+    }
+
+    private List<String> getBestArmourForDefence() {
+        int defence = getLevel(Skill.DEFENCE);
+        if (defence >= 20) {
+            return List.of("Mithril full helm", "Mithril platebody", "Mithril platelegs", "Mithril kiteshield");
+        }
+        if (defence >= 10) {
+            return List.of("Black full helm", "Black platebody", "Black platelegs", "Black kiteshield");
+        }
+        return List.of("Iron full helm", "Iron platebody", "Iron platelegs", "Iron kiteshield");
+    }
+
+    private boolean isPlayerInTargetArea(WorldArea area) {
+        WorldPoint location = Rs2Player.getWorldLocation();
+        return area != null && location != null && area.contains(location);
+    }
+
+    private WorldPoint getAreaCenter(WorldArea area) {
+        return new WorldPoint(area.getX() + (area.getWidth() / 2), area.getY() + (area.getHeight() / 2), area.getPlane());
+    }
+
+    private boolean matchesAnyTarget(String npcName, String[] targetNames) {
+        String normalized = npcName.trim().toLowerCase();
+        for (String target : targetNames) {
+            String needle = target.trim().toLowerCase();
+            if (normalized.equals(needle) || normalized.contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isTeamCapeName(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase();
+        return lower.contains("team-") || lower.contains("team cape");
+    }
+
+    private boolean hasInventoryLoadoutWithoutFood() {
+        String weapon = getBestWeaponForAttack();
+        boolean hasWeapon = hasItemInInventoryOrEquipped(weapon);
+        boolean hasArmour = getBestArmourForDefence().stream().allMatch(this::hasItemInInventoryOrEquipped);
+        boolean hasAmulet = hasItemInInventoryOrEquipped("Amulet of power");
+        boolean hasTeamCape = hasAnyTeamCapeInInventoryOrEquipped();
+        return hasWeapon && hasArmour && hasAmulet && hasTeamCape;
     }
 
     private boolean hasItemInInventoryOrEquipped(String item) {
