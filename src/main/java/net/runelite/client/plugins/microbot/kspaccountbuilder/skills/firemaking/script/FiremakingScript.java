@@ -76,11 +76,19 @@ public class FiremakingScript {
 
 
     private boolean handleProductSelectionDialogue() {
+
         if (!isProductSelectionDialogueOpen()) {
+
+
+
+        if (!Rs2Widget.hasWidget("Product selection") && !Rs2Widget.hasWidget("How many would you like to burn?")) {
+
+
             return false;
         }
 
         status = "Confirming product selection";
+
 
         // Handle both old/new production UIs: try clickable options first, then keyboard fallback.
         Rs2Widget.clickWidget("All");
@@ -102,6 +110,16 @@ public class FiremakingScript {
 
         return Rs2Widget.isProductionWidgetOpen();
     }
+
+
+
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+        Global.sleepUntil(() -> !Rs2Widget.hasWidget("Product selection")
+                && !Rs2Widget.hasWidget("How many would you like to burn?"), 2_000);
+        return true;
+    }
+
+
 
     private boolean handleBurnSelectionWidget(int bestLogId) {
         if (!Rs2Widget.hasWidget("What would you like to burn?")) {
