@@ -5,7 +5,11 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.firemaking.script.FiremakingScript;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.WoodcuttingScript;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script.WoodcuttingScript;
+
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.PlayStyle;

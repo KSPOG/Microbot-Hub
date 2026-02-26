@@ -12,7 +12,13 @@ import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+
+
+
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+
 
 @Slf4j
 public class FiremakingScript {
@@ -40,9 +46,11 @@ public class FiremakingScript {
 
         int bestLogId = resolveBestLogForCurrentLevel();
 
+
         if (handleBurnSelectionWidget(bestLogId)) {
             return;
         }
+
 
         if (!hasRequiredSupplies(bestLogId)) {
             withdrawRequiredSuppliesFromGrandExchangeBank(bestLogId);
@@ -61,6 +69,7 @@ public class FiremakingScript {
         int firemakingLevel = Microbot.getClient().getRealSkillLevel(Skill.FIREMAKING);
         return Needed.getBestLogsForLevel(firemakingLevel);
     }
+
 
 
     private boolean handleBurnSelectionWidget(int bestLogId) {
@@ -97,6 +106,7 @@ public class FiremakingScript {
 
         return "Logs";
     }
+
 
     private boolean hasRequiredSupplies(int bestLogId) {
         return Rs2Inventory.hasItem(Needed.TINDERBOX)
