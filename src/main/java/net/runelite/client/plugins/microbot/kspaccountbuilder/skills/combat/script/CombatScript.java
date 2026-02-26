@@ -42,11 +42,11 @@ public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
     private static final int LOOT_RADIUS = 8;
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
-    private static final long REPOSITION_COOLDOWN_MS = 3_500L;
-    private static final int BURY_WAIT_TIMEOUT_MS = 1_200;
-    private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 1_800;
+    private static final long REPOSITION_COOLDOWN_MS = 1_500L;
+    private static final int BURY_WAIT_TIMEOUT_MS = 700;
+    private static final int LOOT_ACTION_WAIT_TIMEOUT_MS = 1_000;
 
-    private static final long LOOT_WAIT_AFTER_KILL_MS = 2_500L;
+    private static final long LOOT_WAIT_AFTER_KILL_MS = 1_200L;
 
     private String status = "Idle";
     private long lastRepositionAttemptAt = 0L;
@@ -54,7 +54,7 @@ public class CombatScript {
     private long waitForLootUntilMs = 0L;
 
 
-    private static final long LOOT_WAIT_AFTER_KILL_MS = 2_500L;
+    private static final long LOOT_WAIT_AFTER_KILL_MS = 1_200L;
 
     private String status = "Idle";
     private long lastRepositionAttemptAt = 0L;
@@ -324,7 +324,7 @@ public class CombatScript {
 
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
 
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 1_000);
 
 
 
@@ -414,7 +414,7 @@ public class CombatScript {
 
         cachedTargetNpcIndex = npc.getIndex();
         waitForLootUntilMs = 0L;
-        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 3_000);
+        sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving(), 1_500);
         return Rs2Player.isInteracting() || Rs2Player.isAnimating() || Rs2Player.isMoving();
     }
 
