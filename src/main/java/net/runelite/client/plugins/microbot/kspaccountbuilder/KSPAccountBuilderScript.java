@@ -17,6 +17,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 public class KSPAccountBuilderScript extends Script {
@@ -54,7 +56,7 @@ public class KSPAccountBuilderScript extends Script {
         currentTask = "Initializing";
         startedAt = Instant.now();
         startupBankingComplete = false;
-        activeTask = getRandomStartingTask();
+        activeTask = getRandomStartingTask(config);
         nextTaskSwitchAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, config.taskSwitchMinutes())));
 
         woodcuttingScript.initialize();
@@ -97,17 +99,25 @@ public class KSPAccountBuilderScript extends Script {
                     startupBankingComplete = true;
                 }
 
+                if (!isTaskEnabled(activeTask, config)) {
+                    activeTask = getRandomStartingTask(config);
+                }
+
                 rotateTaskIfNeeded(config);
 
-                if (config.enableAntiban() && Rs2AntibanSettings.actionCooldownActive) {
+                if (config.enableAntiban() && activeTask == BuilderTask.WOODCUTTING && Rs2AntibanSettings.actionCooldownActive) {
                     status = "Antiban cooldown";
                     return;
                 }
 
-                executeActiveTask();
+                executeActiveTask(config);
 
                 if (config.enableAntiban()) {
-                    applyAntibanCycle();
+                    if (activeTask != BuilderTask.WOODCUTTING) {
+                        Rs2AntibanSettings.actionCooldownActive = false;
+                    } else {
+                        applyAntibanCycle();
+                    }
                 }
             } catch (Exception ex) {
                 status = "Error";
@@ -134,15 +144,22 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
-    private BuilderTask getRandomStartingTask() {
-        BuilderTask[] tasks = BuilderTask.values();
-        return tasks[ThreadLocalRandom.current().nextInt(tasks.length)];
+    private BuilderTask getRandomStartingTask(KSPAccountBuilderConfig config) {
+        List<BuilderTask> enabledTasks = getEnabledTasks(config);
+        if (enabledTasks.isEmpty()) {
+            return BuilderTask.WOODCUTTING;
+        }
+
+        return enabledTasks.get(ThreadLocalRandom.current().nextInt(enabledTasks.size()));
     }
 
-    private void executeActiveTask() {
+    private void executeActiveTask(KSPAccountBuilderConfig config) {
+        updateNaturalMouseForActiveTask();
+
         switch (activeTask) {
             case COMBAT:
                 currentTask = "Combat";
+                combatScript.configureLooting(config.enableBoneBury(), config.enableCoinLooting());
                 combatScript.execute();
                 status = combatScript.getStatus();
                 break;
@@ -160,18 +177,66 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
+    private void updateNaturalMouseForActiveTask() {
+        Rs2AntibanSettings.naturalMouse = activeTask == BuilderTask.COMBAT || activeTask == BuilderTask.FIREMAKING;
+    }
+
     private void rotateTaskIfNeeded(KSPAccountBuilderConfig config) {
         if (nextTaskSwitchAt == null || Instant.now().isBefore(nextTaskSwitchAt)) {
             return;
         }
 
-        BuilderTask[] tasks = BuilderTask.values();
-        int nextIndex = (activeTask.ordinal() + 1) % tasks.length;
-        activeTask = tasks[nextIndex];
+        List<BuilderTask> enabledTasks = getEnabledTasks(config);
+        if (enabledTasks.isEmpty()) {
+            status = "No debug skills enabled";
+            currentTask = "Idle";
+            nextTaskSwitchAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, config.taskSwitchMinutes())));
+            return;
+        }
+
+        int currentIndex = enabledTasks.indexOf(activeTask);
+        if (currentIndex < 0) {
+            activeTask = enabledTasks.get(0);
+        } else {
+            activeTask = enabledTasks.get((currentIndex + 1) % enabledTasks.size());
+        }
+
         nextTaskSwitchAt = Instant.now().plus(Duration.ofMinutes(Math.max(1, config.taskSwitchMinutes())));
     }
 
+
+    private List<BuilderTask> getEnabledTasks(KSPAccountBuilderConfig config) {
+        List<BuilderTask> enabled = new ArrayList<>();
+        if (config.debugEnableWoodcutting()) {
+            enabled.add(BuilderTask.WOODCUTTING);
+        }
+        if (config.debugEnableCombat()) {
+            enabled.add(BuilderTask.COMBAT);
+        }
+        if (config.debugEnableFiremaking()) {
+            enabled.add(BuilderTask.FIREMAKING);
+        }
+        return enabled;
+    }
+
+    private boolean isTaskEnabled(BuilderTask task, KSPAccountBuilderConfig config) {
+        switch (task) {
+            case COMBAT:
+                return config.debugEnableCombat();
+            case FIREMAKING:
+                return config.debugEnableFiremaking();
+            case WOODCUTTING:
+            default:
+                return config.debugEnableWoodcutting();
+        }
+    }
+
     private boolean prepareForTaskStart() {
+        if (hasRequiredSuppliesForActiveTask()) {
+            status = "Ready (inventory already prepared)";
+            return true;
+        }
+
         status = "Banking before task";
 
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
@@ -183,6 +248,18 @@ public class KSPAccountBuilderScript extends Script {
         Rs2Bank.depositEquipment();
         status = "Ready (bank open)";
         return true;
+    }
+
+    private boolean hasRequiredSuppliesForActiveTask() {
+        switch (activeTask) {
+            case COMBAT:
+                return combatScript.hasCombatSetupReady();
+            case FIREMAKING:
+                return firemakingScript.hasRequiredSuppliesInInventory();
+            case WOODCUTTING:
+            default:
+                return woodcuttingScript.hasRequiredTools();
+        }
     }
 
     private void initializeBreakScheduling(KSPAccountBuilderConfig config) {
@@ -310,6 +387,7 @@ public class KSPAccountBuilderScript extends Script {
         restoreTitle();
         woodcuttingScript.shutdown();
         firemakingScript.shutdown();
+        Rs2AntibanSettings.naturalMouse = false;
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
     }

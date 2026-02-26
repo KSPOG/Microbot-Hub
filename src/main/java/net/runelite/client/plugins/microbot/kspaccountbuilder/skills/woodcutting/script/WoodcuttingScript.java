@@ -25,7 +25,8 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 public class WoodcuttingScript {
     private static final String CHOP_ACTION = "Chop down";
     private static final int TREE_AREA_RADIUS = 10;
-    private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
+    private static final int BUY_WAIT_TIMEOUT_MS = 45_000;
+    private static final int BUY_OFFER_RETRY_COUNT = 3;
     private static final int MIN_BUY_PRICE_GP = 50;
     private static final int MIN_SELL_PRICE_GP = 25;
     private static final double BUY_PRICE_MARKUP_MULTIPLIER = 1.20;
@@ -34,12 +35,12 @@ public class WoodcuttingScript {
     private String status = "Idle";
 
     private static final Axe[] AXE_PRIORITY = new Axe[]{
-            new Axe("Rune axe", ItemReqs.RUNE_AXE, AxeWCLevels.RUNE_AXE, EquipLevels.RUNE_AXE),
-            new Axe("Adamant axe", ItemReqs.ADAMANT_AXE, AxeWCLevels.ADAMANT_AXE, EquipLevels.ADAMANT_AXE),
-            new Axe("Mithril axe", ItemReqs.MITHRIL_AXE, AxeWCLevels.MITHRIL_AXE, EquipLevels.MITHRIL_AXE),
-            new Axe("Black axe", ItemReqs.BLACK_AXE, AxeWCLevels.BLACK_AXE, EquipLevels.BLACK_AXE),
-            new Axe("Steel axe", ItemReqs.STEEL_AXE, AxeWCLevels.STEEL_AXE, EquipLevels.STEEL_AXE),
-            new Axe("Bronze axe", ItemReqs.BRONZE_AXE, AxeWCLevels.BRONZE_AXE, EquipLevels.BRONZE_AXE)
+            new Axe("Rune axe", ItemReqs.RUNE_AXE, AxeWCLevels.RUNE_AXE, EquipLevels.RUNE_AXE, 20_000),
+            new Axe("Adamant axe", ItemReqs.ADAMANT_AXE, AxeWCLevels.ADAMANT_AXE, EquipLevels.ADAMANT_AXE, 5_000),
+            new Axe("Mithril axe", ItemReqs.MITHRIL_AXE, AxeWCLevels.MITHRIL_AXE, EquipLevels.MITHRIL_AXE, 2_000),
+            new Axe("Black axe", ItemReqs.BLACK_AXE, AxeWCLevels.BLACK_AXE, EquipLevels.BLACK_AXE, 1_000),
+            new Axe("Steel axe", ItemReqs.STEEL_AXE, AxeWCLevels.STEEL_AXE, EquipLevels.STEEL_AXE, 500),
+            new Axe("Bronze axe", ItemReqs.BRONZE_AXE, AxeWCLevels.BRONZE_AXE, EquipLevels.BRONZE_AXE, MIN_BUY_PRICE_GP)
     };
 
     public void initialize() {
@@ -215,61 +216,117 @@ public class WoodcuttingScript {
             return false;
         }
 
-        try {
-            Global.sleepUntil(Rs2GrandExchange::isOpen, 7_000);
-            if (!Rs2GrandExchange.isOpen()) {
+        Global.sleepUntil(Rs2GrandExchange::isOpen, 7_000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        if (!ensureExchangeSlotAvailable()) {
+            log.debug("No GE slots available for buying {}", axe.getName());
+            return false;
+        }
+
+        sellLowerTierAxesAtGrandExchange(axe);
+
+        if (!ensureExchangeSlotAvailable()) {
+            log.debug("No GE slots available after selling lower tier axes while buying {}", axe.getName());
+            return false;
+        }
+
+        int buyPrice = getBuyOfferPrice(axe);
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(axe.getName())
+                .quantity(1)
+                .price(buyPrice)
+                .closeAfterCompletion(false)
+                .build();
+
+
+        if (!placeBuyOffer(request, axe)) {
+            return false;
+        }
+
+        boolean boughtAxe = Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
+        if (!boughtAxe) {
+            Rs2GrandExchange.abortAllOffers(true);
+        }
+
+        Rs2GrandExchange.collectAllToBank();
+        if (Rs2Inventory.hasItem(axe.getItemId())) {
+            return true;
+        }
+
+
+
+        if (!placeBuyOffer(request, axe)) {
+            return false;
+        }
+
+            if (!placeBuyOffer(request, axe)) {
                 return false;
             }
 
-            if (!ensureExchangeSlotAvailable()) {
-                log.debug("No GE slots available for buying {}", axe.getName());
-                return false;
-            }
 
-            sellLowerTierAxesAtGrandExchange(axe);
+        boolean boughtAxe = Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
+        if (!boughtAxe) {
+            Rs2GrandExchange.abortAllOffers(true);
+        }
 
-            if (!ensureExchangeSlotAvailable()) {
-                log.debug("No GE slots available after selling lower tier axes while buying {}", axe.getName());
-                return false;
-            }
+        Rs2GrandExchange.collectAllToBank();
+        if (Rs2Inventory.hasItem(axe.getItemId())) {
+            return true;
+        }
 
-            int buyPrice = getBuyOfferPrice(axe);
 
-            GrandExchangeRequest request = GrandExchangeRequest.builder()
-                    .action(GrandExchangeAction.BUY)
-                    .itemName(axe.getName())
-                    .quantity(1)
-                    .price(buyPrice)
-                    .closeAfterCompletion(false)
-                    .build();
+        // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
 
-            if (!Rs2GrandExchange.processOffer(request)) {
-                return false;
-            }
+        boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
+        Rs2Bank.closeBank();
+        return hasAxeInBank;
+    }
 
-            boolean boughtAxe = Global.sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || Rs2Inventory.hasItem(axe.getItemId()), BUY_WAIT_TIMEOUT_MS);
-            if (!boughtAxe) {
-                Rs2GrandExchange.abortAllOffers(true);
-            }
-
-            Rs2GrandExchange.collectAllToBank();
-            if (Rs2Inventory.hasItem(axe.getItemId())) {
+    private boolean placeBuyOffer(GrandExchangeRequest request, Axe axe) {
+        for (int attempt = 1; attempt <= BUY_OFFER_RETRY_COUNT; attempt++) {
+            if (Rs2GrandExchange.processOffer(request)) {
                 return true;
             }
 
-            // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
-            if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
-                return false;
-            }
+            log.debug("Failed to create buy offer for {} on attempt {}/{}", axe.getName(), attempt, BUY_OFFER_RETRY_COUNT);
+            Global.sleep(600, 900);
+
+
 
             boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
             Rs2Bank.closeBank();
             return hasAxeInBank;
-        } finally {
-            if (Rs2GrandExchange.isOpen()) {
-                Rs2GrandExchange.closeExchange();
+        }
+    }
+
+    private boolean placeBuyOffer(GrandExchangeRequest request, Axe axe) {
+        for (int attempt = 1; attempt <= BUY_OFFER_RETRY_COUNT; attempt++) {
+            if (Rs2GrandExchange.processOffer(request)) {
+                return true;
+            }
+
+            log.debug("Failed to create buy offer for {} on attempt {}/{}", axe.getName(), attempt, BUY_OFFER_RETRY_COUNT);
+            Global.sleep(600, 900);
+
+
+
+            if (!Rs2GrandExchange.isOpen()) {
+                if (!Rs2GrandExchange.openExchange()) {
+                    continue;
+                }
+                Global.sleepUntil(Rs2GrandExchange::isOpen, 5_000);
             }
         }
+
+        return false;
     }
 
     private void sellLowerTierAxesAtGrandExchange(Axe bestPossibleAxe) {
@@ -308,8 +365,8 @@ public class WoodcuttingScript {
     private int getBuyOfferPrice(Axe axe) {
         int marketPrice = Microbot.getItemManager().getItemPrice(axe.getItemId());
         if (marketPrice <= 0) {
-            log.debug("Missing market price for {} ({}), falling back to min buy price", axe.getName(), axe.getItemId());
-            return MIN_BUY_PRICE_GP;
+            log.debug("Missing market price for {} ({}), falling back to tier price {}", axe.getName(), axe.getItemId(), axe.getFallbackBuyPrice());
+            return axe.getFallbackBuyPrice();
         }
 
         return Math.max(MIN_BUY_PRICE_GP, (int) Math.ceil(marketPrice * BUY_PRICE_MARKUP_MULTIPLIER));
@@ -368,12 +425,14 @@ public class WoodcuttingScript {
         private final int itemId;
         private final int woodcuttingLevel;
         private final int attackLevel;
+        private final int fallbackBuyPrice;
 
-        private Axe(String name, int itemId, int woodcuttingLevel, int attackLevel) {
+        private Axe(String name, int itemId, int woodcuttingLevel, int attackLevel, int fallbackBuyPrice) {
             this.name = name;
             this.itemId = itemId;
             this.woodcuttingLevel = woodcuttingLevel;
             this.attackLevel = attackLevel;
+            this.fallbackBuyPrice = fallbackBuyPrice;
         }
 
         private String getName() {
@@ -390,6 +449,10 @@ public class WoodcuttingScript {
 
         private int getAttackLevel() {
             return attackLevel;
+        }
+
+        private int getFallbackBuyPrice() {
+            return fallbackBuyPrice;
         }
     }
 
