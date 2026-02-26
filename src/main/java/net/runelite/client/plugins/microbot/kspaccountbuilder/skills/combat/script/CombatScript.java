@@ -103,7 +103,11 @@ public class CombatScript {
                 return;
             }
 
+
             if (moveTowardsTargetNpc(target) || repositionWithinTrainingArea(targetArea)) {
+
+            if (repositionWithinTrainingArea(targetArea)) {
+
                 status = "Repositioning in " + target.name().replace('_', ' ').toLowerCase();
                 return;
             }
@@ -365,6 +369,7 @@ public class CombatScript {
         return true;
     }
 
+
     private boolean moveTowardsTargetNpc(CombatTrainingTarget target) {
         if (Rs2Player.isMoving()) {
             return false;
@@ -392,21 +397,25 @@ public class CombatScript {
         return true;
     }
 
+
     private boolean repositionWithinTrainingArea(WorldArea targetArea) {
         if (targetArea == null || Rs2Player.isMoving()) {
             return false;
         }
+
 
         long now = System.currentTimeMillis();
         if (now - lastRepositionAttemptAt < REPOSITION_COOLDOWN_MS) {
             return false;
         }
 
+
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
         WorldPoint areaCenter = getAreaCenter(targetArea);
         if (playerLocation == null || areaCenter == null) {
             return false;
         }
+
 
         if (!targetArea.contains(playerLocation)) {
             return false;
@@ -418,6 +427,13 @@ public class CombatScript {
 
         lastRepositionAttemptAt = now;
         Rs2Walker.walkTo(destination);
+
+        if (!targetArea.contains(playerLocation) || playerLocation.distanceTo(areaCenter) <= 5) {
+            return false;
+        }
+
+        Rs2Walker.walkTo(areaCenter);
+
         sleepUntil(Rs2Player::isMoving, 2_000);
         return true;
     }
