@@ -82,6 +82,35 @@ public final class Sell {
         return true;
     }
 
+    public static boolean sellInventoryItem(String itemName, int quantity, int price) {
+        if (itemName == null || itemName.isBlank() || quantity <= 0) {
+            return false;
+        }
+
+        if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+
+        sleepUntil(Rs2GrandExchange::isOpen, 7_000);
+        if (!Rs2GrandExchange.isOpen() || !ensureExchangeSlotAvailable()) {
+            return false;
+        }
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.SELL)
+                .itemName(itemName)
+                .quantity(quantity)
+                .price(Math.max(1, price))
+                .closeAfterCompletion(false)
+                .build();
+
+        boolean offered = Rs2GrandExchange.processOffer(request);
+        sleepUntil(() -> Rs2GrandExchange.hasSoldOffer() || !Rs2GrandExchange.isOpen(), SELL_WAIT_TIMEOUT_MS);
+        Rs2GrandExchange.collectAllToBank();
+        Rs2GrandExchange.closeExchange();
+        return offered;
+    }
+
     public static List<String> getSellableBankItems(int firemakingLevel) {
         List<String> sellable = new ArrayList<>(List.of(SELLABLE_BANK_ITEMS_KEEP_ONE));
 

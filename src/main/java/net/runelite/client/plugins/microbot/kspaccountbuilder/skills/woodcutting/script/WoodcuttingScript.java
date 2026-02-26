@@ -11,9 +11,8 @@ import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools.AxeWCLevels;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.tools.EquipLevels;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
-import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
-import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
-import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.buy.Buy;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.ge.sell.Sell;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.Global;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
@@ -25,8 +24,6 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 public class WoodcuttingScript {
     private static final String CHOP_ACTION = "Chop down";
     private static final int TREE_AREA_RADIUS = 10;
-    private static final int BUY_WAIT_TIMEOUT_MS = 45_000;
-    private static final int BUY_OFFER_RETRY_COUNT = 3;
     private static final int MIN_BUY_PRICE_GP = 50;
     private static final int MIN_SELL_PRICE_GP = 25;
     private static final double BUY_PRICE_MARKUP_MULTIPLIER = 1.20;
@@ -207,6 +204,16 @@ public class WoodcuttingScript {
         return Rs2Equipment.isWearing(axeId) || Rs2Inventory.hasItem(axeId);
     }
 
+
+    private boolean buyAxeFromGrandExchange(Axe bestPossibleAxe) {
+        sellLowerTierAxesAtGrandExchange(bestPossibleAxe);
+
+        int buyPrice = getBuyOfferPrice(bestPossibleAxe);
+        boolean bought = Buy.buyItemToBank(bestPossibleAxe.getName(), 1, buyPrice);
+        if (!bought) {
+            return false;
+        }
+
     private boolean buyAxeFromGrandExchange(Axe axe) {
         if (!Rs2GrandExchange.walkToGrandExchange()) {
             return false;
@@ -258,14 +265,16 @@ public class WoodcuttingScript {
         }
 
         // Fallback verification: bank cache can be stale while GE is open, so check by opening bank.
+
         if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
             return false;
         }
 
-        boolean hasAxeInBank = Rs2Bank.hasItem(axe.getItemId());
+        boolean hasAxeInBank = Rs2Bank.hasItem(bestPossibleAxe.getItemId());
         Rs2Bank.closeBank();
         return hasAxeInBank;
     }
+
 
     private boolean placeBuyOffer(GrandExchangeRequest request, Axe axe) {
         for (int attempt = 1; attempt <= BUY_OFFER_RETRY_COUNT; attempt++) {
@@ -298,24 +307,8 @@ public class WoodcuttingScript {
                 continue;
             }
 
-            if (!ensureExchangeSlotAvailable()) {
-                return;
-            }
-
             int sellPrice = getSellOfferPrice(axe);
-
-            GrandExchangeRequest sellRequest = GrandExchangeRequest.builder()
-                    .action(GrandExchangeAction.SELL)
-                    .itemName(axe.getName())
-                    .quantity(quantity)
-                    .price(sellPrice)
-                    .closeAfterCompletion(false)
-                    .build();
-
-            if (Rs2GrandExchange.processOffer(sellRequest)) {
-                Global.sleepUntil(() -> !Rs2Inventory.hasItem(axe.getItemId()), 7_000);
-                Rs2GrandExchange.collectAllToBank();
-            }
+            Sell.sellInventoryItem(axe.getName(), quantity, sellPrice);
         }
     }
 
@@ -339,22 +332,6 @@ public class WoodcuttingScript {
 
         return Math.max(MIN_SELL_PRICE_GP, (int) Math.floor(marketPrice * SELL_PRICE_DISCOUNT_MULTIPLIER));
     }
-
-    private boolean ensureExchangeSlotAvailable() {
-        if (Rs2GrandExchange.getAvailableSlotsCount() > 0) {
-            return true;
-        }
-
-        Rs2GrandExchange.collectAllToBank();
-        Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
-        if (Rs2GrandExchange.getAvailableSlotsCount() == 0) {
-            Rs2GrandExchange.abortAllOffers(true);
-            Global.sleepUntil(() -> Rs2GrandExchange.getAvailableSlotsCount() > 0, 5_000);
-        }
-
-        return Rs2GrandExchange.getAvailableSlotsCount() > 0;
-    }
-
     private TreeTarget resolveTreeTarget() {
         int wcLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
         int combatLevel = Microbot.getClientThread().invoke(() ->

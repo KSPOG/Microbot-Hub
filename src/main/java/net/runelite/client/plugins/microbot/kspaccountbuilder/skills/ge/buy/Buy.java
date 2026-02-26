@@ -87,6 +87,81 @@ public final class Buy {
     }
 
 
+
+
+    public static boolean buyItemToInventory(String itemName, int quantity, int price) {
+        if (itemName == null || itemName.isBlank() || quantity <= 0) {
+            return false;
+        }
+
+        if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+
+        sleepUntil(Rs2GrandExchange::isOpen, 7000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        if (!ensureExchangeSlotAvailable()) {
+            return false;
+        }
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(itemName)
+                .quantity(quantity)
+                .price(Math.max(1, price))
+                .closeAfterCompletion(false)
+                .build();
+
+        boolean offered = Rs2GrandExchange.processOffer(request);
+        if (!offered) {
+            return false;
+        }
+
+        sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || !Rs2GrandExchange.isOpen(), BUY_WAIT_TIMEOUT_MS);
+        Rs2GrandExchange.collectAll();
+        Rs2GrandExchange.closeExchange();
+        return true;
+    }
+    public static boolean buyItemToBank(String itemName, int quantity, int price) {
+        if (itemName == null || itemName.isBlank() || quantity <= 0) {
+            return false;
+        }
+
+        if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+
+        sleepUntil(Rs2GrandExchange::isOpen, 7000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        if (!ensureExchangeSlotAvailable()) {
+            return false;
+        }
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(itemName)
+                .quantity(quantity)
+                .price(Math.max(1, price))
+                .closeAfterCompletion(false)
+                .build();
+
+        boolean offered = Rs2GrandExchange.processOffer(request);
+        if (!offered) {
+            return false;
+        }
+
+        sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || !Rs2GrandExchange.isOpen(), BUY_WAIT_TIMEOUT_MS);
+        collectOffersToBank();
+        Rs2GrandExchange.closeExchange();
+        return true;
+    }
+
     public static boolean buyItemToBank(String itemName, int quantity) {
         if (itemName == null || itemName.isBlank() || quantity <= 0) {
             return false;
