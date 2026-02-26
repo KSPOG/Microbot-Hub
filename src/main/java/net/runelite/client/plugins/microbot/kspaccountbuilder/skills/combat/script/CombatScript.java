@@ -36,6 +36,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 public class CombatScript {
     private static final int BUY_WAIT_TIMEOUT_MS = 20_000;
     private static final int LOOT_RADIUS = 8;
+    private static final int NPC_SEARCH_RADIUS = 20;
     private boolean boneBuryEnabled = true;
     private boolean coinLootingEnabled = true;
     private String status = "Idle";
@@ -341,7 +342,7 @@ public class CombatScript {
                                 && npc.getName() != null
                                 && matchesTargetNpc(npc.getName(), target.getNpcs())
                                 && !npc.isDead()
-                                && (targetArea == null || targetArea.contains(npc.getWorldLocation())))
+                                && isNpcInCombatBounds(targetArea, npc.getWorldLocation()))
                 .min(java.util.Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
                 .orElse(null);
 
@@ -358,12 +359,28 @@ public class CombatScript {
     }
 
     private boolean matchesTargetNpc(String npcName, String[] targetNames) {
+        String normalizedNpcName = npcName.trim().toLowerCase();
         for (String targetName : targetNames) {
-            if (npcName.equalsIgnoreCase(targetName)) {
+            String normalizedTargetName = targetName.trim().toLowerCase();
+            if (normalizedNpcName.equals(normalizedTargetName) || normalizedNpcName.contains(normalizedTargetName)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private boolean isNpcInCombatBounds(WorldArea targetArea, WorldPoint npcLocation) {
+        if (npcLocation == null) {
+            return false;
+        }
+
+        if (targetArea == null || targetArea.contains(npcLocation)) {
+            return true;
+        }
+
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        return playerLocation != null
+                && playerLocation.distanceTo(npcLocation) <= NPC_SEARCH_RADIUS;
     }
 
     private WorldPoint getAreaCenter(WorldArea area) {
