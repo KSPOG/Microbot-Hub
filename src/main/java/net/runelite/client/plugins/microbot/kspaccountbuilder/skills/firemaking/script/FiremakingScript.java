@@ -13,14 +13,18 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 
-
-
-import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import java.awt.event.KeyEvent;
 
 @Slf4j
 public class FiremakingScript {
     private static final int CAMPFIRE_SEARCH_RADIUS = 20;
+    private static final String[] PRODUCT_SELECTION_PROMPTS = {
+            "Product selection",
+            "How many would you like to burn?",
+            "How many would you like to make?"
+    };
 
     private String status = "Idle";
 
@@ -44,6 +48,10 @@ public class FiremakingScript {
 
         int bestLogId = resolveBestLogForCurrentLevel();
 
+        if (handleProductSelectionDialogue()) {
+            return;
+        }
+
         if (handleBurnSelectionWidget(bestLogId)) {
             return;
         }
@@ -66,6 +74,34 @@ public class FiremakingScript {
         return Needed.getBestLogsForLevel(firemakingLevel);
     }
 
+
+    private boolean handleProductSelectionDialogue() {
+        if (!isProductSelectionDialogueOpen()) {
+            return false;
+        }
+
+        status = "Confirming product selection";
+
+        // Handle both old/new production UIs: try clickable options first, then keyboard fallback.
+        Rs2Widget.clickWidget("All");
+        Rs2Widget.clickWidget("Continue");
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+
+        Global.sleepUntil(() -> !isProductSelectionDialogueOpen()
+                || Rs2Player.isAnimating()
+                || Rs2Player.isInteracting(), 2_500);
+        return true;
+    }
+
+    private boolean isProductSelectionDialogueOpen() {
+        for (String prompt : PRODUCT_SELECTION_PROMPTS) {
+            if (Rs2Widget.hasWidget(prompt)) {
+                return true;
+            }
+        }
+
+        return Rs2Widget.isProductionWidgetOpen();
+    }
 
     private boolean handleBurnSelectionWidget(int bestLogId) {
         if (!Rs2Widget.hasWidget("What would you like to burn?")) {
