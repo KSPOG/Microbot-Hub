@@ -41,6 +41,15 @@ public class FiremakingScript {
         return status;
     }
 
+    public boolean hasRequiredSuppliesInInventory() {
+        if (!Microbot.isLoggedIn()) {
+            return false;
+        }
+
+        int bestLogId = resolveBestLogForCurrentLevel();
+        return hasRequiredSupplies(bestLogId);
+    }
+
     public void execute() {
         if (!Microbot.isLoggedIn()) {
             status = "Waiting for login";
