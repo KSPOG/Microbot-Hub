@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting;
+package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;

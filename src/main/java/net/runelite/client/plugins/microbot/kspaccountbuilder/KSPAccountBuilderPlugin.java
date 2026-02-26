@@ -24,7 +24,7 @@ import java.awt.AWTException;
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
 
-    public static final String VERSION = "0.0.39";
+    public static final String VERSION = "0.0.37";
 
 
     @Inject

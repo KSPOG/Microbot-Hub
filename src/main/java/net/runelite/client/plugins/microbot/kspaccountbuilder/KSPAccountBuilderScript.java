@@ -5,11 +5,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.firemaking.script.FiremakingScript;
-
-import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.WoodcuttingScript;
-
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script.WoodcuttingScript;
-
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.PlayStyle;
@@ -111,10 +107,7 @@ public class KSPAccountBuilderScript extends Script {
                 executeActiveTask();
 
                 if (config.enableAntiban()) {
-                    // Defensive re-apply in case another script/util reset antiban runtime state.
-                    Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
-                    Rs2Antiban.actionCooldown();
-                    Rs2Antiban.takeMicroBreakByChance();
+                    applyAntibanCycle();
                 }
             } catch (Exception ex) {
                 status = "Error";
@@ -126,6 +119,20 @@ public class KSPAccountBuilderScript extends Script {
         return true;
     }
 
+
+    private void applyAntibanCycle() {
+        try {
+            // Defensive re-apply in case another script/util reset antiban runtime state.
+            Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
+            Rs2Antiban.actionCooldown();
+            Rs2Antiban.takeMicroBreakByChance();
+        } catch (NullPointerException ex) {
+            // Some antiban internals can transiently null out playStyle; recover without killing the main loop.
+            log.warn("Antiban runtime state was null; resetting playstyle and continuing", ex);
+            Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
+            Rs2AntibanSettings.actionCooldownActive = false;
+        }
+    }
 
     private BuilderTask getRandomStartingTask() {
         BuilderTask[] tasks = BuilderTask.values();
