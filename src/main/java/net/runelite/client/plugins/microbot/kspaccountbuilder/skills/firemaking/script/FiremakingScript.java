@@ -21,6 +21,8 @@ import java.awt.event.KeyEvent;
 @Slf4j
 public class FiremakingScript {
     private static final int CAMPFIRE_SEARCH_RADIUS = 20;
+    private static final int CAMPFIRE_LIGHT_WAIT_TIMEOUT_MS = 4_000;
+    private static final int CAMPFIRE_ACTION_SETTLE_TIMEOUT_MS = 6_000;
     private static final String[] PRODUCT_SELECTION_PROMPTS = {
             "Product selection",
             "How many would you like to burn?",
@@ -72,6 +74,10 @@ public class FiremakingScript {
         }
 
         if (tendActiveForestersCampfire(bestLogId)) {
+            return;
+        }
+
+        if (lightForestersCampfire(bestLogId)) {
             return;
         }
 
@@ -227,6 +233,28 @@ public class FiremakingScript {
             Global.sleepUntil(() -> !Rs2Player.isAnimating() && !Rs2Player.isInteracting(), 8_000);
         }
 
+        return true;
+    }
+
+    private boolean lightForestersCampfire(int bestLogId) {
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
+            status = "Waiting to light Forester's Campfire";
+            return true;
+        }
+
+        if (!Rs2Inventory.hasItem(Needed.TINDERBOX) || !Rs2Inventory.hasItem(bestLogId)) {
+            return false;
+        }
+
+        status = "Lighting Forester's Campfire";
+        boolean lit = Rs2Inventory.combine("Tinderbox", getLogName(bestLogId));
+        if (!lit) {
+            return false;
+        }
+
+        Global.sleepUntil(this::isProductSelectionDialogueOpen, CAMPFIRE_LIGHT_WAIT_TIMEOUT_MS);
+        Global.sleepUntil(() -> Rs2Player.isAnimating() || Rs2Player.isInteracting(), CAMPFIRE_LIGHT_WAIT_TIMEOUT_MS);
+        Global.sleepUntil(() -> !Rs2Player.isAnimating() && !Rs2Player.isInteracting(), CAMPFIRE_ACTION_SETTLE_TIMEOUT_MS);
         return true;
     }
 }
