@@ -42,18 +42,8 @@ public class CombatScript {
     private static final int GE_TROUT_RESTOCK_AMOUNT = 500;
     private static final long REPOSITION_COOLDOWN_MS = 3_500L;
 
-    private boolean boneBuryEnabled = true;
-    private boolean coinLootingEnabled = true;
     private String status = "Idle";
-    private boolean wasInCombatLastTick = false;
-    private WorldPoint lastKillLocation;
-    private long lastKillAt = 0L;
     private long lastRepositionAttemptAt = 0L;
-
-    public void configureLooting(boolean enableBoneBury, boolean enableCoinLooting) {
-        this.boneBuryEnabled = enableBoneBury;
-        this.coinLootingEnabled = enableCoinLooting;
-    }
 
     public void execute() {
         try {
@@ -75,7 +65,6 @@ public class CombatScript {
                 return;
             }
 
-            updateKillWindow(target);
 
             if (Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
                 status = "Fighting in " + target.getDisplayName();
@@ -177,11 +166,11 @@ public class CombatScript {
     }
 
     private boolean lootDropsInArea(CombatTrainingTarget target) {
-        if (!isPlayerInTargetArea(target.getArea()) || !canLootFromRecentKill(target)) {
+        if (!isPlayerInTargetArea(target.getArea())) {
             return false;
         }
 
-        if (boneBuryEnabled && buryBonesInInventory()) {
+        if (buryBonesInInventory()) {
             return true;
         }
 
@@ -189,11 +178,11 @@ public class CombatScript {
             return false;
         }
 
-        if (boneBuryEnabled && lootByName("bones")) {
+        if (lootByName("bones")) {
             return true;
         }
 
-        if (coinLootingEnabled && Rs2GroundItem.lootCoins(new LootingParameters(LOOT_RADIUS, 1, 1, 0, false, true, "coins"))) {
+        if (Loot.lootCoins(LOOT_RADIUS)) {
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
             return true;
         }
@@ -212,29 +201,6 @@ public class CombatScript {
     }
 
 
-    private void updateKillWindow(CombatTrainingTarget target) {
-        boolean nowInCombat = Rs2Player.isInteracting() || Rs2Player.isAnimating();
-        if (wasInCombatLastTick && !nowInCombat && isPlayerInTargetArea(target.getArea())) {
-            lastKillLocation = Rs2Player.getWorldLocation();
-            lastKillAt = System.currentTimeMillis();
-        }
-        wasInCombatLastTick = nowInCombat;
-    }
-
-    private boolean canLootFromRecentKill(CombatTrainingTarget target) {
-        if (lastKillLocation == null) {
-            return false;
-        }
-
-        if (System.currentTimeMillis() - lastKillAt > 25_000) {
-            return false;
-        }
-
-        WorldPoint playerLocation = Rs2Player.getWorldLocation();
-        return playerLocation != null
-                && target.getArea().contains(lastKillLocation)
-                && playerLocation.distanceTo(lastKillLocation) <= LOOT_RADIUS + 2;
-    }
 
     private boolean buryBonesInInventory() {
         List<Rs2ItemModel> bones = Rs2Inventory.getBones();

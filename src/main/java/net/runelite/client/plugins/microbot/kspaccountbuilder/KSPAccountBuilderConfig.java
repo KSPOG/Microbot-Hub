@@ -17,30 +17,23 @@ public interface KSPAccountBuilderConfig extends Config {
     String antibanSection = "antiban";
 
     @ConfigSection(
-            name = "Looting",
-            description = "Looting and burying behavior settings",
-            position = 1
-    )
-    String lootingSection = "looting";
-
-    @ConfigSection(
             name = "Task Rotation",
             description = "Task switching behavior",
-            position = 2
+            position = 1
     )
     String taskSection = "taskRotation";
 
     @ConfigSection(
             name = "Break Handler",
             description = "Custom run/break cycle behavior",
-            position = 3
+            position = 2
     )
     String breakSection = "breakHandler";
 
     @ConfigSection(
             name = "Debug Skills",
             description = "Enable or disable specific skills for debugging",
-            position = 4
+            position = 3
     )
     String debugSkillsSection = "debugSkills";
 
@@ -66,27 +59,7 @@ public interface KSPAccountBuilderConfig extends Config {
         return 0.2;
     }
 
-    @ConfigItem(
-            keyName = "enableBoneBury",
-            name = "Enable bone bury",
-            description = "Bury bones while running supported tasks",
-            position = 0,
-            section = lootingSection
-    )
-    default boolean enableBoneBury() {
-        return true;
-    }
 
-    @ConfigItem(
-            keyName = "enableCoinLooting",
-            name = "Enable coin looting",
-            description = "Loot ground coins while running supported tasks",
-            position = 1,
-            section = lootingSection
-    )
-    default boolean enableCoinLooting() {
-        return true;
-    }
 
     @ConfigItem(
             keyName = "taskSwitchMinutes",

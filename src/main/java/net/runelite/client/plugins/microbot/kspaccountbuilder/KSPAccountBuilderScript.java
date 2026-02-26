@@ -159,7 +159,6 @@ public class KSPAccountBuilderScript extends Script {
         switch (activeTask) {
             case COMBAT:
                 currentTask = "Combat";
-                combatScript.configureLooting(config.enableBoneBury(), config.enableCoinLooting());
                 combatScript.execute();
                 status = combatScript.getStatus();
                 break;
