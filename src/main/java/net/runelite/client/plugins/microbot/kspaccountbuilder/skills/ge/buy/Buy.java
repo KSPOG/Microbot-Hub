@@ -86,6 +86,44 @@ public final class Buy {
         return true;
     }
 
+
+    public static boolean buyItemToBank(String itemName, int quantity) {
+        if (itemName == null || itemName.isBlank() || quantity <= 0) {
+            return false;
+        }
+
+        if (!Rs2GrandExchange.walkToGrandExchange() || !Rs2GrandExchange.openExchange()) {
+            return false;
+        }
+
+        sleepUntil(Rs2GrandExchange::isOpen, 7000);
+        if (!Rs2GrandExchange.isOpen()) {
+            return false;
+        }
+
+        if (!ensureExchangeSlotAvailable()) {
+            return false;
+        }
+
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.BUY)
+                .itemName(itemName)
+                .quantity(quantity)
+                .percent(8)
+                .closeAfterCompletion(false)
+                .build();
+
+        boolean offered = Rs2GrandExchange.processOffer(request);
+        if (!offered) {
+            return false;
+        }
+
+        sleepUntil(() -> Rs2GrandExchange.hasBoughtOffer() || !Rs2GrandExchange.isOpen(), BUY_WAIT_TIMEOUT_MS);
+        collectOffersToBank();
+        Rs2GrandExchange.closeExchange();
+        return true;
+    }
+
     private static boolean refreshBankItems() {
         if (Rs2Bank.isOpen()) {
             return true;
