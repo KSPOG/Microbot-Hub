@@ -60,7 +60,6 @@ public interface KSPAccountBuilderConfig extends Config {
     }
 
 
-
     @ConfigItem(
             keyName = "taskSwitchMinutes",
             name = "Switch task every (minutes)",

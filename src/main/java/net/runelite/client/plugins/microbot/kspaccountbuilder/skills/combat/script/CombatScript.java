@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.scr
 import lombok.Getter;
 import net.runelite.api.Actor;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.Actor;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.coords.WorldArea;
@@ -53,8 +54,17 @@ public class CombatScript {
     private long waitForLootUntilMs = 0L;
 
 
+    private static final long LOOT_WAIT_AFTER_KILL_MS = 2_500L;
+
     private String status = "Idle";
     private long lastRepositionAttemptAt = 0L;
+    private int cachedTargetNpcIndex = -1;
+    private long waitForLootUntilMs = 0L;
+
+
+    private String status = "Idle";
+    private long lastRepositionAttemptAt = 0L;
+
 
 
     public void execute() {
@@ -72,10 +82,14 @@ public class CombatScript {
             }
 
             if (!isPlayerInTargetArea(target.getArea())) {
+                clearLootWaitState();
                 status = "Walking to " + target.getDisplayName();
                 Rs2Walker.walkTo(getAreaCenter(target.getArea()));
                 return;
             }
+
+
+            updateCombatTargetTracking();
 
 
             updateCombatTargetTracking();
@@ -141,7 +155,11 @@ public class CombatScript {
 
     private boolean ensureCombatLoadout() {
         if (hasCombatSetupReady()) {
+
+            clearLootWaitState();
+
             waitForLootUntilMs = 0L;
+
             return true;
         }
 
@@ -197,6 +215,13 @@ public class CombatScript {
         return missing;
     }
 
+
+    private void clearLootWaitState() {
+        cachedTargetNpcIndex = -1;
+        waitForLootUntilMs = 0L;
+    }
+
+
     private void updateCombatTargetTracking() {
         Actor interacting = Rs2Player.getInteracting();
         if (interacting instanceof Rs2NpcModel) {
@@ -219,7 +244,11 @@ public class CombatScript {
 
     private boolean shouldWaitForLoot(CombatTrainingTarget target) {
         if (waitForLootUntilMs <= 0L || System.currentTimeMillis() >= waitForLootUntilMs) {
+
+            clearLootWaitState();
+
             waitForLootUntilMs = 0L;
+
             return false;
         }
 
@@ -228,7 +257,11 @@ public class CombatScript {
         }
 
         if (!hasAnyGroundItemsNearby() && (Rs2Inventory.getBones() == null || Rs2Inventory.getBones().isEmpty())) {
+
+            clearLootWaitState();
+
             waitForLootUntilMs = 0L;
+
             return false;
         }
 
@@ -237,15 +270,20 @@ public class CombatScript {
 
     private boolean lootDropsInArea(CombatTrainingTarget target) {
 
+        if (!isPlayerInTargetArea(target.getArea())) {
+
+
 
 
         if (!isPlayerInTargetArea(target.getArea()) || Rs2Player.isInCombat() || Rs2Combat.inCombat()) {
+
             return false;
         }
 
         if (!hasAnyGroundItemsNearby()) {
             return buryBonesInInventory();
         }
+
 
 
 
@@ -257,6 +295,7 @@ public class CombatScript {
         if (!hasAnyGroundItemsNearby()) {
             return buryBonesInInventory();
         }
+
 
 
         if (buryBonesInInventory()) {
@@ -274,6 +313,10 @@ public class CombatScript {
         if (Loot.lootCoins(LOOT_RADIUS)) {
 
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
+            clearLootWaitState();
+
+
+            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
             waitForLootUntilMs = 0L;
 
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
@@ -282,6 +325,7 @@ public class CombatScript {
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
 
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), 2_500);
+
 
 
             return true;
@@ -317,6 +361,8 @@ public class CombatScript {
         if (Rs2Inventory.interact(bones.get(0), "bury")) {
             sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.getBones().size() < bones.size(), BURY_WAIT_TIMEOUT_MS);
 
+            clearLootWaitState();
+
             return true;
         }
         return false;
@@ -326,6 +372,9 @@ public class CombatScript {
         LootingParameters params = new LootingParameters(LOOT_RADIUS, 1, 1, 0, false, true, itemName);
         if (Rs2GroundItem.lootItemsBasedOnNames(params)) {
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting(), LOOT_ACTION_WAIT_TIMEOUT_MS);
+
+            clearLootWaitState();
+
 
             waitForLootUntilMs = 0L;
 
@@ -346,7 +395,12 @@ public class CombatScript {
                 .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
                         .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
 
+
+                .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
+                        .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
+
                 .min(Comparator.comparingInt(Rs2NpcModel::getDistanceFromPlayer))
+
 
                 .orElse(null);
 
@@ -376,6 +430,10 @@ public class CombatScript {
                         && n.getWorldLocation() != null
                         && target.getArea().contains(n.getWorldLocation())
                         && isNpcAvailableForAttack(n))
+
+                .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
+                        .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
+
 
                 .min(Comparator.comparingInt((Rs2NpcModel n) -> n.getInteracting() == Microbot.getClient().getLocalPlayer() ? 0 : 1)
                         .thenComparingInt(Rs2NpcModel::getDistanceFromPlayer))
