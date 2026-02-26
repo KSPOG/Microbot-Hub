@@ -13,10 +13,9 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 
-
-
-import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import java.awt.event.KeyEvent;
 
 @Slf4j
 public class FiremakingScript {
@@ -44,6 +43,10 @@ public class FiremakingScript {
 
         int bestLogId = resolveBestLogForCurrentLevel();
 
+        if (handleProductSelectionDialogue()) {
+            return;
+        }
+
         if (handleBurnSelectionWidget(bestLogId)) {
             return;
         }
@@ -66,6 +69,18 @@ public class FiremakingScript {
         return Needed.getBestLogsForLevel(firemakingLevel);
     }
 
+
+    private boolean handleProductSelectionDialogue() {
+        if (!Rs2Widget.hasWidget("Product selection") && !Rs2Widget.hasWidget("How many would you like to burn?")) {
+            return false;
+        }
+
+        status = "Confirming product selection";
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+        Global.sleepUntil(() -> !Rs2Widget.hasWidget("Product selection")
+                && !Rs2Widget.hasWidget("How many would you like to burn?"), 2_000);
+        return true;
+    }
 
     private boolean handleBurnSelectionWidget(int bestLogId) {
         if (!Rs2Widget.hasWidget("What would you like to burn?")) {
