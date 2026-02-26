@@ -8,6 +8,7 @@ import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.firemaking.
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.woodcutting.script.WoodcuttingScript;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.PlayStyle;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.ui.ClientUI;
@@ -63,6 +64,7 @@ public class KSPAccountBuilderScript extends Script {
         Rs2Antiban.resetAntibanSettings();
         if (config.enableAntiban()) {
             Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
+            Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
             Rs2AntibanSettings.actionCooldownChance = Math.max(0.0, Math.min(1.0, config.actionCooldownChance()));
         }
 
@@ -105,6 +107,8 @@ public class KSPAccountBuilderScript extends Script {
                 executeActiveTask();
 
                 if (config.enableAntiban()) {
+                    // Defensive re-apply in case another script/util reset antiban runtime state.
+                    Rs2Antiban.setPlayStyle(PlayStyle.EXTREME_AGGRESSIVE);
                     Rs2Antiban.actionCooldown();
                     Rs2Antiban.takeMicroBreakByChance();
                 }

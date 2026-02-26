@@ -13,6 +13,9 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+
+
 @Slf4j
 public class FiremakingScript {
     private static final int CAMPFIRE_SEARCH_RADIUS = 20;
@@ -39,6 +42,12 @@ public class FiremakingScript {
 
         int bestLogId = resolveBestLogForCurrentLevel();
 
+
+        if (handleBurnSelectionWidget(bestLogId)) {
+            return;
+        }
+
+
         if (!hasRequiredSupplies(bestLogId)) {
             withdrawRequiredSuppliesFromGrandExchangeBank(bestLogId);
             return;
@@ -56,6 +65,44 @@ public class FiremakingScript {
         int firemakingLevel = Microbot.getClient().getRealSkillLevel(Skill.FIREMAKING);
         return Needed.getBestLogsForLevel(firemakingLevel);
     }
+
+
+
+    private boolean handleBurnSelectionWidget(int bestLogId) {
+        if (!Rs2Widget.hasWidget("What would you like to burn?")) {
+            return false;
+        }
+
+        status = "Selecting burn quantity and logs";
+
+        // New burn interface requires selecting quantity and then selecting the log option.
+        Rs2Widget.clickWidget("All");
+
+        String logName = getLogName(bestLogId);
+        boolean clickedLog = Rs2Widget.clickWidget(logName);
+        if (!clickedLog) {
+            // Fallback to generic logs label in case naming differs by client/build.
+            Rs2Widget.clickWidget("Logs");
+        }
+
+        Global.sleepUntil(() -> !Rs2Widget.hasWidget("What would you like to burn?")
+                || Rs2Player.isAnimating()
+                || Rs2Player.isInteracting(), 3_000);
+        return true;
+    }
+
+    private String getLogName(int logId) {
+        if (logId == Needed.WILLOW_LOGS) {
+            return "Willow logs";
+        }
+
+        if (logId == Needed.OAK_LOGS) {
+            return "Oak logs";
+        }
+
+        return "Logs";
+    }
+
 
     private boolean hasRequiredSupplies(int bestLogId) {
         return Rs2Inventory.hasItem(Needed.TINDERBOX)
