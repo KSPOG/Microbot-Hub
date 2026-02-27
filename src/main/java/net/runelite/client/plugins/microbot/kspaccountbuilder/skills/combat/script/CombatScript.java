@@ -6,7 +6,9 @@ import net.runelite.api.ItemID;
 import net.runelite.api.Skill;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.widgets.WidgetInfo;
+
 import net.runelite.client.plugins.microbot.inventory.Rs2ItemModel;
+
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.areas.MobArea;
@@ -32,6 +34,7 @@ import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
@@ -64,6 +67,10 @@ public class CombatScript {
 
 
         return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
+
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
 
 
     }
@@ -131,6 +138,10 @@ public class CombatScript {
         if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
 
 
+        if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
+
 
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
@@ -175,7 +186,11 @@ public class CombatScript {
         }
 
         if (!isWearingTeamCape() && hasTeamCapeInBank()) {
+
+            Rs2Bank.withdrawX(getBestAvailableTeamCapeName(), 1);
+
             Rs2Bank.withdrawX(this::isTeamCapeItem, 1);
+
             Global.sleep(150);
         }
     }
@@ -187,7 +202,11 @@ public class CombatScript {
         }
         Rs2Inventory.wield(Gear.AMULET_OF_POWER);
         if (!isWearingTeamCape()) {
+
+            Rs2Inventory.interact(getBestAvailableTeamCapeName(), "Wear");
+
             Rs2Inventory.interact(this::isTeamCapeItem, "Wear");
+
         }
     }
 
@@ -296,6 +315,38 @@ public class CombatScript {
 
     private boolean isWearingTeamCape() {
 
+        for (String capeName : getTeamCapeNameCandidates()) {
+            if (Rs2Equipment.isWearing(capeName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasTeamCapeInBank() {
+        return getBestAvailableTeamCapeName() != null;
+    }
+
+    private String getBestAvailableTeamCapeName() {
+        return Arrays.stream(getTeamCapeNameCandidates())
+                .filter(Rs2Bank::hasItem)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String[] getTeamCapeNameCandidates() {
+        List<String> names = new ArrayList<>();
+        names.add(Gear.DEFAULT_TEAM_CAPE_NAME);
+        for (int i = 1; i <= 50; i++) {
+            names.add("Team-" + i + " cape");
+        }
+        return names.toArray(new String[0]);
+    }
+
+    private boolean buryBonesInInventory() {
+        if (Rs2Inventory.interact(ItemID.BONES, "Bury")) {
+
+
         return Rs2Equipment.isWearing(this::isTeamCapeItem)
                 || Rs2Equipment.isWearing(Gear.DEFAULT_TEAM_CAPE_NAME);
     }
@@ -347,6 +398,7 @@ public class CombatScript {
     private boolean buryBonesInInventory() {
         List<Rs2ItemModel> bones = Rs2Inventory.getBones();
         if (bones != null && !bones.isEmpty() && Rs2Inventory.interact(bones.get(0), "Bury")) {
+
             status = "Burying bones";
             Global.sleep(350);
             return true;
@@ -371,7 +423,11 @@ public class CombatScript {
             return false;
         }
 
+
+        Rs2Bank.depositAllExcept(getProtectedInventoryIds());
+
         Rs2Bank.depositAll(item -> item != null && shouldBankInventoryItem(item));
+
         Global.sleep(250);
 
         withdrawFood();
@@ -381,6 +437,23 @@ public class CombatScript {
         Rs2Bank.closeBank();
         return true;
     }
+
+
+    private Integer[] getProtectedInventoryIds() {
+        List<Integer> protectedIds = new ArrayList<>();
+        protectedIds.add(Gear.AMULET_OF_POWER);
+
+        for (int foodId : Gear.FOOD_REQUIREMENTS) {
+            protectedIds.add(foodId);
+        }
+        for (int weaponId : Gear.BEST_MELEE_WEAPONS_BY_LEVEL) {
+            protectedIds.add(weaponId);
+        }
+        for (int armourId : Gear.BEST_MELEE_ARMOUR_BY_LEVEL) {
+            protectedIds.add(armourId);
+        }
+
+        return protectedIds.toArray(new Integer[0]);
 
     private boolean shouldBankInventoryItem(Rs2ItemModel item) {
         if (item.getName() != null && isTeamCapeItem(item)) {
@@ -414,6 +487,7 @@ public class CombatScript {
         }
 
         return false;
+
     }
 
     private boolean ensureBalancedMeleeStatsTraining() {
@@ -501,7 +575,11 @@ public class CombatScript {
 
                     true,
 
+
+                    true,
+
                     false,
+
 
 
                     true,
@@ -591,6 +669,7 @@ public class CombatScript {
 
     private int[] armourSet(int helm, int body, int legs, int shield) {
         return new int[]{helm, body, legs, shield};
+
 
         if (defence >= Armour.RUNE_ARMOUR_EQUIP_LEVEL) return new int[]{
                 Armour.RUNE_FULL_HELM,
