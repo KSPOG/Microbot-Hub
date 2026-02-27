@@ -26,7 +26,8 @@ public class KSPAccountBuilderPlugin extends Plugin {
 
 
 
-    public static final String VERSION = "0.0.82";
+    public static final String VERSION = "0.0.84";
+
 
 
 

@@ -10,6 +10,8 @@ import net.runelite.client.plugins.microbot.inventory.Rs2ItemModel;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.areas.MobArea;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.gear.armour.Armour;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.gear.swords.Swords;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.ge.sell.Sell;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.loot.Loot;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
@@ -54,7 +56,9 @@ public class CombatScript {
     }
 
     public boolean hasCombatSetupReady() {
-        return hasFoodInInventory() && hasBestWeaponEquipped() && hasArmourPieceEquipped() && isWearingTeamCape();
+
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
     }
 
     public void execute() {
@@ -105,7 +109,9 @@ public class CombatScript {
         withdrawBestAvailableGear();
         equipInventoryGear();
 
-        if (!hasBestWeaponEquipped() || !hasArmourPieceEquipped() || !isWearingTeamCape()) {
+
+        if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
             return sellLootAndBuyUpgrades();
@@ -269,11 +275,21 @@ public class CombatScript {
     }
 
     private boolean isWearingTeamCape() {
+
+        return Rs2Equipment.isWearing(this::isTeamCapeItem)
+                || Rs2Equipment.isWearing(Gear.DEFAULT_TEAM_CAPE_NAME);
+    }
+
+    private boolean hasTeamCapeInBank() {
+        return Rs2Bank.hasItem(this::isTeamCapeItem)
+                || Rs2Bank.hasItem(Gear.DEFAULT_TEAM_CAPE_NAME);
+
         return Rs2Equipment.isWearing(this::isTeamCapeItem);
     }
 
     private boolean hasTeamCapeInBank() {
         return Rs2Bank.hasItem(this::isTeamCapeItem);
+
     }
 
     private boolean isTeamCapeItem(Rs2ItemModel item) {
@@ -282,6 +298,12 @@ public class CombatScript {
         }
 
         String lowerName = item.getName().toLowerCase();
+
+        if (lowerName.contains(Gear.DEFAULT_TEAM_CAPE_NAME.toLowerCase())) {
+            return true;
+        }
+
+
         for (String teamCapeNameMatcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
             if (lowerName.contains(teamCapeNameMatcher.toLowerCase())) {
                 return true;
@@ -468,65 +490,65 @@ public class CombatScript {
         return Rs2Equipment.isWearing(bestWeaponForAttackLevel());
     }
 
-    private boolean hasArmourPieceEquipped() {
+    private boolean hasBestArmourEquipped() {
         for (int armourId : bestArmourForDefenceLevel()) {
-            if (Rs2Equipment.isWearing(armourId)) {
-                return true;
+            if (!Rs2Equipment.isWearing(armourId)) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     private int bestWeaponForAttackLevel() {
         int attack = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
-        if (attack >= 40) return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[0];
-        if (attack >= 30) return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[1];
-        if (attack >= 20) return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[2];
-        if (attack >= 10) return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[3];
-        if (attack >= 5) return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[4];
-        if (attack >= 1) return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[5];
-        return Gear.BEST_MELEE_WEAPONS_BY_LEVEL[6];
+        if (attack >= Swords.RUNE_SCIMITAR_ATTACK_LEVEL) return Swords.RUNE_SCIMITAR;
+        if (attack >= Swords.ADAMANT_SCIMITAR_ATTACK_LEVEL) return Swords.ADAMANT_SCIMITAR;
+        if (attack >= Swords.MITHRIL_SCIMITAR_ATTACK_LEVEL) return Swords.MITHRIL_SCIMITAR;
+        if (attack >= Swords.BLACK_SCIMITAR_ATTACK_LEVEL) return Swords.BLACK_SCIMITAR;
+        if (attack >= Swords.STEEL_SCIMITAR_ATTACK_LEVEL) return Swords.STEEL_SCIMITAR;
+        if (attack >= Swords.IRON_SCIMITAR_ATTACK_LEVEL) return Swords.IRON_SCIMITAR;
+        return Swords.BRONZE_SCIMITAR;
     }
 
     private int[] bestArmourForDefenceLevel() {
         int defence = Microbot.getClient().getRealSkillLevel(Skill.DEFENCE);
 
-        if (defence >= 40) return new int[]{
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[0],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[1],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[2],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[3]
+        if (defence >= Armour.RUNE_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.RUNE_FULL_HELM,
+                Armour.RUNE_PLATEBODY,
+                Armour.RUNE_PLATELEGS,
+                Armour.RUNE_KITESHIELD
         };
-        if (defence >= 30) return new int[]{
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[4],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[5],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[6],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[7]
+        if (defence >= Armour.ADAMANT_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.ADAMANT_FULL_HELM,
+                Armour.ADAMANT_PLATEBODY,
+                Armour.ADAMANT_PLATELEGS,
+                Armour.ADAMANT_KITESHIELD
         };
-        if (defence >= 20) return new int[]{
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[8],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[9],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[10],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[11]
+        if (defence >= Armour.MITHRIL_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.MITHRIL_FULL_HELM,
+                Armour.MITHRIL_PLATEBODY,
+                Armour.MITHRIL_PLATELEGS,
+                Armour.MITHRIL_KITESHIELD
         };
-        if (defence >= 10) return new int[]{
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[12],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[13],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[14],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[15]
+        if (defence >= Armour.BLACK_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.BLACK_FULL_HELM,
+                Armour.BLACK_PLATEBODY,
+                Armour.BLACK_PLATELEGS,
+                Armour.BLACK_KITESHIELD
         };
-        if (defence >= 1) return new int[]{
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[16],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[17],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[18],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[19]
+        if (defence >= Armour.IRON_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.IRON_FULL_HELM,
+                Armour.IRON_PLATEBODY,
+                Armour.IRON_PLATELEGS,
+                Armour.IRON_KITESHIELD
         };
 
         return new int[]{
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[20],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[21],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[22],
-                Gear.BEST_MELEE_ARMOUR_BY_LEVEL[23]
+                Armour.BRONZE_FULL_HELM,
+                Armour.BRONZE_PLATEBODY,
+                Armour.BRONZE_PLATELEGS,
+                Armour.BRONZE_KITESHIELD
         };
     }
 }
