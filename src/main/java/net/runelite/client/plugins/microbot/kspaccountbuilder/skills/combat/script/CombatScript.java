@@ -118,12 +118,14 @@ public class CombatScript {
         equipInventoryGear();
 
         if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
             List<String> upgradesToBuy = getMissingUpgradeNames();
             if (upgradesToBuy.isEmpty()) {
                 status = "Waiting to equip available gear";
                 Rs2Bank.closeBank();
                 return false;
             }
+
 
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
@@ -362,39 +364,63 @@ public class CombatScript {
         List<String> names = new ArrayList<>();
 
         int bestWeapon = bestWeaponForAttackLevel();
+
         if (!hasItemAvailable(bestWeapon)) {
             String weaponName = getItemName(bestWeapon);
             if (weaponName != null && !names.contains(weaponName)) {
+
+        if (!Rs2Equipment.isWearing(bestWeapon) && Rs2Bank.count(bestWeapon) <= 0) {
+            String weaponName = getItemName(bestWeapon);
+            if (weaponName != null) {
+
                 names.add(weaponName);
             }
         }
 
         for (int armourId : bestArmourForDefenceLevel()) {
+
             if (!hasItemAvailable(armourId)) {
                 String armourName = getItemName(armourId);
                 if (armourName != null && !names.contains(armourName)) {
+
+            if (!Rs2Equipment.isWearing(armourId) && Rs2Bank.count(armourId) <= 0) {
+                String armourName = getItemName(armourId);
+                if (armourName != null) {
+
                     names.add(armourName);
                 }
             }
         }
 
+
         if (!hasItemAvailable(Gear.AMULET_OF_POWER)) {
             String amuletName = getItemName(Gear.AMULET_OF_POWER);
             if (amuletName != null && !names.contains(amuletName)) {
+
+        if (!Rs2Equipment.isWearing(Gear.AMULET_OF_POWER) && Rs2Bank.count(Gear.AMULET_OF_POWER) <= 0) {
+            String amuletName = getItemName(Gear.AMULET_OF_POWER);
+            if (amuletName != null) {
+
                 names.add(amuletName);
             }
         }
 
+
         if (!isWearingTeamCape() && getTeamCapeInInventoryName() == null && !hasTeamCapeInBank()) {
+
+        if (!isWearingTeamCape() && !hasTeamCapeInBank()) {
+
             names.add(Gear.DEFAULT_TEAM_CAPE_NAME);
         }
 
         return names;
     }
 
+
     private boolean hasItemAvailable(int itemId) {
         return Rs2Equipment.isWearing(itemId) || Rs2Inventory.count(itemId) > 0 || Rs2Bank.count(itemId) > 0;
     }
+
 
     private String getItemName(int itemId) {
         ItemComposition item = Microbot.getClientThread()
@@ -661,4 +687,7 @@ public class CombatScript {
     private int[] armourSet(int helm, int body, int legs, int shield) {
         return new int[]{helm, body, legs, shield};
     }
+
+}
+
 }
