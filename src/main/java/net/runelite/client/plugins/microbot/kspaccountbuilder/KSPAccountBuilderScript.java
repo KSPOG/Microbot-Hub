@@ -28,6 +28,8 @@ public class KSPAccountBuilderScript extends Script {
     private static volatile String currentTask = "None";
     private static volatile Instant startedAt;
 
+    private final CombatScript combatRunner = new CombatScript();
+
 
     private final net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript combatScript =
             new net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript();
@@ -55,7 +57,11 @@ public class KSPAccountBuilderScript extends Script {
         startedAt = Instant.now();
         startupBankingComplete = false;
 
+
+        combatRunner.initialize();
+
         combatScript.initialize();
+
         initializeBreakScheduling(config);
 
         Rs2Antiban.resetAntibanSettings();
@@ -96,8 +102,13 @@ public class KSPAccountBuilderScript extends Script {
 
                 currentTask = "Combat";
                 Rs2AntibanSettings.naturalMouse = true;
+
+                combatRunner.execute();
+                status = combatRunner.getStatus();
+
                 combatScript.execute();
                 status = combatScript.getStatus();
+
 
                 if (config.enableAntiban()) {
                     applyAntibanCycle();
@@ -125,7 +136,11 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private boolean prepareForTaskStart() {
+
+        if (combatRunner.hasCombatSetupReady()) {
+
         if (combatScript.hasCombatSetupReady()) {
+
             status = "Ready (inventory already prepared)";
             return true;
         }
@@ -266,7 +281,11 @@ public class KSPAccountBuilderScript extends Script {
         breakEndsAt = null;
         nextBreakAt = null;
         restoreTitle();
+
+        combatRunner.shutdown();
+
         combatScript.shutdown();
+
         Rs2AntibanSettings.naturalMouse = false;
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
