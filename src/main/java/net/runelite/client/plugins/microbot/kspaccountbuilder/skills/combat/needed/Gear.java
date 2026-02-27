@@ -25,6 +25,8 @@ public final class Gear {
             "Team cape"
     };
 
+    public static final String DEFAULT_TEAM_CAPE_NAME = "Team-1 cape";
+
     public static final int[] BEST_MELEE_WEAPONS_BY_LEVEL = {
             Swords.RUNE_SCIMITAR,
             Swords.ADAMANT_SCIMITAR,

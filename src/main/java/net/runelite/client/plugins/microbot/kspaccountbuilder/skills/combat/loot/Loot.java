@@ -15,6 +15,8 @@ public final class Loot {
     }
 
     public static final int[] DEFAULT_LOOT = {
+            ItemID.BONES,
+            ItemID.BIG_BONES,
             ItemID.COWHIDE,
             ItemID.GOBLIN_MAIL,
             ItemID.CHEFS_HAT,
