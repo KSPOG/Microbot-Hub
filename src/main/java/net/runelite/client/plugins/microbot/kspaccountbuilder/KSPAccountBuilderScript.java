@@ -32,10 +32,12 @@ public class KSPAccountBuilderScript extends Script {
 
 
 
+
     private final net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript combatScript =
             new net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript();
 
     private final CombatScript combatScript = new CombatScript();
+
 
 
     private volatile boolean startupBankingComplete;
@@ -53,6 +55,13 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     public boolean run(KSPAccountBuilderConfig config) {
+
+        setStatusAndTask("Starting", "Combat");
+        startedAt = Instant.now();
+        startupBankingComplete = false;
+
+        combatRunner.initialize();
+
 
         setStatusAndTask("Starting", "Combat");
         startedAt = Instant.now();
@@ -113,14 +122,6 @@ public class KSPAccountBuilderScript extends Script {
                 combatRunner.execute();
                 status = combatRunner.getStatus();
 
-                combatRunner.execute();
-                status = combatRunner.getStatus();
-
-                combatScript.execute();
-                status = combatScript.getStatus();
-
-
-
                 if (config.enableAntiban()) {
                     applyAntibanCycle();
                 }
@@ -149,12 +150,6 @@ public class KSPAccountBuilderScript extends Script {
 
         if (combatRunner.hasCombatSetupReady()) {
 
-
-        if (combatRunner.hasCombatSetupReady()) {
-
-        if (combatScript.hasCombatSetupReady()) {
-
-
             status = "Ready (inventory already prepared)";
             return true;
         }
@@ -177,7 +172,6 @@ public class KSPAccountBuilderScript extends Script {
         originalTitle = safeGetTitle();
 
         if (!config.enableCustomBreakHandler()) {
-            nextBreakAt = null;
             return;
         }
 
@@ -193,8 +187,7 @@ public class KSPAccountBuilderScript extends Script {
         Instant now = Instant.now();
         if (breakActive) {
             if (breakEndsAt != null && now.isAfter(breakEndsAt)) {
-                breakActive = false;
-                breakEndsAt = null;
+                clearActiveBreak();
                 nextBreakAt = now.plus(Duration.ofMinutes(randomBetween(config.minRunMinutes(), config.maxRunMinutes())));
                 restoreTitle();
                 return;
@@ -272,6 +265,13 @@ public class KSPAccountBuilderScript extends Script {
         currentTask = newTask;
     }
 
+
+    private void clearActiveBreak() {
+        breakActive = false;
+        breakEndsAt = null;
+    }
+
+
     private void resetBreakState() {
         breakActive = false;
         breakEndsAt = null;
@@ -301,14 +301,8 @@ public class KSPAccountBuilderScript extends Script {
         startupBankingComplete = false;
         resetBreakState();
         restoreTitle();
-
+      
         combatRunner.shutdown();
-
-
-        combatRunner.shutdown();
-
-        combatScript.shutdown();
-
 
         Rs2AntibanSettings.naturalMouse = false;
         Rs2Antiban.resetAntibanSettings();

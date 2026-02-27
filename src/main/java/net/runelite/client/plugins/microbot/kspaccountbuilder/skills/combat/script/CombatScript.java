@@ -29,8 +29,6 @@ import java.util.List;
 public final class CombatScript {
 
 
-public final class CombatScript {
-
 public class CombatScript {
 
 
