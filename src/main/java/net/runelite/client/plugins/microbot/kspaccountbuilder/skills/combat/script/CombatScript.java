@@ -56,7 +56,12 @@ public class CombatScript {
     }
 
     public boolean hasCombatSetupReady() {
+
         return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
+
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
     }
 
     public void execute() {
@@ -112,7 +117,13 @@ public class CombatScript {
         withdrawBestAvailableGear();
         equipInventoryGear();
 
+
         if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
+        if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
             return sellLootAndBuyUpgrades();
@@ -276,6 +287,8 @@ public class CombatScript {
     }
 
     private boolean isWearingTeamCape() {
+
+
         return Rs2Equipment.isWearing(this::isTeamCapeItem)
                 || Rs2Equipment.isWearing(Gear.DEFAULT_TEAM_CAPE_NAME);
     }
@@ -283,6 +296,14 @@ public class CombatScript {
     private boolean hasTeamCapeInBank() {
         return Rs2Bank.hasItem(this::isTeamCapeItem)
                 || Rs2Bank.hasItem(Gear.DEFAULT_TEAM_CAPE_NAME);
+
+
+        return Rs2Equipment.isWearing(this::isTeamCapeItem);
+    }
+
+    private boolean hasTeamCapeInBank() {
+        return Rs2Bank.hasItem(this::isTeamCapeItem);
+
     }
 
     private boolean isTeamCapeItem(Rs2ItemModel item) {
@@ -291,9 +312,11 @@ public class CombatScript {
         }
 
         String lowerName = item.getName().toLowerCase();
+
         if (lowerName.contains(Gear.DEFAULT_TEAM_CAPE_NAME.toLowerCase())) {
             return true;
         }
+
 
         for (String teamCapeNameMatcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
             if (lowerName.contains(teamCapeNameMatcher.toLowerCase())) {
@@ -454,7 +477,11 @@ public class CombatScript {
                     1,
                     1,
                     0,
+
                     true,
+
+                    false,
+
                     true,
                     lootName
             ))) {
