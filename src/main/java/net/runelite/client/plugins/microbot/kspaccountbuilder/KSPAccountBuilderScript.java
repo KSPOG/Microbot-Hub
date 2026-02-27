@@ -31,6 +31,7 @@ public class KSPAccountBuilderScript extends Script {
     private final CombatScript combatRunner = new CombatScript();
 
 
+
     private final net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript combatScript =
             new net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript();
 
@@ -52,6 +53,13 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     public boolean run(KSPAccountBuilderConfig config) {
+
+        setStatusAndTask("Starting", "Combat");
+        startedAt = Instant.now();
+        startupBankingComplete = false;
+
+        combatRunner.initialize();
+
         status = "Starting";
         currentTask = "Combat";
         startedAt = Instant.now();
@@ -61,6 +69,7 @@ public class KSPAccountBuilderScript extends Script {
         combatRunner.initialize();
 
         combatScript.initialize();
+
 
         initializeBreakScheduling(config);
 
@@ -81,14 +90,12 @@ public class KSPAccountBuilderScript extends Script {
                 updateClientTitle();
 
                 if (breakActive) {
-                    status = "On break";
-                    currentTask = "Break";
+                    setStatusAndTask("On break", "Break");
                     return;
                 }
 
                 if (!Microbot.isLoggedIn()) {
-                    status = "Waiting for login";
-                    currentTask = "Login";
+                    setStatusAndTask("Waiting for login", "Login");
                     return;
                 }
 
@@ -106,16 +113,19 @@ public class KSPAccountBuilderScript extends Script {
                 combatRunner.execute();
                 status = combatRunner.getStatus();
 
+                combatRunner.execute();
+                status = combatRunner.getStatus();
+
                 combatScript.execute();
                 status = combatScript.getStatus();
+
 
 
                 if (config.enableAntiban()) {
                     applyAntibanCycle();
                 }
             } catch (Exception ex) {
-                status = "Error";
-                currentTask = "Error";
+                setStatusAndTask("Error", "Error");
                 log.error("KSPAccountBuilder encountered an error", ex);
             }
         }, LOOP_INITIAL_DELAY_MS, LOOP_DELAY_MS, TimeUnit.MILLISECONDS);
@@ -139,7 +149,11 @@ public class KSPAccountBuilderScript extends Script {
 
         if (combatRunner.hasCombatSetupReady()) {
 
+
+        if (combatRunner.hasCombatSetupReady()) {
+
         if (combatScript.hasCombatSetupReady()) {
+
 
             status = "Ready (inventory already prepared)";
             return true;
@@ -159,8 +173,7 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private void initializeBreakScheduling(KSPAccountBuilderConfig config) {
-        breakActive = false;
-        breakEndsAt = null;
+        resetBreakState();
         originalTitle = safeGetTitle();
 
         if (!config.enableCustomBreakHandler()) {
@@ -173,8 +186,7 @@ public class KSPAccountBuilderScript extends Script {
 
     private void handleCustomBreaks(KSPAccountBuilderConfig config) {
         if (!config.enableCustomBreakHandler()) {
-            breakActive = false;
-            breakEndsAt = null;
+            resetBreakState();
             return;
         }
 
@@ -254,6 +266,17 @@ public class KSPAccountBuilderScript extends Script {
         }
     }
 
+
+    private void setStatusAndTask(String newStatus, String newTask) {
+        status = newStatus;
+        currentTask = newTask;
+    }
+
+    private void resetBreakState() {
+        breakActive = false;
+        breakEndsAt = null;
+        nextBreakAt = null;
+    }
     private int randomBetween(int min, int max) {
         int sanitizedMin = Math.max(1, Math.min(min, max));
         int sanitizedMax = Math.max(1, Math.max(min, max));
@@ -274,17 +297,18 @@ public class KSPAccountBuilderScript extends Script {
 
     @Override
     public void shutdown() {
-        status = "Stopped";
-        currentTask = "Stopped";
+        setStatusAndTask("Stopped", "Stopped");
         startupBankingComplete = false;
-        breakActive = false;
-        breakEndsAt = null;
-        nextBreakAt = null;
+        resetBreakState();
         restoreTitle();
 
         combatRunner.shutdown();
 
+
+        combatRunner.shutdown();
+
         combatScript.shutdown();
+
 
         Rs2AntibanSettings.naturalMouse = false;
         Rs2Antiban.resetAntibanSettings();
