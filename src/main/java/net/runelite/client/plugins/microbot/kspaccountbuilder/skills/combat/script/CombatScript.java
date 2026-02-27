@@ -25,10 +25,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
-
-public final class CombatScript {
-
-
 public class CombatScript {
 
 
