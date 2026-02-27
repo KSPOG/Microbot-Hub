@@ -31,14 +31,6 @@ public class KSPAccountBuilderScript extends Script {
     private final CombatScript combatRunner = new CombatScript();
 
 
-
-
-    private final net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript combatScript =
-            new net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript();
-
-
-
-
     private volatile boolean startupBankingComplete;
     private volatile boolean breakActive;
     private volatile Instant nextBreakAt;
@@ -58,26 +50,7 @@ public class KSPAccountBuilderScript extends Script {
         setStatusAndTask("Starting", "Combat");
         startedAt = Instant.now();
         startupBankingComplete = false;
-
         combatRunner.initialize();
-
-
-        setStatusAndTask("Starting", "Combat");
-        startedAt = Instant.now();
-        startupBankingComplete = false;
-
-        combatRunner.initialize();
-
-        status = "Starting";
-        currentTask = "Combat";
-        startedAt = Instant.now();
-        startupBankingComplete = false;
-
-
-        combatRunner.initialize();
-
-        combatScript.initialize();
-
 
         initializeBreakScheduling(config);
 
