@@ -59,11 +59,19 @@ public class CombatScript {
 
         return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
 
+
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
     }
 
     public void execute() {
         if (!Microbot.isLoggedIn()) {
             status = "Waiting for login";
+            return;
+        }
+
+        if (isPlayerBusy()) {
+            status = "Waiting for current action";
             return;
         }
 
@@ -111,6 +119,10 @@ public class CombatScript {
 
 
         if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
+        if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
 
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
@@ -276,6 +288,7 @@ public class CombatScript {
 
     private boolean isWearingTeamCape() {
 
+
         return Rs2Equipment.isWearing(this::isTeamCapeItem)
                 || Rs2Equipment.isWearing(Gear.DEFAULT_TEAM_CAPE_NAME);
     }
@@ -283,6 +296,7 @@ public class CombatScript {
     private boolean hasTeamCapeInBank() {
         return Rs2Bank.hasItem(this::isTeamCapeItem)
                 || Rs2Bank.hasItem(Gear.DEFAULT_TEAM_CAPE_NAME);
+
 
         return Rs2Equipment.isWearing(this::isTeamCapeItem);
     }
@@ -434,11 +448,19 @@ public class CombatScript {
             return true;
         }
 
+        if (isPlayerBusy()) {
+            return false;
+        }
+
         status = "Walking to goblin area";
         return Rs2Walker.walkTo(GOBLIN_AREA_CENTER);
     }
 
     private boolean lootTrainingAreaDrops() {
+        if (isPlayerBusy()) {
+            return false;
+        }
+
         if (Loot.lootCoins(AREA_LOOT_RADIUS)) {
             status = "Looting coins";
             return true;
@@ -455,7 +477,11 @@ public class CombatScript {
                     1,
                     1,
                     0,
+
+                    true,
+
                     false,
+
                     true,
                     lootName
             ))) {
@@ -468,13 +494,21 @@ public class CombatScript {
     }
 
     private void attackGoblin() {
-        if (Rs2Player.isInCombat() || Rs2Player.isInteracting() || Rs2Player.isAnimating()) {
+        if (Rs2Player.isInCombat()) {
             status = "Fighting";
+            return;
+        }
+
+        if (isPlayerBusy()) {
             return;
         }
 
         status = "Attacking goblin";
         Rs2Npc.attack("Goblin");
+    }
+
+    private boolean isPlayerBusy() {
+        return Rs2Player.isMoving() || Rs2Player.isInteracting() || Rs2Player.isAnimating();
     }
 
     private boolean hasFoodInInventory() {
