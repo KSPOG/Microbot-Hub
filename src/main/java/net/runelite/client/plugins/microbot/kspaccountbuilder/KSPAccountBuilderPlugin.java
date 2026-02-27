@@ -1,7 +1,7 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
-import lombok.extern.slf4j.Slf4j;
 import com.google.inject.Provides;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -26,8 +26,7 @@ public class KSPAccountBuilderPlugin extends Plugin {
 
 
 
-    public static final String VERSION = "0.0.56";
-
+    public static final String VERSION = "0.0.76";
 
 
 
@@ -44,7 +43,6 @@ public class KSPAccountBuilderPlugin extends Plugin {
 
     @Inject
     private KSPAccountBuilderOverlay overlay;
-
 
     @Provides
     KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {

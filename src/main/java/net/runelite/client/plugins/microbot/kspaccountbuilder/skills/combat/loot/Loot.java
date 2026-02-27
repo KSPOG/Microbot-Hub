@@ -1,10 +1,17 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.loot;
 
 import net.runelite.api.ItemID;
+import net.runelite.client.plugins.microbot.util.grounditem.LootingParameters;
+import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 
 public final class Loot {
     private Loot() {
         throw new UnsupportedOperationException("Utility class");
+    }
+
+
+    public static boolean lootCoins(int lootRadius) {
+        return Rs2GroundItem.lootCoins(new LootingParameters(lootRadius, 1, 1, 0, false, true, "coins"));
     }
 
     public static final int[] DEFAULT_LOOT = {
