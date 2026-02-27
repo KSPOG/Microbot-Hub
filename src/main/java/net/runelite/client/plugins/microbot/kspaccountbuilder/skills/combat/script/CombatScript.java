@@ -25,7 +25,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
+
 public final class CombatScript {
+
+
+public final class CombatScript {
+
+public class CombatScript {
+
+
     private static final WorldPoint GOBLIN_AREA_CENTER = new WorldPoint(3252, 3230, 0);
     private static final int AREA_LOOT_RADIUS = 12;
 
