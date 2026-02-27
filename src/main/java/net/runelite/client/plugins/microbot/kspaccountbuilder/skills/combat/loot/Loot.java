@@ -11,10 +11,12 @@ public final class Loot {
 
 
     public static boolean lootCoins(int lootRadius) {
-        return Rs2GroundItem.lootCoins(new LootingParameters(lootRadius, 1, 1, 0, false, true, "coins"));
+        return Rs2GroundItem.lootCoins(new LootingParameters(lootRadius, 1, 1, 0, true, true, "coins"));
     }
 
     public static final int[] DEFAULT_LOOT = {
+            ItemID.BONES,
+            ItemID.BIG_BONES,
             ItemID.COWHIDE,
             ItemID.GOBLIN_MAIL,
             ItemID.CHEFS_HAT,
