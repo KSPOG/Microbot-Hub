@@ -2,23 +2,31 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.scr
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ItemComposition;
+import net.runelite.api.ItemID;
 import net.runelite.api.Skill;
+import net.runelite.api.VarPlayer;
+import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.client.plugins.microbot.inventory.Rs2ItemModel;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.areas.MobArea;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.ge.sell.Sell;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.loot.Loot;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.needed.Gear;
 import net.runelite.client.plugins.microbot.util.Global;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
+import net.runelite.client.plugins.microbot.util.grounditem.LootingParameters;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.ArrayList;
@@ -46,7 +54,7 @@ public class CombatScript {
     }
 
     public boolean hasCombatSetupReady() {
-        return hasFoodInInventory() && hasBestWeaponEquipped() && hasArmourPieceEquipped();
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasArmourPieceEquipped() && isWearingTeamCape();
     }
 
     public void execute() {
@@ -56,6 +64,18 @@ public class CombatScript {
         }
 
         if (!ensureCombatSetup()) {
+            return;
+        }
+
+        if (buryBonesInInventory()) {
+            return;
+        }
+
+        if (bankWhenInventoryFull()) {
+            return;
+        }
+
+        if (!ensureBalancedMeleeStatsTraining()) {
             return;
         }
 
@@ -85,7 +105,7 @@ public class CombatScript {
         withdrawBestAvailableGear();
         equipInventoryGear();
 
-        if (!hasBestWeaponEquipped() || !hasArmourPieceEquipped()) {
+        if (!hasBestWeaponEquipped() || !hasArmourPieceEquipped() || !isWearingTeamCape()) {
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
             return sellLootAndBuyUpgrades();
@@ -127,6 +147,11 @@ public class CombatScript {
             Rs2Bank.withdrawX(Gear.AMULET_OF_POWER, 1);
             Global.sleep(150);
         }
+
+        if (!isWearingTeamCape() && hasTeamCapeInBank()) {
+            Rs2Bank.withdrawX(this::isTeamCapeItem, 1);
+            Global.sleep(150);
+        }
     }
 
     private void equipInventoryGear() {
@@ -135,6 +160,9 @@ public class CombatScript {
             Rs2Inventory.wield(armourId);
         }
         Rs2Inventory.wield(Gear.AMULET_OF_POWER);
+        if (!isWearingTeamCape()) {
+            Rs2Inventory.interact(this::isTeamCapeItem, "Wear");
+        }
     }
 
     private boolean sellLootAndBuyUpgrades() {
@@ -226,6 +254,10 @@ public class CombatScript {
             }
         }
 
+        if (!isWearingTeamCape() && !hasTeamCapeInBank()) {
+            names.add(Gear.DEFAULT_TEAM_CAPE_NAME);
+        }
+
         return names;
     }
 
@@ -234,6 +266,145 @@ public class CombatScript {
                 .runOnClientThreadOptional(() -> Microbot.getItemManager().getItemComposition(itemId))
                 .orElse(null);
         return item == null ? null : item.getName();
+    }
+
+    private boolean isWearingTeamCape() {
+        return Rs2Equipment.isWearing(this::isTeamCapeItem);
+    }
+
+    private boolean hasTeamCapeInBank() {
+        return Rs2Bank.hasItem(this::isTeamCapeItem);
+    }
+
+    private boolean isTeamCapeItem(Rs2ItemModel item) {
+        if (item == null || item.getName() == null) {
+            return false;
+        }
+
+        String lowerName = item.getName().toLowerCase();
+        for (String teamCapeNameMatcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
+            if (lowerName.contains(teamCapeNameMatcher.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean buryBonesInInventory() {
+        List<Rs2ItemModel> bones = Rs2Inventory.getBones();
+        if (bones != null && !bones.isEmpty() && Rs2Inventory.interact(bones.get(0), "Bury")) {
+            status = "Burying bones";
+            Global.sleep(350);
+            return true;
+        }
+
+        if (Rs2Inventory.interact(ItemID.BIG_BONES, "Bury")) {
+            status = "Burying big bones";
+            Global.sleep(350);
+            return true;
+        }
+
+        return false;
+    }
+
+    private boolean bankWhenInventoryFull() {
+        if (!Rs2Inventory.isFull()) {
+            return false;
+        }
+
+        status = "Inventory full - banking";
+        if (!Rs2Bank.walkToBankAndUseBank() || !Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        Rs2Bank.depositAll(item -> item != null && shouldBankInventoryItem(item));
+        Global.sleep(250);
+
+        withdrawFood();
+        withdrawBestAvailableGear();
+        equipInventoryGear();
+
+        Rs2Bank.closeBank();
+        return true;
+    }
+
+    private boolean shouldBankInventoryItem(Rs2ItemModel item) {
+        if (item.getName() != null && isTeamCapeItem(item)) {
+            return false;
+        }
+
+        return !isGearItemId(item.getId());
+    }
+
+    private boolean isGearItemId(int itemId) {
+        if (itemId == Gear.AMULET_OF_POWER) {
+            return true;
+        }
+
+        for (int foodId : Gear.FOOD_REQUIREMENTS) {
+            if (foodId == itemId) {
+                return true;
+            }
+        }
+
+        for (int weaponId : Gear.BEST_MELEE_WEAPONS_BY_LEVEL) {
+            if (weaponId == itemId) {
+                return true;
+            }
+        }
+
+        for (int armourId : Gear.BEST_MELEE_ARMOUR_BY_LEVEL) {
+            if (armourId == itemId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean ensureBalancedMeleeStatsTraining() {
+        if (Rs2Player.isInCombat() || Rs2Player.isInteracting()) {
+            return true;
+        }
+
+        int attackLevel = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
+        int strengthLevel = Microbot.getClient().getRealSkillLevel(Skill.STRENGTH);
+        int defenceLevel = Microbot.getClient().getRealSkillLevel(Skill.DEFENCE);
+
+        int targetStyle = 1;
+        if (attackLevel <= strengthLevel && attackLevel <= defenceLevel) {
+            targetStyle = 0;
+        } else if (defenceLevel <= attackLevel && defenceLevel <= strengthLevel) {
+            targetStyle = 3;
+        }
+
+        int currentStyle = Microbot.getVarbitPlayerValue(VarPlayer.ATTACK_STYLE);
+        if (currentStyle == targetStyle) {
+            return true;
+        }
+
+        if (Rs2Tab.getCurrentTab() != InterfaceTab.COMBAT) {
+            Rs2Tab.switchToCombatOptionsTab();
+            Global.sleep(250);
+        }
+
+        status = "Balancing melee stats";
+        Rs2Combat.setAttackStyle(mapStyleWidget(targetStyle));
+        Global.sleep(250);
+        return true;
+    }
+
+    private WidgetInfo mapStyleWidget(int styleIndex) {
+        if (styleIndex == 0) {
+            return WidgetInfo.COMBAT_STYLE_ONE;
+        }
+        if (styleIndex == 1) {
+            return WidgetInfo.COMBAT_STYLE_TWO;
+        }
+        if (styleIndex == 2) {
+            return WidgetInfo.COMBAT_STYLE_THREE;
+        }
+        return WidgetInfo.COMBAT_STYLE_FOUR;
     }
 
     private boolean walkToGoblinArea() {
@@ -252,7 +423,20 @@ public class CombatScript {
         }
 
         for (int lootId : Loot.DEFAULT_LOOT) {
-            if (Rs2GroundItem.loot(lootId, AREA_LOOT_RADIUS)) {
+            String lootName = getItemName(lootId);
+            if (lootName == null || lootName.isBlank()) {
+                continue;
+            }
+
+            if (Rs2GroundItem.lootItemsBasedOnNames(new LootingParameters(
+                    AREA_LOOT_RADIUS,
+                    1,
+                    1,
+                    0,
+                    false,
+                    true,
+                    lootName
+            ))) {
                 status = "Looting drops";
                 return true;
             }
