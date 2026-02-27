@@ -3,7 +3,9 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript;
+
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.PlayStyle;
@@ -28,6 +30,13 @@ public class KSPAccountBuilderScript extends Script {
 
     private final CombatScript combatRunner = new CombatScript();
 
+
+    private final net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript combatScript =
+            new net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript();
+
+    private final CombatScript combatScript = new CombatScript();
+
+
     private volatile boolean startupBankingComplete;
     private volatile boolean breakActive;
     private volatile Instant nextBreakAt;
@@ -48,7 +57,11 @@ public class KSPAccountBuilderScript extends Script {
         startedAt = Instant.now();
         startupBankingComplete = false;
 
+
         combatRunner.initialize();
+
+        combatScript.initialize();
+
         initializeBreakScheduling(config);
 
         Rs2Antiban.resetAntibanSettings();
@@ -89,8 +102,13 @@ public class KSPAccountBuilderScript extends Script {
 
                 currentTask = "Combat";
                 Rs2AntibanSettings.naturalMouse = true;
+
                 combatRunner.execute();
                 status = combatRunner.getStatus();
+
+                combatScript.execute();
+                status = combatScript.getStatus();
+
 
                 if (config.enableAntiban()) {
                     applyAntibanCycle();
@@ -118,7 +136,11 @@ public class KSPAccountBuilderScript extends Script {
     }
 
     private boolean prepareForTaskStart() {
+
         if (combatRunner.hasCombatSetupReady()) {
+
+        if (combatScript.hasCombatSetupReady()) {
+
             status = "Ready (inventory already prepared)";
             return true;
         }
@@ -259,7 +281,11 @@ public class KSPAccountBuilderScript extends Script {
         breakEndsAt = null;
         nextBreakAt = null;
         restoreTitle();
+
         combatRunner.shutdown();
+
+        combatScript.shutdown();
+
         Rs2AntibanSettings.naturalMouse = false;
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
