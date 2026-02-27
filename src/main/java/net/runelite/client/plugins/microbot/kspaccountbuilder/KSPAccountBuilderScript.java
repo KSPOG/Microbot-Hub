@@ -3,6 +3,9 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript;
+
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.PlayStyle;
@@ -25,8 +28,12 @@ public class KSPAccountBuilderScript extends Script {
     private static volatile String currentTask = "None";
     private static volatile Instant startedAt;
 
+
     private final net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript combatScript =
             new net.runelite.client.plugins.microbot.kspaccountbuilder.skills.combat.script.CombatScript();
+
+    private final CombatScript combatScript = new CombatScript();
+
 
     private volatile boolean startupBankingComplete;
     private volatile boolean breakActive;
