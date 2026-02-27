@@ -56,7 +56,16 @@ public class CombatScript {
     }
 
     public boolean hasCombatSetupReady() {
+
         return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
+
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
+
+        return hasFoodInInventory() && hasBestWeaponEquipped() && hasBestArmourEquipped() && isWearingTeamCape();
+
+
     }
 
     public void execute() {
@@ -112,7 +121,17 @@ public class CombatScript {
         withdrawBestAvailableGear();
         equipInventoryGear();
 
+
         if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
+        if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
+        if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+
+
+
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
             return sellLootAndBuyUpgrades();
@@ -276,6 +295,7 @@ public class CombatScript {
     }
 
     private boolean isWearingTeamCape() {
+
         return Rs2Equipment.isWearing(this::isTeamCapeItem)
                 || Rs2Equipment.isWearing(Gear.DEFAULT_TEAM_CAPE_NAME);
     }
@@ -283,6 +303,7 @@ public class CombatScript {
     private boolean hasTeamCapeInBank() {
         return Rs2Bank.hasItem(this::isTeamCapeItem)
                 || Rs2Bank.hasItem(Gear.DEFAULT_TEAM_CAPE_NAME);
+
     }
 
     private boolean isTeamCapeItem(Rs2ItemModel item) {
@@ -291,9 +312,29 @@ public class CombatScript {
 
     private boolean matchesTeamCapeName(String itemName) {
         String lowerName = itemName.toLowerCase();
+
+
+
+        return Rs2Equipment.isWearing(this::isTeamCapeItem);
+    }
+
+    private boolean hasTeamCapeInBank() {
+        return Rs2Bank.hasItem(this::isTeamCapeItem);
+
+    }
+
+    private boolean isTeamCapeItem(Rs2ItemModel item) {
+        if (item == null || item.getName() == null) {
+            return false;
+        }
+
+        String lowerName = item.getName().toLowerCase();
+
+
         if (lowerName.contains(Gear.DEFAULT_TEAM_CAPE_NAME.toLowerCase())) {
             return true;
         }
+
 
         for (String teamCapeNameMatcher : Gear.TEAM_CAPE_NAME_MATCHERS) {
             if (lowerName.contains(teamCapeNameMatcher.toLowerCase())) {
@@ -454,7 +495,15 @@ public class CombatScript {
                     1,
                     1,
                     0,
+
                     true,
+
+
+                    true,
+
+                    false,
+
+
                     true,
                     lootName
             ))) {
@@ -520,6 +569,7 @@ public class CombatScript {
     private int[] bestArmourForDefenceLevel() {
         int defence = Microbot.getClient().getRealSkillLevel(Skill.DEFENCE);
 
+
         if (defence >= Armour.RUNE_ARMOUR_EQUIP_LEVEL) {
             return armourSet(Armour.RUNE_FULL_HELM, Armour.RUNE_PLATEBODY, Armour.RUNE_PLATELEGS, Armour.RUNE_KITESHIELD);
         }
@@ -541,5 +591,43 @@ public class CombatScript {
 
     private int[] armourSet(int helm, int body, int legs, int shield) {
         return new int[]{helm, body, legs, shield};
+
+        if (defence >= Armour.RUNE_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.RUNE_FULL_HELM,
+                Armour.RUNE_PLATEBODY,
+                Armour.RUNE_PLATELEGS,
+                Armour.RUNE_KITESHIELD
+        };
+        if (defence >= Armour.ADAMANT_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.ADAMANT_FULL_HELM,
+                Armour.ADAMANT_PLATEBODY,
+                Armour.ADAMANT_PLATELEGS,
+                Armour.ADAMANT_KITESHIELD
+        };
+        if (defence >= Armour.MITHRIL_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.MITHRIL_FULL_HELM,
+                Armour.MITHRIL_PLATEBODY,
+                Armour.MITHRIL_PLATELEGS,
+                Armour.MITHRIL_KITESHIELD
+        };
+        if (defence >= Armour.BLACK_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.BLACK_FULL_HELM,
+                Armour.BLACK_PLATEBODY,
+                Armour.BLACK_PLATELEGS,
+                Armour.BLACK_KITESHIELD
+        };
+        if (defence >= Armour.IRON_ARMOUR_EQUIP_LEVEL) return new int[]{
+                Armour.IRON_FULL_HELM,
+                Armour.IRON_PLATEBODY,
+                Armour.IRON_PLATELEGS,
+                Armour.IRON_KITESHIELD
+        };
+
+        return new int[]{
+                Armour.BRONZE_FULL_HELM,
+                Armour.BRONZE_PLATEBODY,
+                Armour.BRONZE_PLATELEGS,
+                Armour.BRONZE_KITESHIELD
+        };
     }
 }
