@@ -251,10 +251,15 @@ public class CombatScript {
         int strength = getMeleeLevel(Skill.STRENGTH);
         int defence = getMeleeLevel(Skill.DEFENCE);
 
-        boolean allAtLeastFive = attack >= 5 && strength >= 5 && defence >= 5;
+        boolean hasPassedGoblinStarterLevels = attack >= 5 || strength >= 5 || defence >= 5;
+        boolean stillNeedsMeleeLevels = attack < 20 || strength < 20 || defence < 20;
+
+        return hasPassedGoblinStarterLevels && stillNeedsMeleeLevels;
+       boolean allAtLeastFive = attack >= 5 && strength >= 5 && defence >= 5;
         boolean anyBelowTwenty = attack < 20 || strength < 20 || defence < 20;
 
         return allAtLeastFive && anyBelowTwenty;
+
     }
 
     private boolean isInTrainingArea() {
