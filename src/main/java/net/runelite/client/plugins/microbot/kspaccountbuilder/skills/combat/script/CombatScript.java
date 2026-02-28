@@ -205,6 +205,11 @@ public class CombatScript {
             return;
         }
 
+        if (Rs2Player.isInteracting() || Rs2Player.isInCombat()) {
+            status = "Already in combat";
+            return;
+        }
+
         if (Rs2Player.isMoving()) {
             status = "Moving";
             return;
@@ -235,25 +240,6 @@ public class CombatScript {
     private boolean walkToTrainingArea() {
         if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
             return false;
-
-    private boolean isPlayerBusy() {
-        if (Rs2Player.isMoving()) {
-            return true;
-        }
-
-        if (Rs2Player.isInCombat()) {
-            return Rs2Player.isInteracting() || Rs2Player.isAnimating();
-        }
-
-        return false;
-    }
-
-    private boolean hasFoodInInventory() {
-        for (int foodId : Gear.FOOD_REQUIREMENTS) {
-            if (Rs2Inventory.count(foodId) >= Gear.MIN_TROUT_REQUIRED) {
-                return true;
-            }
-
         }
 
         if (shouldTrainAtCows()) {
@@ -266,7 +252,14 @@ public class CombatScript {
     }
 
     private boolean shouldTrainAtCows() {
-        return getMeleeLevel(Skill.ATTACK) >= 5 && getMeleeLevel(Skill.STRENGTH) >= 5 && getMeleeLevel(Skill.DEFENCE) >= 5;
+        int attack = getMeleeLevel(Skill.ATTACK);
+        int strength = getMeleeLevel(Skill.STRENGTH);
+        int defence = getMeleeLevel(Skill.DEFENCE);
+
+        boolean hasPassedGoblinStarterLevels = attack >= 5 || strength >= 5 || defence >= 5;
+        boolean stillNeedsMeleeLevels = attack < 20 || strength < 20 || defence < 20;
+
+        return hasPassedGoblinStarterLevels && stillNeedsMeleeLevels;
     }
 
     private boolean isInTrainingArea() {
