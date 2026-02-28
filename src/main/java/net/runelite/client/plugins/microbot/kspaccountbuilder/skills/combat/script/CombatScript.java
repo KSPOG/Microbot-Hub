@@ -635,7 +635,15 @@ public class CombatScript {
     }
 
     private boolean isPlayerBusy() {
-        return Rs2Player.isMoving() || Rs2Player.isInteracting() || Rs2Player.isAnimating();
+        if (Rs2Player.isMoving()) {
+            return true;
+        }
+
+        if (Rs2Player.isInCombat()) {
+            return Rs2Player.isInteracting() || Rs2Player.isAnimating();
+        }
+
+        return false;
     }
 
     private boolean hasFoodInInventory() {
