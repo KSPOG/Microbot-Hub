@@ -42,13 +42,21 @@ public class CombatScript {
     private static final int AREA_LOOT_RADIUS = 12;
 
     private String status = "Idle";
+    private boolean wasInCombat;
+    private long forceLootUntil;
+
+    private static final long FORCE_LOOT_AFTER_KILL_MS = 4_000L;
 
     public void initialize() {
         status = "Initializing combat";
+        wasInCombat = false;
+        forceLootUntil = 0L;
     }
 
     public void shutdown() {
         status = "Combat stopped";
+        wasInCombat = false;
+        forceLootUntil = 0L;
     }
 
     public String getStatus() {
@@ -76,6 +84,11 @@ public class CombatScript {
 
         if (!hasCombatSetupReady()) {
             status = "Waiting for required combat gear";
+            return;
+        }
+
+        updateCombatTransitionState();
+        if (forceLootAfterKill()) {
             return;
         }
 
@@ -118,6 +131,13 @@ public class CombatScript {
         equipInventoryGear();
 
         if (!hasBestWeaponEquipped() || !hasBestArmourEquipped() || !isWearingTeamCape()) {
+            List<String> upgradesToBuy = getMissingUpgradeNames();
+            if (upgradesToBuy.isEmpty()) {
+                status = "Waiting to equip available gear";
+                Rs2Bank.closeBank();
+                return false;
+            }
+
             status = "Missing upgrades - going to GE";
             Rs2Bank.closeBank();
             return sellLootAndBuyUpgrades();
@@ -267,14 +287,14 @@ public class CombatScript {
         }
 
         int bestWeapon = bestWeaponForAttackLevel();
-        for (int weaponId : Gear.BEST_MELEE_WEAPONS_BY_LEVEL) {
+        for (int weaponId : getAllMeleeWeaponUpgrades()) {
             if (weaponId != bestWeapon && !idsToSell.contains(weaponId)) {
                 idsToSell.add(weaponId);
             }
         }
 
         int[] bestArmourSet = bestArmourForDefenceLevel();
-        for (int armourId : Gear.BEST_MELEE_ARMOUR_BY_LEVEL) {
+        for (int armourId : getAllMeleeArmourUpgrades()) {
             if (!containsId(bestArmourSet, armourId) && !idsToSell.contains(armourId)) {
                 idsToSell.add(armourId);
             }
@@ -355,34 +375,38 @@ public class CombatScript {
         List<String> names = new ArrayList<>();
 
         int bestWeapon = bestWeaponForAttackLevel();
-        if (!Rs2Equipment.isWearing(bestWeapon) && Rs2Bank.count(bestWeapon) <= 0) {
+        if (!hasItemAvailable(bestWeapon)) {
             String weaponName = getItemName(bestWeapon);
-            if (weaponName != null) {
+            if (weaponName != null && !names.contains(weaponName)) {
                 names.add(weaponName);
             }
         }
 
         for (int armourId : bestArmourForDefenceLevel()) {
-            if (!Rs2Equipment.isWearing(armourId) && Rs2Bank.count(armourId) <= 0) {
+            if (!hasItemAvailable(armourId)) {
                 String armourName = getItemName(armourId);
-                if (armourName != null) {
+                if (armourName != null && !names.contains(armourName)) {
                     names.add(armourName);
                 }
             }
         }
 
-        if (!Rs2Equipment.isWearing(Gear.AMULET_OF_POWER) && Rs2Bank.count(Gear.AMULET_OF_POWER) <= 0) {
+        if (!hasItemAvailable(Gear.AMULET_OF_POWER)) {
             String amuletName = getItemName(Gear.AMULET_OF_POWER);
-            if (amuletName != null) {
+            if (amuletName != null && !names.contains(amuletName)) {
                 names.add(amuletName);
             }
         }
 
-        if (!isWearingTeamCape() && !hasTeamCapeInBank()) {
+        if (!isWearingTeamCape() && getTeamCapeInInventoryName() == null && !hasTeamCapeInBank()) {
             names.add(Gear.DEFAULT_TEAM_CAPE_NAME);
         }
 
         return names;
+    }
+
+    private boolean hasItemAvailable(int itemId) {
+        return Rs2Equipment.isWearing(itemId) || Rs2Inventory.count(itemId) > 0 || Rs2Bank.count(itemId) > 0;
     }
 
     private String getItemName(int itemId) {
@@ -473,10 +497,10 @@ public class CombatScript {
         for (int foodId : Gear.FOOD_REQUIREMENTS) {
             protectedIds.add(foodId);
         }
-        for (int weaponId : Gear.BEST_MELEE_WEAPONS_BY_LEVEL) {
+        for (int weaponId : getAllMeleeWeaponUpgrades()) {
             protectedIds.add(weaponId);
         }
-        for (int armourId : Gear.BEST_MELEE_ARMOUR_BY_LEVEL) {
+        for (int armourId : getAllMeleeArmourUpgrades()) {
             protectedIds.add(armourId);
         }
 
@@ -526,6 +550,28 @@ public class CombatScript {
             return WidgetInfo.COMBAT_STYLE_THREE;
         }
         return WidgetInfo.COMBAT_STYLE_FOUR;
+    }
+
+    private void updateCombatTransitionState() {
+        boolean inCombat = Rs2Player.isInCombat();
+        if (wasInCombat && !inCombat) {
+            forceLootUntil = System.currentTimeMillis() + FORCE_LOOT_AFTER_KILL_MS;
+        }
+        wasInCombat = inCombat;
+    }
+
+    private boolean forceLootAfterKill() {
+        if (System.currentTimeMillis() > forceLootUntil) {
+            return false;
+        }
+
+        status = "Forcing loot after kill";
+        if (lootTrainingAreaDrops()) {
+            return true;
+        }
+
+        Global.sleep(200);
+        return true;
     }
 
     private boolean walkToGoblinArea() {
@@ -612,6 +658,29 @@ public class CombatScript {
             }
         }
         return true;
+    }
+
+    private int[] getAllMeleeWeaponUpgrades() {
+        return new int[]{
+                Swords.RUNE_SCIMITAR,
+                Swords.ADAMANT_SCIMITAR,
+                Swords.MITHRIL_SCIMITAR,
+                Swords.BLACK_SCIMITAR,
+                Swords.STEEL_SCIMITAR,
+                Swords.IRON_SCIMITAR,
+                Swords.BRONZE_SCIMITAR
+        };
+    }
+
+    private int[] getAllMeleeArmourUpgrades() {
+        return new int[]{
+                Armour.RUNE_FULL_HELM, Armour.RUNE_PLATEBODY, Armour.RUNE_PLATELEGS, Armour.RUNE_KITESHIELD,
+                Armour.ADAMANT_FULL_HELM, Armour.ADAMANT_PLATEBODY, Armour.ADAMANT_PLATELEGS, Armour.ADAMANT_KITESHIELD,
+                Armour.MITHRIL_FULL_HELM, Armour.MITHRIL_PLATEBODY, Armour.MITHRIL_PLATELEGS, Armour.MITHRIL_KITESHIELD,
+                Armour.BLACK_FULL_HELM, Armour.BLACK_PLATEBODY, Armour.BLACK_PLATELEGS, Armour.BLACK_KITESHIELD,
+                Armour.IRON_FULL_HELM, Armour.IRON_PLATEBODY, Armour.IRON_PLATELEGS, Armour.IRON_KITESHIELD,
+                Armour.BRONZE_FULL_HELM, Armour.BRONZE_PLATEBODY, Armour.BRONZE_PLATELEGS, Armour.BRONZE_KITESHIELD
+        };
     }
 
     private int bestWeaponForAttackLevel() {

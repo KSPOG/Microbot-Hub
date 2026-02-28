@@ -273,7 +273,7 @@ public class KSPAccountBuilderScript extends Script {
         startupBankingComplete = false;
         resetBreakState();
         restoreTitle();
-      
+
         combatRunner.shutdown();
 
         Rs2AntibanSettings.naturalMouse = false;
