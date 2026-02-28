@@ -231,9 +231,29 @@ public class CombatScript {
         Rs2Npc.attack("Goblin");
     }
 
+
     private boolean walkToTrainingArea() {
         if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
             return false;
+
+    private boolean isPlayerBusy() {
+        if (Rs2Player.isMoving()) {
+            return true;
+        }
+
+        if (Rs2Player.isInCombat()) {
+            return Rs2Player.isInteracting() || Rs2Player.isAnimating();
+        }
+
+        return false;
+    }
+
+    private boolean hasFoodInInventory() {
+        for (int foodId : Gear.FOOD_REQUIREMENTS) {
+            if (Rs2Inventory.count(foodId) >= Gear.MIN_TROUT_REQUIRED) {
+                return true;
+            }
+
         }
 
         if (shouldTrainAtCows()) {
