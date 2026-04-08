@@ -17,6 +17,9 @@ import javax.inject.Inject;
         tags = {"ksp", "account", "builder", "mining"},
         authors = {"KSP"},
         version = "1.0.0",
+
+        version = KSPAccountBuilderPlugin.version,
+
         minClientVersion = "1.9.6",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
