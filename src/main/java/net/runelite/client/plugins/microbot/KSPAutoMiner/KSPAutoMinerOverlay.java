@@ -15,19 +15,19 @@ public class KSPAutoMinerOverlay extends OverlayPanel {
     KSPAutoMinerOverlay(KSPAutoMinerPlugin plugin) {
         super(plugin);
         setPosition(OverlayPosition.TOP_CENTER);
+        panelComponent.setPreferredSize(new Dimension(220, 0));
     }
 
     @Override
     public Dimension render(java.awt.Graphics2D graphics) {
         panelComponent.getChildren().clear();
-        panelComponent.setPreferredSize(new Dimension(230, 150));
         panelComponent.getChildren().add(TitleComponent.builder()
-                .text("KSPAutoMiner")
+                .text("KSP Auto Miner")
                 .color(Color.ORANGE)
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
-                .left("Current Status:")
+                .left("Status:")
                 .right(KSPAutoMinerScript.status)
                 .build());
 
@@ -37,7 +37,7 @@ public class KSPAutoMinerOverlay extends OverlayPanel {
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
-                .left("Time running:")
+                .left("Time Running:")
                 .right(formatDuration(KSPAutoMinerScript.getRuntime()))
                 .build());
 

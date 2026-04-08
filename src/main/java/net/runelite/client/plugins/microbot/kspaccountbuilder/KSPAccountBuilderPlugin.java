@@ -12,33 +12,22 @@ import javax.inject.Inject;
 import java.awt.AWTException;
 
 @PluginDescriptor(
-        name = PluginConstants.KSP + "Account Builder",
-        description = "KSP account progression plugin scaffold.",
-        tags = {"ksp", "account", "builder"},
+        name = PluginConstants.DEFAULT_PREFIX + "KSP Account Builder",
+        description = "Builds fresh accounts with guided skilling progression",
+        tags = {"ksp", "account", "builder", "microbot"},
         authors = {"KSP"},
-        version = KSPAccountBuilderPlugin.VERSION,
+        version = "0.1.0",
         minClientVersion = "2.0.13",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
-
-
-
-    public static final String VERSION = "0.0.89";
-
-
-
-
-
-
+    @Inject
+    private KSPAccountBuilderConfig config;
 
     @Inject
     private KSPAccountBuilderScript script;
-
-    @Inject
-    private KSPAccountBuilderConfig config;
 
     @Inject
     private OverlayManager overlayManager;
@@ -53,14 +42,12 @@ public class KSPAccountBuilderPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
-        log.info("Starting KSP Account Builder plugin.");
         overlayManager.add(overlay);
         script.run(config);
     }
 
     @Override
     protected void shutDown() {
-        log.info("Stopping KSP Account Builder plugin.");
         script.shutdown();
         overlayManager.remove(overlay);
     }

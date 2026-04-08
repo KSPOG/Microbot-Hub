@@ -22,17 +22,13 @@ import java.awt.AWTException;
 )
 @Slf4j
 public class F2pFishingPlugin extends Plugin {
-
     public static final String version = "1.1.9";
-
 
     @Inject
     private F2pFishingConfig config;
 
-    @Provides
-    F2pFishingConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(F2pFishingConfig.class);
-    }
+    @Inject
+    private F2pFishingScript script;
 
     @Inject
     private OverlayManager overlayManager;
@@ -40,8 +36,10 @@ public class F2pFishingPlugin extends Plugin {
     @Inject
     private F2pFishingOverlay overlay;
 
-    @Inject
-    private F2pFishingScript script;
+    @Provides
+    F2pFishingConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(F2pFishingConfig.class);
+    }
 
     @Override
     protected void startUp() throws AWTException {

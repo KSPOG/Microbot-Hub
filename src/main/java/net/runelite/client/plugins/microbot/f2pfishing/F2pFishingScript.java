@@ -5,6 +5,7 @@ import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.ItemID;
+import net.runelite.api.WorldView;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
@@ -501,10 +502,11 @@ public class F2pFishingScript extends Script {
 
     private boolean isAtFishingLocation() {
         WorldPoint target = getFishingLocation();
-        if (target == null) {
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (target == null || playerLocation == null) {
             return false;
         }
-        return Rs2Player.getWorldLocation().distanceTo(target) <= 5;
+        return playerLocation.distanceTo(target) <= 5;
     }
 
     private boolean hasFishingAction(Rs2NpcModel fishingSpot, String action) {
@@ -540,6 +542,9 @@ public class F2pFishingScript extends Script {
 
     private void handleKaramjaTravel() {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (playerLocation == null) {
+            return;
+        }
         if (isInKaramjaDockArea(playerLocation)) {
             if (playerLocation.distanceTo(KARAMJA_FISHING_POINT) > 3) {
                 walkToTarget(KARAMJA_FISHING_POINT);
@@ -561,6 +566,9 @@ public class F2pFishingScript extends Script {
 
     private void handleFullInventoryForKaramja() {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (playerLocation == null) {
+            return;
+        }
         if (isInKaramjaDockArea(playerLocation)) {
             Rs2NpcModel customsOfficer = Rs2Npc.getNpc("Customs Officer");
             if (customsOfficer != null) {
@@ -623,18 +631,24 @@ public class F2pFishingScript extends Script {
     }
 
     private boolean walkToNpcLocalTarget(Rs2NpcModel npc) {
-        if (npc == null || Microbot.getClient() == null) {
+        if (npc == null || Microbot.getClient() == null || Microbot.getClient().getTopLevelWorldView() == null) {
             return false;
         }
         LocalPoint targetTile = npc.getLocalLocation();
         if (targetTile == null) {
             return false;
         }
-        WorldPoint targetPoint = WorldPoint.fromLocal(Microbot.getClient(), targetTile);
+        WorldView worldView = Microbot.getClient().getTopLevelWorldView();
+        WorldPoint targetPoint = worldView.isInstance()
+                ? WorldPoint.fromLocalInstance(Microbot.getClient(), targetTile)
+                : WorldPoint.fromLocal(Microbot.getClient(), targetTile);
         return targetPoint != null && Rs2Walker.walkFastCanvas(targetPoint);
     }
 
     private boolean isInKaramjaDockArea(WorldPoint location) {
+        if (location == null) {
+            return false;
+        }
         return location.getX() >= KARAMJA_DOCK_MIN_X
                 && location.getX() <= KARAMJA_DOCK_MAX_X
                 && location.getY() >= KARAMJA_DOCK_MIN_Y
@@ -642,6 +656,9 @@ public class F2pFishingScript extends Script {
     }
 
     private boolean isInPortSarimCustomsArea(WorldPoint location) {
+        if (location == null) {
+            return false;
+        }
         return location.getX() >= PORT_SARIM_CUSTOMS_MIN_X
                 && location.getX() <= PORT_SARIM_CUSTOMS_MAX_X
                 && location.getY() >= PORT_SARIM_CUSTOMS_MIN_Y
@@ -649,6 +666,9 @@ public class F2pFishingScript extends Script {
     }
 
     private boolean isInKaramjaArea(WorldPoint location) {
+        if (location == null) {
+            return false;
+        }
         return location.getX() < 3000 && location.getY() < 3200;
     }
 

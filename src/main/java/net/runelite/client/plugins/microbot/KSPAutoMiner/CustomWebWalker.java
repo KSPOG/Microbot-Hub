@@ -62,6 +62,9 @@ public final class CustomWebWalker {
             if (!Rs2Player.isMoving()
                     && System.currentTimeMillis() - lastWalkActionTime > WALK_ACTION_COOLDOWN_MS) {
                 WorldPoint nextCheckpoint = getNextCheckpoint(path);
+                if (nextCheckpoint == null) {
+                    return WalkerState.UNREACHABLE;
+                }
                 Rs2Walker.walkFastCanvas(nextCheckpoint);
                 lastWalkActionTime = System.currentTimeMillis();
             }
@@ -81,6 +84,9 @@ public final class CustomWebWalker {
     }
 
     private static WorldPoint getNextCheckpoint(List<WorldPoint> path) {
+        if (path == null || path.isEmpty()) {
+            return null;
+        }
         int currentIndex = Rs2Walker.getClosestTileIndex(path);
         int lookahead = ThreadLocalRandom.current().nextInt(LOOKAHEAD_MIN, LOOKAHEAD_MAX + 1);
         int nextIndex = Math.min(currentIndex + lookahead, path.size() - 1);

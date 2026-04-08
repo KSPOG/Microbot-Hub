@@ -85,7 +85,7 @@ public class KSPAutoMinerScript extends Script {
         modeLabel = config.mode().toString();
         Rs2Antiban.resetAntibanSettings();
         if (config.enableAntiban()) {
-            Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
+            Rs2Antiban.antibanSetupTemplates.applyMiningSetup();
             Rs2AntibanSettings.actionCooldownChance = 0.2;
         }
 
@@ -129,11 +129,7 @@ public class KSPAutoMinerScript extends Script {
                     return;
                 }
 
-
                 if (Rs2Player.isAnimating() && !Rs2Player.isMoving()) {
-
-                if (Rs2Player.isAnimating()) {
-
                     return;
                 }
 
@@ -181,11 +177,13 @@ public class KSPAutoMinerScript extends Script {
     }
 
     private void updateTarget(KSPAutoMinerMode mode, KSPAutoMinerRock rockSelection) {
-        int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
-
-        int combatLevel = Microbot.getClient().getLocalPlayer() != null
-                ? Microbot.getClient().getLocalPlayer().getCombatLevel()
-                : 3;
+        int miningLevel = Microbot.getClientThread().invoke(() -> Microbot.getClient().getRealSkillLevel(Skill.MINING));
+        int combatLevel = Microbot.getClientThread().invoke(() -> {
+            if (Microbot.getClient() == null || Microbot.getClient().getLocalPlayer() == null) {
+                return 3;
+            }
+            return Microbot.getClient().getLocalPlayer().getCombatLevel();
+        });
 
         if (rockSelection != selectedRock) {
             selectedRock = rockSelection;
@@ -466,7 +464,8 @@ public class KSPAutoMinerScript extends Script {
 
 
     private GameObject findNearestRock(WorldPoint searchCenter, int radius) {
-        if (searchCenter == null || targetRock == null) {
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (searchCenter == null || targetRock == null || playerLocation == null) {
             return null;
         }
 
@@ -474,8 +473,8 @@ public class KSPAutoMinerScript extends Script {
                 .stream()
                 .filter(Rs2GameObject::isReachable)
                 .min((first, second) -> Integer.compare(
-                        first.getWorldLocation().distanceTo(Rs2Player.getWorldLocation()),
-                        second.getWorldLocation().distanceTo(Rs2Player.getWorldLocation())))
+                        first.getWorldLocation().distanceTo(playerLocation),
+                        second.getWorldLocation().distanceTo(playerLocation)))
                 .orElse(null);
     }
 

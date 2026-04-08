@@ -8,21 +8,23 @@ import net.runelite.client.ui.overlay.components.TitleComponent;
 import javax.inject.Inject;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.time.Duration;
 
 public class KSPAccountBuilderOverlay extends OverlayPanel {
     @Inject
     KSPAccountBuilderOverlay(KSPAccountBuilderPlugin plugin) {
         super(plugin);
         setPosition(OverlayPosition.TOP_CENTER);
+        panelComponent.setPreferredSize(new Dimension(230, 0));
     }
 
     @Override
     public Dimension render(java.awt.Graphics2D graphics) {
         panelComponent.getChildren().clear();
-        panelComponent.setPreferredSize(new Dimension(260, 120));
+
         panelComponent.getChildren().add(TitleComponent.builder()
-                .text("KSPAccountBuilder")
-                .color(Color.ORANGE)
+                .text("KSP Account Builder")
+                .color(Color.GREEN)
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
@@ -37,9 +39,17 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Time Running:")
-                .right(KSPAccountBuilderScript.getRunningTime())
+                .right(formatDuration(KSPAccountBuilderScript.getRuntime()))
                 .build());
 
         return super.render(graphics);
+    }
+
+    private String formatDuration(Duration duration) {
+        long totalSeconds = duration.getSeconds();
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 }

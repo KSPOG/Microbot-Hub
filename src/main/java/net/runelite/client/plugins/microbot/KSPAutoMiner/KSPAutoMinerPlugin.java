@@ -24,14 +24,11 @@ import java.awt.AWTException;
 public class KSPAutoMinerPlugin extends Plugin {
     public static final String version = "0.1.4";
 
-
     @Inject
     private KSPAutoMinerConfig config;
 
-    @Provides
-    KSPAutoMinerConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(KSPAutoMinerConfig.class);
-    }
+    @Inject
+    private KSPAutoMinerScript script;
 
     @Inject
     private OverlayManager overlayManager;
@@ -39,11 +36,20 @@ public class KSPAutoMinerPlugin extends Plugin {
     @Inject
     private KSPAutoMinerOverlay overlay;
 
-    @Inject
-    private KSPAutoMinerScript script;
+    @Provides
+    KSPAutoMinerConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(KSPAutoMinerConfig.class);
+    }
 
     @Override
     protected void startUp() throws AWTException {
         overlayManager.add(overlay);
         script.run(config);
     }
+
+    @Override
+    protected void shutDown() {
+        script.shutdown();
+        overlayManager.remove(overlay);
+    }
+}

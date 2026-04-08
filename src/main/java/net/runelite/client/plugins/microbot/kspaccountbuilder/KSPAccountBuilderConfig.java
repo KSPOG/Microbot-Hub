@@ -2,161 +2,31 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
+import net.runelite.client.config.ConfigInformation;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 
-@ConfigGroup(KSPAccountBuilderConfig.configGroup)
+@ConfigGroup("kspaccountbuilder")
+@ConfigInformation("<h2>KSP Account Builder</h2>" +
+        "Start the plugin on the account you want to progress.<br />" +
+        "This rebuild restores the base plugin shell and mining support files.<br />" +
+        "Enable antiban if you want natural mouse and antiban settings applied.")
 public interface KSPAccountBuilderConfig extends Config {
-    String configGroup = "KSPAccountBuilder";
-
     @ConfigSection(
-            name = "Antiban",
-            description = "Antiban behavior settings",
+            name = "General",
+            description = "General account builder settings",
             position = 0
     )
-    String antibanSection = "antiban";
-
-    @ConfigSection(
-            name = "Task Rotation",
-            description = "Task switching behavior",
-            position = 1
-    )
-    String taskSection = "taskRotation";
-
-    @ConfigSection(
-            name = "Break Handler",
-            description = "Custom run/break cycle behavior",
-            position = 2
-    )
-    String breakSection = "breakHandler";
-
-    @ConfigSection(
-            name = "Debug Skills",
-            description = "Enable or disable specific skills for debugging",
-            position = 3
-    )
-    String debugSkillsSection = "debugSkills";
+    String generalSection = "general";
 
     @ConfigItem(
             keyName = "enableAntiban",
-            name = "Enable antiban",
-            description = "Use universal antiban settings while account builder is running",
+            name = "Enable Antiban/Natural Mouse",
+            description = "Applies antiban and natural mouse settings while the builder is running",
             position = 0,
-            section = antibanSection
+            section = generalSection
     )
     default boolean enableAntiban() {
         return true;
     }
-
-    @ConfigItem(
-            keyName = "actionCooldownChance",
-            name = "Action cooldown chance",
-            description = "Chance (0.0 - 1.0) to trigger action cooldown",
-            position = 1,
-            section = antibanSection
-    )
-    default double actionCooldownChance() {
-        return 0.2;
-    }
-
-
-    @ConfigItem(
-            keyName = "taskSwitchMinutes",
-            name = "Switch task every (minutes)",
-            description = "How often to rotate between available account-builder tasks",
-            position = 0,
-            section = taskSection
-    )
-    default int taskSwitchMinutes() {
-        return 20;
-    }
-
-    @ConfigItem(
-            keyName = "enableCustomBreakHandler",
-            name = "Enable custom break handler",
-            description = "Run for random minutes then logout break for random minutes",
-            position = 0,
-            section = breakSection
-    )
-    default boolean enableCustomBreakHandler() {
-        return false;
-    }
-
-    @ConfigItem(
-            keyName = "minRunMinutes",
-            name = "Run min (minutes)",
-            description = "Minimum run duration before triggering break",
-            position = 1,
-            section = breakSection
-    )
-    default int minRunMinutes() {
-        return 30;
-    }
-
-    @ConfigItem(
-            keyName = "maxRunMinutes",
-            name = "Run max (minutes)",
-            description = "Maximum run duration before triggering break",
-            position = 2,
-            section = breakSection
-    )
-    default int maxRunMinutes() {
-        return 60;
-    }
-
-    @ConfigItem(
-            keyName = "minBreakMinutes",
-            name = "Break min (minutes)",
-            description = "Minimum logout break duration",
-            position = 3,
-            section = breakSection
-    )
-    default int minBreakMinutes() {
-        return 30;
-    }
-
-    @ConfigItem(
-            keyName = "maxBreakMinutes",
-            name = "Break max (minutes)",
-            description = "Maximum logout break duration",
-            position = 4,
-            section = breakSection
-    )
-    default int maxBreakMinutes() {
-        return 60;
-    }
-
-    @ConfigItem(
-            keyName = "debugEnableWoodcutting",
-            name = "Enable Woodcutting",
-            description = "Allow woodcutting task in rotation (debug)",
-            position = 0,
-            section = debugSkillsSection
-    )
-    default boolean debugEnableWoodcutting() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "debugEnableCombat",
-            name = "Enable Combat",
-            description = "Allow combat task in rotation (debug)",
-            position = 1,
-            section = debugSkillsSection
-    )
-    default boolean debugEnableCombat() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "debugEnableFiremaking",
-            name = "Enable Firemaking",
-            description = "Allow firemaking task in rotation (debug)",
-            position = 2,
-            section = debugSkillsSection
-    )
-    default boolean debugEnableFiremaking() {
-        return true;
-    }
-
 }

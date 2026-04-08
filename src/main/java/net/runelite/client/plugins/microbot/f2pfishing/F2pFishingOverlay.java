@@ -1,24 +1,29 @@
 package net.runelite.client.plugins.microbot.f2pfishing;
 
 import net.runelite.client.ui.overlay.OverlayPanel;
+import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
+import net.runelite.client.ui.overlay.components.TitleComponent;
 
 import javax.inject.Inject;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.time.Duration;
 
 public class F2pFishingOverlay extends OverlayPanel {
     @Inject
     F2pFishingOverlay(F2pFishingPlugin plugin) {
-        panelComponent.setPreferredSize(new java.awt.Dimension(220, 0));
+        super(plugin);
+        setPosition(OverlayPosition.TOP_CENTER);
+        panelComponent.setPreferredSize(new Dimension(220, 0));
     }
 
     @Override
-    public java.awt.Dimension render(java.awt.Graphics2D graphics) {
+    public Dimension render(java.awt.Graphics2D graphics) {
         panelComponent.getChildren().clear();
-        panelComponent.getChildren().add(LineComponent.builder()
-                .left("F2P Fishing")
-                .leftColor(Color.CYAN)
+        panelComponent.getChildren().add(TitleComponent.builder()
+                .text("F2P Fishing")
+                .color(Color.CYAN)
                 .build());
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Status")
