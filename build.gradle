@@ -114,6 +114,21 @@ application {
     mainClass = 'net.runelite.client.RuneLite'
 }
 
+// When building selected plugin jars, distribution archives are unnecessary and can fail on Windows
+// if the main shaded client jar is locked by another process.
+if (project.findProperty("pluginList")) {
+    tasks.matching { it.name in [
+            'distZip',
+            'distTar',
+            'shadowDistZip',
+            'shadowDistTar',
+            'startScripts',
+            'shadowStartScripts'
+    ] }.configureEach {
+        enabled = false
+    }
+}
+
 // Plugin Logic
 String pluginVersionFromPluginJson(File pluginDir) {
     def pluginJavaFile = pluginDir.listFiles()?.find { it.name.endsWith("Plugin.java") }
