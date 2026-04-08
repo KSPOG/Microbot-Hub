@@ -5,7 +5,9 @@ import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigInformation;
 import net.runelite.client.config.ConfigItem;
 
+
 @ConfigGroup("KSPAccountBuilder")
+
 @ConfigInformation("Start near a bank with pickaxes available. The script will mine based on level and bank when inventory is full.")
 public interface KSPAccountBuilderConfig extends Config {
     @ConfigItem(
