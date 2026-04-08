@@ -6,9 +6,17 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
+
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.mining.script.MScript;
+import net.runelite.client.ui.overlay.OverlayManager;
+
+import javax.inject.Inject;
+
+
 import java.awt.AWTException;
 
 @PluginDescriptor(
@@ -17,6 +25,20 @@ import java.awt.AWTException;
         tags = {"mining", "microbot", "ksp", "account", "builder"},
         version = KSPAccountBuilderPlugin.version,
         minClientVersion = "2.0.13",
+
+
+
+@PluginDescriptor(
+        name = PluginConstants.KSP + "Account Builder",
+        description = "Automates early account-building mining tasks.",
+        tags = {"ksp", "account", "builder", "mining"},
+        authors = {"KSP"},
+        version = "1.0.0",
+
+        version = KSPAccountBuilderPlugin.version,
+
+        minClientVersion = "1.9.6",
+
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
@@ -31,7 +53,11 @@ public class KSPAccountBuilderPlugin extends Plugin {
     private KSPAccountBuilderOverlay overlay;
 
     @Inject
+
     private KSPAccountBuilderScript accountBuilderScript;
+
+    private MScript miningScript;
+
 
     @Inject
     private KSPAccountBuilderConfig config;
@@ -43,13 +69,25 @@ public class KSPAccountBuilderPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
+
         overlayManager.add(overlay);
         accountBuilderScript.run(config);
+
+
+    protected void startUp() {
+
+        overlayManager.add(overlay);
+        miningScript.run();
+
     }
 
     @Override
     protected void shutDown() {
         overlayManager.remove(overlay);
+
         accountBuilderScript.shutdown();
+
+        miningScript.shutdown();
+
     }
 }
