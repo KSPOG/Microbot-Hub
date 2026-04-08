@@ -18,6 +18,8 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
     @Override
     public Dimension render(Graphics2D graphics) {
+        panelComponent.getChildren().clear();
+
         panelComponent.getChildren().add(TitleComponent.builder()
                 .text("KSP Account Builder v" + KSPAccountBuilderPlugin.version)
                 .color(Color.CYAN)

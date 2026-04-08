@@ -4,6 +4,7 @@ import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KSPAccountBuilderConfig;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.mining.Areas;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.mining.pickelevel.PickaxeELevel;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.mining.pickulevel.PickaxeMLevel;
@@ -20,9 +21,11 @@ import java.util.concurrent.TimeUnit;
 
 public class MScript extends Script {
     private static final String COPPER_ORE = "Copper ore";
+    private KSPAccountBuilderConfig config;
     private static final String TIN_ORE = "Tin ore";
 
-    public boolean run() {
+    public boolean run(KSPAccountBuilderConfig config) {
+        this.config = config;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(this::execute, 0, 800, TimeUnit.MILLISECONDS);
         return true;
     }
