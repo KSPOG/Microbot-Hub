@@ -1,40 +1,57 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
-import net.runelite.client.config.Config;
-import net.runelite.client.config.ConfigGroup;
-import net.runelite.client.config.ConfigInformation;
-import net.runelite.client.config.ConfigItem;
-import net.runelite.client.config.ConfigSection;
+import com.google.inject.Provides;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.ui.overlay.OverlayManager;
 
-@ConfigGroup("KSPAccountBuilder")
-@ConfigInformation("Start near a bank with pickaxes available. The script will mine based on level and bank when inventory is full.")
-public interface KSPAccountBuilderConfig extends Config {
-    @ConfigSection(
-            name = "General",
-            description = "General settings",
-            position = 0
-    )
-    String generalSection = "general";
+import javax.inject.Inject;
+import java.awt.AWTException;
 
-    @ConfigItem(
-            keyName = "guide",
-            name = "How to use",
-            description = "Quick setup steps for KSP Account Builder.",
-            position = 0,
-            section = generalSection
-    )
-    default String guide() {
-        return "1) Start near a bank. 2) Ensure pickaxes are in bank. 3) Enable plugin and let it handle mining + banking.";
+@PluginDescriptor(
+        name = PluginConstants.KSP + "Account Builder",
+        description = "Automates early account-building mining tasks.",
+        tags = {"mining", "microbot", "ksp", "account", "builder"},
+        authors = {"KSP"},
+        version = "1.0.0",
+        minClientVersion = "2.0.13",
+        enabledByDefault = PluginConstants.DEFAULT_ENABLED,
+        isExternal = PluginConstants.IS_EXTERNAL
+)
+@Slf4j
+public class KSPAccountBuilderPlugin extends Plugin {
+    public static final String version = "1.0.0";
+
+    @Inject
+    private OverlayManager overlayManager;
+
+    @Inject
+    private KSPAccountBuilderOverlay overlay;
+
+    @Inject
+    private KSPAccountBuilderScript accountBuilderScript;
+
+    @Inject
+    private KSPAccountBuilderConfig config;
+
+    @Provides
+    @SuppressWarnings("unused")
+    KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(KSPAccountBuilderConfig.class);
     }
 
-    @ConfigItem(
-            keyName = "enableAntiban",
-            name = "Enable Antiban",
-            description = "Toggle antiban behavior during mining.",
-            position = 1,
-            section = generalSection
-    )
-    default boolean enableAntiban() {
-        return true;
+    @Override
+    protected void startUp() throws AWTException {
+        overlayManager.add(overlay);
+        accountBuilderScript.run(config);
+    }
+
+    @Override
+    protected void shutDown() {
+        overlayManager.remove(overlay);
+        accountBuilderScript.shutdown();
     }
 }
