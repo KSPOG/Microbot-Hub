@@ -16,13 +16,14 @@ import java.awt.AWTException;
         description = "Builds fresh accounts with guided skilling progression",
         tags = {"ksp", "account", "builder", "microbot"},
         authors = {"KSP"},
-        version = "0.1.0",
+        version = version,
         minClientVersion = "2.0.13",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class KSPAccountBuilderPlugin extends Plugin {
+    static final String version = "0.1.1";
     @Inject
     private KSPAccountBuilderConfig config;
 
