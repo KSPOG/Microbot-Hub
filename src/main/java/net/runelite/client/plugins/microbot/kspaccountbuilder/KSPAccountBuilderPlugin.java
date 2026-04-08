@@ -13,8 +13,8 @@ import java.awt.AWTException;
 
 @PluginDescriptor(
         name = PluginConstants.KSP + "Account Builder",
-        description = "Automates early account-building mining tasks.",
-        tags = {"mining", "microbot", "ksp", "account", "builder"},
+        description = "KSP account builder base plugin.",
+        tags = {"ksp", "account", "builder", "microbot"},
         authors = {"KSP"},
         version = "1.0.0",
         minClientVersion = "2.0.13",
@@ -32,7 +32,7 @@ public class KSPAccountBuilderPlugin extends Plugin {
     private KSPAccountBuilderOverlay overlay;
 
     @Inject
-    private KSPAccountBuilderScript accountBuilderScript;
+    private KSPAccountBuilderScript script;
 
     @Inject
     private KSPAccountBuilderConfig config;
@@ -46,12 +46,12 @@ public class KSPAccountBuilderPlugin extends Plugin {
     @Override
     protected void startUp() throws AWTException {
         overlayManager.add(overlay);
-        accountBuilderScript.run(config);
+        script.run(config);
     }
 
     @Override
     protected void shutDown() {
+        script.shutdown();
         overlayManager.remove(overlay);
-        accountBuilderScript.shutdown();
     }
 }

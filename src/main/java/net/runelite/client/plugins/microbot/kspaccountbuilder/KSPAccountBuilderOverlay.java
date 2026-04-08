@@ -22,7 +22,7 @@ public class KSPAccountBuilderOverlay extends OverlayPanel {
 
         panelComponent.getChildren().add(TitleComponent.builder()
                 .text("KSP Account Builder v" + KSPAccountBuilderPlugin.version)
-                .color(Color.CYAN)
+                .color(Color.GREEN)
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()

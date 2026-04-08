@@ -1,57 +1,29 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
-import com.google.inject.Provides;
-import lombok.extern.slf4j.Slf4j;
-import net.runelite.client.config.ConfigManager;
-import net.runelite.client.plugins.Plugin;
-import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.plugins.microbot.PluginConstants;
-import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.config.Config;
+import net.runelite.client.config.ConfigGroup;
+import net.runelite.client.config.ConfigInformation;
+import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.ConfigSection;
 
-import javax.inject.Inject;
-import java.awt.AWTException;
+@ConfigGroup("KSPAccountBuilder")
+@ConfigInformation("Basic KSP account builder plugin. Start near a bank and enable the plugin.")
+public interface KSPAccountBuilderConfig extends Config {
+    @ConfigSection(
+            name = "General",
+            description = "General plugin settings",
+            position = 0
+    )
+    String generalSection = "general";
 
-@PluginDescriptor(
-        name = PluginConstants.KSP + "Account Builder",
-        description = "Automates early account-building mining tasks.",
-        tags = {"mining", "microbot", "ksp", "account", "builder"},
-        authors = {"KSP"},
-        version = "1.0.0",
-        minClientVersion = "2.0.13",
-        enabledByDefault = PluginConstants.DEFAULT_ENABLED,
-        isExternal = PluginConstants.IS_EXTERNAL
-)
-@Slf4j
-public class KSPAccountBuilderPlugin extends Plugin {
-    public static final String version = "1.0.0";
-
-    @Inject
-    private OverlayManager overlayManager;
-
-    @Inject
-    private KSPAccountBuilderOverlay overlay;
-
-    @Inject
-    private KSPAccountBuilderScript accountBuilderScript;
-
-    @Inject
-    private KSPAccountBuilderConfig config;
-
-    @Provides
-    @SuppressWarnings("unused")
-    KSPAccountBuilderConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(KSPAccountBuilderConfig.class);
-    }
-
-    @Override
-    protected void startUp() throws AWTException {
-        overlayManager.add(overlay);
-        accountBuilderScript.run(config);
-    }
-
-    @Override
-    protected void shutDown() {
-        overlayManager.remove(overlay);
-        accountBuilderScript.shutdown();
+    @ConfigItem(
+            keyName = "enableAntiban",
+            name = "Enable Antiban",
+            description = "Enable antiban behavior.",
+            section = generalSection,
+            position = 0
+    )
+    default boolean enableAntiban() {
+        return true;
     }
 }
