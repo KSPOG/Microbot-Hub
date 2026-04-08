@@ -1,32 +1,53 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
-import net.runelite.client.plugins.microbot.Microbot;
-import net.runelite.client.plugins.microbot.Script;
+import com.google.inject.Provides;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.microbot.PluginConstants;
 
-import javax.inject.Singleton;
-import java.util.concurrent.TimeUnit;
+import javax.inject.Inject;
 
-@Singleton
-public class KspAccountBuilderScript extends Script
+@PluginDescriptor(
+    name = PluginConstants.KSP + "Account Builder",
+    description = "Skeleton plugin for KSP account builder automation",
+    tags = {"microbot", "ksp", "account", "builder"},
+    authors = {"KSP"},
+    version = KspAccountBuilderPlugin.VERSION,
+    minClientVersion = "2.0.13",
+    enabledByDefault = PluginConstants.DEFAULT_ENABLED,
+    isExternal = PluginConstants.IS_EXTERNAL
+)
+@Slf4j
+@SuppressWarnings("unused") // Loaded dynamically by the hub build/plugin discovery process.
+public class KspAccountBuilderPlugin extends Plugin
 {
-    public boolean run(KspAccountBuilderConfig config)
+    public static final String VERSION = "0.0.18";
+
+    @Inject
+    private KspAccountBuilderScript script;
+
+    @Inject
+    private KspAccountBuilderConfig config;
+
+    @Provides
+    KspAccountBuilderConfig provideConfig(ConfigManager configManager)
     {
-        mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() ->
-        {
-            if (!super.run() || !Microbot.isLoggedIn() || !config.enabled())
-            {
-                return;
-            }
-
-            // TODO: Implement account-building steps.
-        }, 0, 600, TimeUnit.MILLISECONDS);
-
-        return true;
+        return configManager.getConfig(KspAccountBuilderConfig.class);
     }
 
     @Override
-    public void shutdown()
+    protected void startUp()
     {
-        super.shutdown();
+        log.info("Starting KSP Account Builder plugin");
+        script.run(config);
+    }
+
+    @Override
+    protected void shutDown()
+    {
+        log.info("Stopping KSP Account Builder plugin");
+        script.shutdown();
     }
 }

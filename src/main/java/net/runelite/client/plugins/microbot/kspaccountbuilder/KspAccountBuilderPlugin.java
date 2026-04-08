@@ -20,9 +20,10 @@ import javax.inject.Inject;
     isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
+@SuppressWarnings("unused") // Loaded dynamically by the hub build/plugin discovery process.
 public class KspAccountBuilderPlugin extends Plugin
 {
-    public static final String VERSION = "0.0.1";
+    public static final String VERSION = "0.0.18";
 
     @Inject
     private KspAccountBuilderScript script;
