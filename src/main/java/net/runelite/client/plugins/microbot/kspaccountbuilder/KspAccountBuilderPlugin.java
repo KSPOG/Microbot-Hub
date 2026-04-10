@@ -6,7 +6,9 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
+
 import net.runelite.client.ui.overlay.OverlayManager;
+
 
 import javax.inject.Inject;
 
@@ -24,13 +26,16 @@ import javax.inject.Inject;
 @SuppressWarnings("unused") // Loaded dynamically by the hub build/plugin discovery process.
 public class KspAccountBuilderPlugin extends Plugin
 {
+
     public static final String VERSION = "0.0.81";
+
 
     @Inject
     private KspAccountBuilderScript script;
 
     @Inject
     private KspAccountBuilderConfig config;
+
 
     @Inject
     private KSPAccountBuilderOverlay overlay;
@@ -48,7 +53,7 @@ public class KspAccountBuilderPlugin extends Plugin
     protected void startUp()
     {
         log.info("Starting KSP Account Builder plugin");
-        overlayManager.add(overlay);
+
         script.run(config);
     }
 
@@ -57,6 +62,10 @@ public class KspAccountBuilderPlugin extends Plugin
     {
         log.info("Stopping KSP Account Builder plugin");
         script.shutdown();
+
         overlayManager.remove(overlay);
     }
 }
+    }
+}
+
