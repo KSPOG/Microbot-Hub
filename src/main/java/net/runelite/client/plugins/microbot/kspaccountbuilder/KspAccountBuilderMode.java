@@ -5,4 +5,8 @@ public enum KspAccountBuilderMode
     STARTER,
     SKILLER,
     QUESTER
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/main

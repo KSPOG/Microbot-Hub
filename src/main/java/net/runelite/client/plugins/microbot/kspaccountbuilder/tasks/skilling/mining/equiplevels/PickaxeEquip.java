@@ -34,4 +34,8 @@ public enum PickaxeEquip
         }
         return best;
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> origin/main

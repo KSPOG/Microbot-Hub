@@ -8,6 +8,7 @@ import net.runelite.api.coords.WorldPoint;
 public enum Areas
 {
     TIN_COPPER_VARROCK_EAST(
+<<<<<<< HEAD
         "Varrock East Tin & Copper",
         new WorldPoint(3281, 3360, 0),
         new WorldPoint(3291, 3365, 0)
@@ -31,6 +32,31 @@ public enum Areas
         "Barbarian Village Coal",
         new WorldPoint(3079, 3418, 0),
         new WorldPoint(3085, 3422, 0)
+=======
+            "Varrock East Tin & Copper",
+            new WorldPoint(3281, 3360, 0),
+            new WorldPoint(3291, 3365, 0)
+    ),
+    IRON_VARROCK_EAST(
+            "Varrock East Iron",
+            new WorldPoint(3284, 3367, 0),
+            new WorldPoint(3289, 3370, 0)
+    ),
+    CLAY_VARROCK_WEST(
+            "Varrock West Clay",
+            new WorldPoint(3179, 3370, 0),
+            new WorldPoint(3184, 3377, 0)
+    ),
+    SILVER_VARROCK_WEST(
+            "Varrock West Silver",
+            new WorldPoint(3180, 3363, 0),
+            new WorldPoint(3171, 3370, 0)
+    ),
+    COAL_BARBARIAN_VILLAGE(
+            "Barbarian Village Coal",
+            new WorldPoint(3079, 3418, 0),
+            new WorldPoint(3085, 3422, 0)
+>>>>>>> origin/main
     );
 
     private final String displayName;
