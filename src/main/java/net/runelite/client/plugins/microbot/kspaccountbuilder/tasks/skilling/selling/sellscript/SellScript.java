@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.MenuAction;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -47,14 +48,14 @@ public class SellScript extends Script
     private static final int ACTION_COOLDOWN_MS = 1_200;
     private static final int INVENTORY_WAIT_TIMEOUT_MS = 3_000;
     private static final int[] GRAND_EXCHANGE_SLOT_IDS = {
-            465,
-            468,
-            471,
-            474,
-            477,
-            480,
-            483,
-            486
+            InterfaceID.GeOffers.INDEX_0,
+            InterfaceID.GeOffers.INDEX_1,
+            InterfaceID.GeOffers.INDEX_2,
+            InterfaceID.GeOffers.INDEX_3,
+            InterfaceID.GeOffers.INDEX_4,
+            InterfaceID.GeOffers.INDEX_5,
+            InterfaceID.GeOffers.INDEX_6,
+            InterfaceID.GeOffers.INDEX_7
     };
 
     @Getter
@@ -63,6 +64,7 @@ public class SellScript extends Script
     private boolean debugLogging;
     private long lastWebWalkAtMs;
     private long lastActionAtMs;
+    private SellState state = SellState.GOING_TO_GE;
     private Plugin flippingCopilot;
     private Object suggestionManager;
     private Object highlightController;
@@ -85,78 +87,31 @@ public class SellScript extends Script
                 return;
             }
 
-            if (!ensureInTargetArea())
-            {
-                return;
-            }
+            updateState();
 
-            if (Rs2Player.isMoving() || Rs2Player.isInteracting())
+            switch (state)
             {
-                Microbot.status = "Waiting at GE";
-                return;
-            }
+                case GOING_TO_GE:
+                    if (!ensureInTargetArea())
+                    {
+                        return;
+                    }
+                    state = SellState.RESTOCKING_FROM_BANK;
+                    return;
 
-            if (Rs2GrandExchange.hasSoldOffer() && ensureGrandExchangeOpen())
-            {
-                Microbot.status = "Collecting Sold Items";
-                Rs2GrandExchange.collectAllToBank();
-                sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5_000);
-                return;
-            }
+                case RESTOCKING_FROM_BANK:
+                    if (!hasSellableInventoryItems())
+                    {
+                        prepareSellInventoryFromBank();
+                        return;
+                    }
+                    state = SellState.MONITORING_COPILOT;
+                    return;
 
-            if (isGrandExchangeOfferFlowActive())
-            {
-                Microbot.status = "Setting Offer Price";
-                handleCopilotSellFlow();
-                return;
+                case MONITORING_COPILOT:
+                    handleMonitoringCopilot();
+                    return;
             }
-
-            if (!hasSellableInventoryItems())
-            {
-                prepareSellInventoryFromBank();
-                return;
-            }
-
-            if (!ensureGrandExchangeOpen())
-            {
-                return;
-            }
-
-            if (handleCopilotSellFlow())
-            {
-                return;
-            }
-
-            if (Rs2GrandExchange.getAvailableSlotsCount() <= 0)
-            {
-                if (Rs2GrandExchange.hasSoldOffer())
-                {
-                    Rs2GrandExchange.collectAllToBank();
-                    sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5_000);
-                }
-                return;
-            }
-
-            Rs2ItemModel nextItem = getNextSellableInventoryItem();
-            if (nextItem == null)
-            {
-                Microbot.status = "Waiting at GE";
-                return;
-            }
-
-            if (isCopilotAvailable())
-            {
-                Microbot.status = "Selling " + nextItem.getName();
-                if (Rs2Inventory.interact(nextItem.getName(), "Offer"))
-                {
-                    lastActionAtMs = System.currentTimeMillis();
-                    sleepUntil(() -> Rs2GrandExchange.isOfferScreenOpen()
-                            || isCopilotPromptVisible(), 3_000);
-                }
-                return;
-            }
-
-            placeFallbackSellOffer(nextItem);
         }, 0, LOOP_DELAY_MS, TimeUnit.MILLISECONDS);
 
         return true;
@@ -254,6 +209,89 @@ public class SellScript extends Script
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
         Microbot.status = withdrewAny ? "Opening GE" : "No Sell Items";
+    }
+
+    private void updateState()
+    {
+        if (!targetArea.toWorldArea().contains(Rs2Player.getWorldLocation()))
+        {
+            state = SellState.GOING_TO_GE;
+            return;
+        }
+
+        if (!hasSellableInventoryItems())
+        {
+            state = SellState.RESTOCKING_FROM_BANK;
+            return;
+        }
+
+        state = SellState.MONITORING_COPILOT;
+    }
+
+    private void handleMonitoringCopilot()
+    {
+        if (Rs2Player.isMoving() || Rs2Player.isInteracting())
+        {
+            Microbot.status = "Waiting at GE";
+            return;
+        }
+
+        if (Rs2GrandExchange.hasSoldOffer() && ensureGrandExchangeOpen())
+        {
+            Microbot.status = "Collecting Sold Items";
+            Rs2GrandExchange.collectAllToBank();
+            sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5_000);
+            return;
+        }
+
+        if (isGrandExchangeOfferFlowActive())
+        {
+            Microbot.status = "Setting Offer Price";
+            handleCopilotSellFlow();
+            return;
+        }
+
+        if (!ensureGrandExchangeOpen())
+        {
+            return;
+        }
+
+        if (handleCopilotSellFlow())
+        {
+            return;
+        }
+
+        if (Rs2GrandExchange.getAvailableSlotsCount() <= 0)
+        {
+            if (Rs2GrandExchange.hasSoldOffer())
+            {
+                Rs2GrandExchange.collectAllToBank();
+                sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5_000);
+            }
+            return;
+        }
+
+        Rs2ItemModel nextItem = getNextSellableInventoryItem();
+        if (nextItem == null)
+        {
+            Microbot.status = "Waiting at GE";
+            state = SellState.RESTOCKING_FROM_BANK;
+            return;
+        }
+
+        if (isCopilotAvailable())
+        {
+            Microbot.status = "Selling " + nextItem.getName();
+            if (Rs2Inventory.interact(nextItem.getName(), "Offer"))
+            {
+                lastActionAtMs = System.currentTimeMillis();
+                sleepUntil(() -> Rs2GrandExchange.isOfferScreenOpen()
+                        || isCopilotPromptVisible(), 3_000);
+            }
+            return;
+        }
+
+        placeFallbackSellOffer(nextItem);
     }
 
     private boolean shouldSellEntry(SellList sellList)
@@ -630,12 +668,13 @@ public class SellScript extends Script
                 || Objects.equals(suggestionType, "modify_sell"))
         {
             return highlightedWidgets.stream()
+                    .filter(Objects::nonNull)
                     .filter(widget -> Arrays.stream(GRAND_EXCHANGE_SLOT_IDS).anyMatch(id -> id == widget.getId()))
                     .findFirst()
                     .orElse(null);
         }
 
-        return highlightedWidgets.get(0);
+        return highlightedWidgets.stream().filter(Objects::nonNull).findFirst().orElse(null);
     }
 
     private Object getSuggestion()
@@ -709,6 +748,7 @@ public class SellScript extends Script
     @Override
     public void shutdown()
     {
+        state = SellState.GOING_TO_GE;
         lastWebWalkAtMs = 0L;
         lastActionAtMs = 0L;
         flippingCopilot = null;
