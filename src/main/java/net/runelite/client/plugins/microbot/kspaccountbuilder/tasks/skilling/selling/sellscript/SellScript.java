@@ -122,8 +122,10 @@ public class SellScript extends Script
                 return;
             }
 
-            if (handleCopilotSellFlow())
+            if (isCopilotAvailable())
             {
+                Microbot.status = "Following Flipping Copilot";
+                handleCopilotSellFlow();
                 return;
             }
 
@@ -141,18 +143,6 @@ public class SellScript extends Script
             if (nextItem == null)
             {
                 Microbot.status = "Waiting at GE";
-                return;
-            }
-
-            if (isCopilotAvailable())
-            {
-                Microbot.status = "Selling " + nextItem.getName();
-                if (Rs2Inventory.interact(nextItem.getName(), "Offer"))
-                {
-                    lastActionAtMs = System.currentTimeMillis();
-                    sleepUntil(() -> Rs2GrandExchange.isOfferScreenOpen()
-                            || isCopilotPromptVisible(), 3_000);
-                }
                 return;
             }
 
@@ -591,10 +581,19 @@ public class SellScript extends Script
             return false;
         }
 
-        Widget highlightedWidget = getWidgetFromOverlay(getSuggestionType(getSuggestion()));
+        String suggestionType = getSuggestionType(getSuggestion());
+        Widget highlightedWidget = getWidgetFromOverlay(suggestionType);
         if (highlightedWidget == null || !Rs2Widget.isWidgetVisible(highlightedWidget.getId()))
         {
             return false;
+        }
+
+        if (shouldCollectToBank(suggestionType, highlightedWidget))
+        {
+            Rs2GrandExchange.collectAllToBank();
+            sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5_000);
+            lastActionAtMs = System.currentTimeMillis();
+            return true;
         }
 
         Rs2Widget.clickWidget(highlightedWidget);
@@ -615,6 +614,36 @@ public class SellScript extends Script
             }
         }
         return true;
+    }
+
+    private boolean shouldCollectToBank(String suggestionType, Widget highlightedWidget)
+    {
+        if (Objects.equals(suggestionType, "collect"))
+        {
+            return true;
+        }
+
+        if (highlightedWidget.getText() != null
+                && highlightedWidget.getText().toLowerCase(Locale.ENGLISH).contains("collect"))
+        {
+            return true;
+        }
+
+        String[] actions = highlightedWidget.getActions();
+        if (actions == null)
+        {
+            return false;
+        }
+
+        for (String action : actions)
+        {
+            if (action != null && action.toLowerCase(Locale.ENGLISH).contains("collect"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private Widget getWidgetFromOverlay(String suggestionType)
