@@ -2,12 +2,6 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
-<<<<<<< HEAD
-import net.runelite.client.config.ConfigItem;
-import net.runelite.client.config.Range;
-
-@ConfigGroup(KspAccountBuilderConfig.CONFIG_GROUP)
-=======
 import net.runelite.client.config.ConfigInformation;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
@@ -20,20 +14,10 @@ import net.runelite.client.config.Range;
                 "Tools i.e Pickaxe, Axe, Hammer in bank<br />" +
                 "start next to a bank and let it do its thing."
 )
->>>>>>> origin/main
 public interface KspAccountBuilderConfig extends Config
 {
     String CONFIG_GROUP = "kspaccountbuilder";
 
-<<<<<<< HEAD
-    @ConfigItem(
-        keyName = "enabled",
-        name = "Enable script",
-        description = "Enable the account builder automation",
-        position = 0
-    )
-    default boolean enabled()
-=======
     @ConfigSection(
             name = "Antiban",
             description = "General antiban controls",
@@ -83,47 +67,11 @@ public interface KspAccountBuilderConfig extends Config
             section = antibanSection
     )
     default boolean debugLogging()
->>>>>>> origin/main
     {
         return false;
     }
 
     @ConfigItem(
-<<<<<<< HEAD
-        keyName = "mode",
-        name = "Build mode",
-        description = "Select the account progression mode",
-        position = 1
-    )
-    default KspAccountBuilderMode mode()
-    {
-        return KspAccountBuilderMode.STARTER;
-    }
-
-    @Range(min = 200, max = 5000)
-    @ConfigItem(
-        keyName = "tickDelayMs",
-        name = "Loop delay (ms)",
-        description = "Delay between account builder loop iterations",
-        position = 2
-    )
-    default int tickDelayMs()
-    {
-        return 600;
-    }
-
-    @ConfigItem(
-        keyName = "verboseLogging",
-        name = "Verbose logging",
-        description = "Print builder state transitions to the log",
-        position = 3
-    )
-    default boolean verboseLogging()
-    {
-        return true;
-    }
-}
-=======
             keyName = "doBreaks",
             name = "Do Breaks",
             description = "If enabled, the script will perform randomized logout breaks",
@@ -286,4 +234,3 @@ public interface KspAccountBuilderConfig extends Config
         return KspDeveloperSmeltingTarget.DEFAULT_PROGRESS;
     }
 }
->>>>>>> origin/main
