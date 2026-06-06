@@ -5,6 +5,7 @@ import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
@@ -38,8 +39,9 @@ public class AstralRunesScript extends Script {
     private final static WorldPoint LUNAR_ISLE_BANK_WORLD_POINT = new WorldPoint(2099, 3918, 0);
     private final static WorldPoint LUNAR_ISLE_CRAFT_WORLD_POINT = new WorldPoint(2156, 3864, 0);
     private final static WorldPoint LUNAR_ISLE_BANK_WORLD_POINT_AFTER_TELEPORT = new WorldPoint(2107, 3915, 0);
-    private final static WorldPoint ASTRAL_ALTAR_WORLD_POINT = new WorldPoint(2158, 3864, 0);
+    private final static WorldPoint ASTRAL_ALTAR_WORLD_POINT = new WorldPoint(2157, 3863, 0);
     private final static int ASTRAL_ALTAR_ID = 34771;
+    private final static int ASTRAL_ALTAR_SEARCH_RADIUS = 6;
 
     private boolean canCastMoonclanTeleport = false;
     public final int runeItemId = ItemID.ASTRALRUNE;
@@ -385,7 +387,7 @@ public class AstralRunesScript extends Script {
     private void setSpellbookLunarAltar() {
         if( isLunarIsleRegion() ) {
             Rs2Walker.walkTo(ASTRAL_ALTAR_WORLD_POINT);
-            var altarModel = Microbot.getRs2TileObjectCache().query().withId(ASTRAL_ALTAR_ID).nearest();
+            var altarModel = findAstralAltar();
             if( altarModel != null ) {
                 altarModel.click("Pray");
                 sleepUntil(this::isLunar);
@@ -396,7 +398,7 @@ public class AstralRunesScript extends Script {
     }
 
     private static void doAltarCraft() {
-        var altarModel = Microbot.getRs2TileObjectCache().query().within(ASTRAL_ALTAR_WORLD_POINT, 0).nearest();
+        var altarModel = findAstralAltar();
         if( altarModel != null && Rs2Player.getWorldLocation().distanceTo(ASTRAL_ALTAR_WORLD_POINT) < 5) {
             if( Rs2Inventory.hasItem(ItemID.BLANKRUNE_HIGH) ) {
                 altarModel.click();
@@ -407,6 +409,14 @@ public class AstralRunesScript extends Script {
                 Rs2Inventory.waitForInventoryChanges(800);
             }
         }
+    }
+
+    private static Rs2TileObjectModel findAstralAltar() {
+        return Microbot.getRs2TileObjectCache()
+                .query()
+                .withId(ASTRAL_ALTAR_ID)
+                .within(ASTRAL_ALTAR_WORLD_POINT, ASTRAL_ALTAR_SEARCH_RADIUS)
+                .nearest();
     }
 
     private static final Set<Integer> exceptIds = new HashSet<>(Arrays.asList(

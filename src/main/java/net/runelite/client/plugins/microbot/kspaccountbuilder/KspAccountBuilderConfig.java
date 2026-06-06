@@ -40,11 +40,11 @@ public interface KspAccountBuilderConfig extends Config
     String activitySwitchSection = "activitySwitch";
 
     @ConfigSection(
-            name = "Developer Testing",
-            description = "Developer-only task forcing and target selection",
+            name = "Train Single Skill",
+            description = "Train one selected task instead of randomly switching activities",
             position = 3
     )
-    String developerSection = "developer";
+    String trainSingleSkillSection = "trainSingleSkill";
 
     @ConfigItem(
             keyName = "useAntiban",
@@ -138,7 +138,7 @@ public interface KspAccountBuilderConfig extends Config
     @ConfigItem(
             keyName = "enableActivitySwitchRandomization",
             name = "Randomize Activity Switch",
-            description = "Enable randomized timing before switching activities",
+            description = "Enable randomized timing before switching activities. Ignored while Train Single Skill is enabled.",
             position = 0,
             section = activitySwitchSection
     )
@@ -174,63 +174,38 @@ public interface KspAccountBuilderConfig extends Config
     }
 
     @ConfigItem(
-            keyName = "developerPassword",
-            name = "Developer Password",
-            description = "Enter the developer password to enable test selectors",
+            keyName = "trainSingleSkill",
+            name = "Train Single Skill",
+            description = "Force the account builder to train only the selected task",
             position = 0,
-            section = developerSection,
-            secret = true
+            section = trainSingleSkillSection
     )
-    default String developerPassword()
+    default boolean trainSingleSkill()
     {
-        return "";
+        return false;
     }
 
     @ConfigItem(
-            keyName = "developerTask",
-            name = "Developer Task",
-            description = "Developer task override. Only used when the password matches.",
+            keyName = "singleSkillTask",
+            name = "Task",
+            description = "Task to train while Train Single Skill is enabled",
             position = 1,
-            section = developerSection
+            section = trainSingleSkillSection
     )
-    default KspDeveloperTask developerTask()
+    default KspTrainSingleSkillTask singleSkillTask()
     {
-        return KspDeveloperTask.DISABLED;
+        return KspTrainSingleSkillTask.MINING;
     }
 
     @ConfigItem(
-            keyName = "developerMiningTarget",
-            name = "Mining Target",
-            description = "Developer mining area override. Only used when the password matches and Mining is selected.",
+            keyName = "singleSkillProgressive",
+            name = "Progressive",
+            description = "When training Mining only, automatically move to the best ore available for the current Mining level",
             position = 2,
-            section = developerSection
+            section = trainSingleSkillSection
     )
-    default KspDeveloperMiningTarget developerMiningTarget()
+    default boolean singleSkillProgressive()
     {
-        return KspDeveloperMiningTarget.DEFAULT_PROGRESS;
-    }
-
-    @ConfigItem(
-            keyName = "developerWoodcuttingTarget",
-            name = "Woodcutting Target",
-            description = "Developer woodcutting area override. Only used when the password matches and Woodcutting is selected.",
-            position = 3,
-            section = developerSection
-    )
-    default KspDeveloperWoodcuttingTarget developerWoodcuttingTarget()
-    {
-        return KspDeveloperWoodcuttingTarget.DEFAULT_PROGRESS;
-    }
-
-    @ConfigItem(
-            keyName = "developerSmeltingTarget",
-            name = "Smelting Target",
-            description = "Developer smelting bar override. Only used when the password matches and Smelting is selected.",
-            position = 4,
-            section = developerSection
-    )
-    default KspDeveloperSmeltingTarget developerSmeltingTarget()
-    {
-        return KspDeveloperSmeltingTarget.DEFAULT_PROGRESS;
+        return true;
     }
 }

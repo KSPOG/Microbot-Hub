@@ -4,6 +4,8 @@ import lombok.Getter;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 
+import java.util.concurrent.ThreadLocalRandom;
+
 @Getter
 public enum Areas
 {
@@ -55,5 +57,13 @@ public enum Areas
         int width = (northEast.getX() - southWest.getX()) + 1;
         int height = (northEast.getY() - southWest.getY()) + 1;
         return new WorldArea(southWest.getX(), southWest.getY(), width, height, southWest.getPlane());
+    }
+
+    public WorldPoint getRandomPoint()
+    {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        int x = random.nextInt(southWest.getX(), northEast.getX() + 1);
+        int y = random.nextInt(southWest.getY(), northEast.getY() + 1);
+        return new WorldPoint(x, y, southWest.getPlane());
     }
 }
