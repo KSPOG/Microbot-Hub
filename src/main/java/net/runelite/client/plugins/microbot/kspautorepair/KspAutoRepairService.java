@@ -322,7 +322,7 @@ final class KspAutoRepairService
         {
             return;
         }
-        if (isIntentionalWait(frame.status))
+        if (isIntentionalWait(frame.microbotStatus))
         {
             lastProgressAtMs = System.currentTimeMillis();
             return;
