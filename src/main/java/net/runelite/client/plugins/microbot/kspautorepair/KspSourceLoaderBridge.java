@@ -20,22 +20,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-/**
- * Compatibility bridge to the separately installed KSP Source Loader.
- *
- * The loader is intentionally not a compile-time dependency. Newer loader builds can expose a
- * lifecycle listener and validation entry point, while older builds continue to work through
- * revision/log observation in the coordinator. This also prevents a loader upgrade from making
- * the repair plugin unloadable.
- */
+/** Runtime compatibility bridge to the separately installed KSP Source Loader. */
 final class KspSourceLoaderBridge
 {
     private static final Logger log = LoggerFactory.getLogger(KspSourceLoaderBridge.class);
     private static final String LOADER_CLASS_SUFFIX = ".loader.KspSourceLoaderPlugin";
     private static final String COMPILER_CLASS = "net.runelite.client.plugins.microbot.loader.InMemoryJavaCompiler";
+    private static final Pattern PACKAGE_PATTERN =
+            Pattern.compile("(?m)^\\s*package\\s+([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\s*;");
 
     interface Listener
     {
@@ -88,12 +85,10 @@ final class KspSourceLoaderBridge
             hookDescription = "source loader not currently loaded; log fallback";
             return;
         }
-
         if (tryAttachLifecycleListener(loader))
         {
             return;
         }
-
         hookDescription = "loader discovered without listener API; log/revision fallback";
         emit("BRIDGE_FALLBACK", detail("loaderClass", loader.getClass().getName()));
     }
@@ -110,31 +105,28 @@ final class KspSourceLoaderBridge
         {
             return Optional.empty();
         }
-
-        String[] methodNames = {
-                "getCurrentRevision", "getLoadedRevision", "getLastRevision",
-                "currentRevision", "loadedRevision", "lastRevision"
-        };
-        for (String methodName : methodNames)
+        String[] names = {"getCurrentRevision", "getLoadedRevision", "getLastRevision",
+                "currentRevision", "loadedRevision", "lastRevision"};
+        for (String name : names)
         {
+            Method method = findNoArgMethod(current.getClass(), name);
+            if (method == null)
+            {
+                continue;
+            }
             try
             {
-                Method method = current.getClass().getMethod(methodName);
-                if (method.getParameterCount() == 0)
+                method.setAccessible(true);
+                String revision = normalizeRevision(method.invoke(current));
+                if (!revision.isEmpty())
                 {
-                    Object value = method.invoke(current);
-                    String revision = normalizeRevision(value);
-                    if (!revision.isEmpty())
-                    {
-                        return Optional.of(revision);
-                    }
+                    return Optional.of(revision);
                 }
             }
             catch (ReflectiveOperationException ignored)
             {
             }
         }
-
         for (Field field : allFields(current.getClass()))
         {
             String name = field.getName().toLowerCase(Locale.ROOT);
@@ -165,19 +157,16 @@ final class KspSourceLoaderBridge
         {
             return false;
         }
-
-        String[] names = {
-                "requestRefresh", "refreshNow", "manualRefresh", "refreshSources", "refresh"
-        };
+        String[] names = {"requestRefresh", "refreshNow", "manualRefresh", "refreshSources", "refresh"};
         for (String name : names)
         {
+            Method method = findNoArgMethod(current.getClass(), name);
+            if (method == null)
+            {
+                continue;
+            }
             try
             {
-                Method method = current.getClass().getDeclaredMethod(name);
-                if (method.getParameterCount() != 0)
-                {
-                    continue;
-                }
                 method.setAccessible(true);
                 method.invoke(current);
                 emit("REFRESH_REQUESTED", detail("method", method.getName()));
@@ -199,7 +188,6 @@ final class KspSourceLoaderBridge
             {
                 return PreflightResult.result(false, "source-loader-bridge", "No Java source files were found");
             }
-
             Plugin current = ensureLoader();
             if (current != null)
             {
@@ -209,7 +197,6 @@ final class KspSourceLoaderBridge
                     return loaderResult;
                 }
             }
-
             PreflightResult compilerResult = tryCompilerClass(sources, repository, current);
             if (compilerResult.available)
             {
@@ -220,44 +207,37 @@ final class KspSourceLoaderBridge
         {
             return PreflightResult.result(false, "source-loader-bridge", t.toString());
         }
-
         return PreflightResult.unavailable("No compatible source-loader validation method was discoverable");
     }
 
     private PreflightResult tryValidationMethods(Object target, Map<String, String> sources, Path repository)
     {
-        for (Method method : target.getClass().getDeclaredMethods())
+        for (Method method : allMethods(target.getClass()))
         {
             String name = method.getName().toLowerCase(Locale.ROOT);
-            boolean candidateName = name.equals("validatesources")
-                    || name.equals("validatecandidate")
-                    || name.equals("preflight")
-                    || name.equals("compileforvalidation")
+            boolean candidate = name.equals("validatesources") || name.equals("validatecandidate")
+                    || name.equals("preflight") || name.equals("compileforvalidation")
                     || name.equals("validateandcompile");
-            if (!candidateName || method.getParameterCount() != 1)
+            if (!candidate || method.getParameterCount() != 1)
             {
                 continue;
             }
-
             Object argument = supportedArgument(method.getParameterTypes()[0], sources, repository);
             if (argument == Unsupported.INSTANCE)
             {
                 continue;
             }
-
             try
             {
                 method.setAccessible(true);
-                Object result = method.invoke(target, argument);
-                return interpretResult(result,
+                return interpretResult(method.invoke(target, argument),
                         target.getClass().getSimpleName() + "." + method.getName());
             }
             catch (Throwable t)
             {
                 Throwable cause = t.getCause() == null ? t : t.getCause();
                 return PreflightResult.result(false,
-                        target.getClass().getSimpleName() + "." + method.getName(),
-                        cause.toString());
+                        target.getClass().getSimpleName() + "." + method.getName(), cause.toString());
             }
         }
         return PreflightResult.unavailable("loader has no compatible validation method");
@@ -272,7 +252,6 @@ final class KspSourceLoaderBridge
         }
         classLoaders.add(Thread.currentThread().getContextClassLoader());
         classLoaders.add(getClass().getClassLoader());
-
         Class<?> compilerClass = null;
         for (ClassLoader classLoader : classLoaders)
         {
@@ -293,11 +272,9 @@ final class KspSourceLoaderBridge
         {
             return PreflightResult.unavailable("InMemoryJavaCompiler is not visible from the repair plugin classloader");
         }
-
-        for (Method method : compilerClass.getDeclaredMethods())
+        for (Method method : allMethods(compilerClass))
         {
-            String name = method.getName().toLowerCase(Locale.ROOT);
-            if (!name.contains("compile") || method.getParameterCount() != 1)
+            if (!method.getName().toLowerCase(Locale.ROOT).contains("compile") || method.getParameterCount() != 1)
             {
                 continue;
             }
@@ -306,7 +283,6 @@ final class KspSourceLoaderBridge
             {
                 continue;
             }
-
             try
             {
                 Object target = null;
@@ -317,19 +293,17 @@ final class KspSourceLoaderBridge
                     target = constructor.newInstance();
                 }
                 method.setAccessible(true);
-                Object result = method.invoke(target, argument);
-                return interpretResult(result, compilerClass.getSimpleName() + "." + method.getName());
+                return interpretResult(method.invoke(target, argument),
+                        compilerClass.getSimpleName() + "." + method.getName());
             }
             catch (NoSuchMethodException ignored)
             {
-                // Compiler requires constructor dependencies; leave production compiler untouched.
             }
             catch (Throwable t)
             {
                 Throwable cause = t.getCause() == null ? t : t.getCause();
                 return PreflightResult.result(false,
-                        compilerClass.getSimpleName() + "." + method.getName(),
-                        cause.toString());
+                        compilerClass.getSimpleName() + "." + method.getName(), cause.toString());
             }
         }
         return PreflightResult.unavailable("InMemoryJavaCompiler found but no safe one-argument compile method matched");
@@ -337,18 +311,9 @@ final class KspSourceLoaderBridge
 
     private Object supportedArgument(Class<?> type, Map<String, String> sources, Path repository)
     {
-        if (Map.class.isAssignableFrom(type))
-        {
-            return sources;
-        }
-        if (Path.class.isAssignableFrom(type))
-        {
-            return repository;
-        }
-        if (String.class == type)
-        {
-            return repository.toAbsolutePath().toString();
-        }
+        if (Map.class.isAssignableFrom(type)) return sources;
+        if (Path.class.isAssignableFrom(type)) return repository;
+        if (String.class == type) return repository.toAbsolutePath().toString();
         return Unsupported.INSTANCE;
     }
 
@@ -377,13 +342,11 @@ final class KspSourceLoaderBridge
 
     private boolean tryAttachLifecycleListener(Plugin current)
     {
-        String[] names = {
-                "addListener", "registerListener", "setListener",
-                "addLifecycleListener", "registerLifecycleListener"
-        };
+        String[] names = {"addListener", "registerListener", "setListener",
+                "addLifecycleListener", "registerLifecycleListener"};
         for (String name : names)
         {
-            for (Method method : current.getClass().getMethods())
+            for (Method method : allMethods(current.getClass()))
             {
                 if (!method.getName().equals(name) || method.getParameterCount() != 1)
                 {
@@ -396,20 +359,12 @@ final class KspSourceLoaderBridge
                 }
                 try
                 {
-                    Object proxy = Proxy.newProxyInstance(
-                            listenerType.getClassLoader(),
-                            new Class<?>[]{listenerType},
-                            (object, callback, args) -> {
+                    Object proxy = Proxy.newProxyInstance(listenerType.getClassLoader(),
+                            new Class<?>[]{listenerType}, (object, callback, args) -> {
                                 if (callback.getDeclaringClass() == Object.class)
                                 {
-                                    if ("toString".equals(callback.getName()))
-                                    {
-                                        return "KspAutoRepairSourceLoaderListener";
-                                    }
-                                    if ("hashCode".equals(callback.getName()))
-                                    {
-                                        return System.identityHashCode(object);
-                                    }
+                                    if ("toString".equals(callback.getName())) return "KspAutoRepairSourceLoaderListener";
+                                    if ("hashCode".equals(callback.getName())) return System.identityHashCode(object);
                                     if ("equals".equals(callback.getName()))
                                     {
                                         return args != null && args.length == 1 && object == args[0];
@@ -427,9 +382,11 @@ final class KspSourceLoaderBridge
                                 emit("LOADER_CALLBACK", details);
                                 return defaultValue(callback.getReturnType());
                             });
+                    method.setAccessible(true);
                     method.invoke(current, proxy);
                     installedListenerProxy = proxy;
-                    hookDescription = "direct listener via " + current.getClass().getSimpleName() + "." + method.getName();
+                    hookDescription = "direct listener via " + current.getClass().getSimpleName()
+                            + "." + method.getName();
                     emit("BRIDGE_ATTACHED", detail("mechanism", hookDescription));
                     return true;
                 }
@@ -474,19 +431,46 @@ final class KspSourceLoaderBridge
     {
         try (Stream<Path> stream = Files.walk(repository))
         {
-            List<Path> files = stream
-                    .filter(Files::isRegularFile)
+            List<Path> files = stream.filter(Files::isRegularFile)
                     .filter(path -> path.toString().endsWith(".java"))
                     .filter(path -> !path.toString().contains(".git"))
                     .collect(Collectors.toList());
             Map<String, String> result = new LinkedHashMap<>();
             for (Path file : files)
             {
-                String relative = repository.relativize(file).toString().replace('\\', '/');
-                result.put(relative, new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
+                String source = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+                String fileName = file.getFileName().toString();
+                String simpleName = fileName.substring(0, fileName.length() - ".java".length());
+                Matcher matcher = PACKAGE_PATTERN.matcher(source);
+                String sourceName = matcher.find() ? matcher.group(1) + "." + simpleName : simpleName;
+                result.put(sourceName, source);
             }
             return result;
         }
+    }
+
+    private Method findNoArgMethod(Class<?> type, String name)
+    {
+        for (Method method : allMethods(type))
+        {
+            if (method.getName().equals(name) && method.getParameterCount() == 0)
+            {
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private List<Method> allMethods(Class<?> type)
+    {
+        List<Method> methods = new ArrayList<>();
+        Class<?> current = type;
+        while (current != null && current != Object.class)
+        {
+            for (Method method : current.getDeclaredMethods()) methods.add(method);
+            current = current.getSuperclass();
+        }
+        return methods;
     }
 
     private List<Field> allFields(Class<?> type)
@@ -495,10 +479,7 @@ final class KspSourceLoaderBridge
         Class<?> current = type;
         while (current != null && current != Object.class)
         {
-            for (Field field : current.getDeclaredFields())
-            {
-                fields.add(field);
-            }
+            for (Field field : current.getDeclaredFields()) fields.add(field);
             current = current.getSuperclass();
         }
         return fields;
@@ -506,56 +487,22 @@ final class KspSourceLoaderBridge
 
     private String normalizeRevision(Object value)
     {
-        if (value == null)
-        {
-            return "";
-        }
+        if (value == null) return "";
         String text = String.valueOf(value).trim();
-        if (text.matches("[0-9a-fA-F]{7,40}"))
-        {
-            return text.toLowerCase(Locale.ROOT);
-        }
-        return "";
+        return text.matches("[0-9a-fA-F]{7,40}") ? text.toLowerCase(Locale.ROOT) : "";
     }
 
     private Object defaultValue(Class<?> type)
     {
-        if (!type.isPrimitive())
-        {
-            return null;
-        }
-        if (type == boolean.class)
-        {
-            return false;
-        }
-        if (type == char.class)
-        {
-            return '\0';
-        }
-        if (type == byte.class)
-        {
-            return (byte) 0;
-        }
-        if (type == short.class)
-        {
-            return (short) 0;
-        }
-        if (type == int.class)
-        {
-            return 0;
-        }
-        if (type == long.class)
-        {
-            return 0L;
-        }
-        if (type == float.class)
-        {
-            return 0F;
-        }
-        if (type == double.class)
-        {
-            return 0D;
-        }
+        if (!type.isPrimitive()) return null;
+        if (type == boolean.class) return false;
+        if (type == char.class) return '\0';
+        if (type == byte.class) return (byte) 0;
+        if (type == short.class) return (short) 0;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == float.class) return 0F;
+        if (type == double.class) return 0D;
         return null;
     }
 
