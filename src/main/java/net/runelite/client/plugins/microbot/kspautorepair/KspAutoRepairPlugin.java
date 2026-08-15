@@ -40,7 +40,7 @@ import java.lang.reflect.Proxy;
 )
 public class KspAutoRepairPlugin extends Plugin
 {
-    public static final String VERSION = "0.2.1";
+    public static final String VERSION = "0.2.2";
 
     @Inject
     private Client client;
@@ -77,9 +77,9 @@ public class KspAutoRepairPlugin extends Plugin
     }
 
     /**
-     * KspAutoRepairCoordinator already owns a hardened generic command backend.  Keep that
+     * KspAutoRepairCoordinator already owns a hardened generic command backend. Keep that
      * coordinator stable and adapt the first-class Codex / ChatGPT selection onto the hardened
-     * path internally.  To the user Codex remains a native backend: no custom command is needed.
+     * path internally. To the user Codex remains a native backend: no custom command is needed.
      */
     private KspAutoRepairConfig coordinatorConfig()
     {
@@ -130,9 +130,12 @@ public class KspAutoRepairPlugin extends Plugin
             command.append(posixToken(executable));
         }
 
-        command.append(" exec -C \"{repo}\"")
+        // -a/--ask-for-approval is a top-level Codex option in current CLI builds, so it must
+        // appear before the exec subcommand. Exec-specific options follow exec.
+        command.append(" -a never exec")
+                .append(" -C \"{repo}\"")
                 .append(" --sandbox workspace-write")
-                .append(" -a never")
+                .append(" --skip-git-repo-check")
                 .append(" --ephemeral")
                 .append(" --color never");
 
@@ -142,7 +145,7 @@ public class KspAutoRepairPlugin extends Plugin
                     .append(isWindows() ? windowsToken(model) : posixToken(model));
         }
 
-        // The coordinator replaces {prompt} with the generated incident prompt file.  Redirecting
+        // The coordinator replaces {prompt} with the generated incident prompt file. Redirecting
         // that file to stdin lets Codex consume the exact prompt via its documented '-' input mode.
         command.append(" - < \"{prompt}\"");
         return command.toString();
