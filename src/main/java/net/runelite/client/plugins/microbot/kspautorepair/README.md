@@ -1,75 +1,80 @@
-# KSP Auto Repair Agent
+# KSP Auto Repair Agent v0.2.2
 
-KSP Auto Repair Agent is a continuous diagnostic and repair bridge for KSP Microbot plugins.
+KSP Auto Repair Agent is a continuous self-healing development bridge for KSP Microbot plugins. Version 0.2 observes **intent, action and postcondition**, not only player movement or log errors.
 
-## What it does
+## Codex / ChatGPT backend
 
-1. Watches active KSP plugins while the client is logged in.
-2. Keeps a rolling runtime trace containing player location, animation, interaction target, inventory state, XP state, `Microbot.status`, and active KSP plugin classes.
-3. Tails `~/.runelite/logs/client.log` for KSP errors and source-loader revisions.
-4. Detects silent stalls when meaningful runtime state stops changing for the configured threshold.
-5. Creates an incident bundle under `~/.runelite/ksp-agent-repair/incidents/` with the trace, recent log lines, reflected plugin/script state, and an optional client screenshot.
-6. Synchronizes a managed clone of the repository consumed by KSP Source Loader.
-7. Invokes the configured coding agent non-interactively.
-8. Rejects agent edits outside the failing plugin's Java source directory.
-9. Compiles the full KSP source repository before allowing a commit.
-10. Commits and pushes a successful candidate when `Push validated fixes` is enabled.
-11. Watches KSP Source Loader for the pushed revision.
-12. Validates runtime progress after that revision loads and automatically reverts a source-loader-rejected repair.
+`Agent backend` now includes **Codex / ChatGPT** as a first-class option. No Custom command is required.
 
-## Default source repository
+Default Codex settings:
 
-`https://github.com/KSPOG/ksppluginsrelease.git`
+- Codex executable: `codex`
+- Codex model: blank, which preserves the configured/default Codex model
+- Approval policy: `never`
+- Sandbox: `workspace-write`
+- Session: ephemeral
+- Generated repair prompt: supplied through stdin
 
-The managed clone defaults to:
+Current Codex CLI builds treat `-a/--ask-for-approval` as a top-level option, so the generated invocation is ordered like:
 
-`%USERPROFILE%\.runelite\ksp-agent-repair\worktree\ksppluginsrelease`
+`codex -a never exec -C <repo> --sandbox workspace-write --skip-git-repo-check --ephemeral --color never -`
 
-## Agent backends
+The repair bridge still owns Git commits/pushes, compiler validation, Source Loader refresh, runtime validation and rollback.
 
-### Claude Code
+## Reliability model
 
-The built-in backend calls the configured `Agent executable` in non-interactive mode and restricts the agent to source-reading/editing tools. Git operations remain owned by the repair bridge.
+The observer combines four evidence layers:
 
-The executable must already be installed and authenticated on the machine running Microbot.
+1. **RuneLite events** — menu actions, widgets, item containers, varbits, stats, animations, chat, NPC/object lifecycle and game-state changes.
+2. **Runtime snapshots** — position, animation, interaction target, inventory/equipment hashes, XP, `Microbot.status`, active KSP plugins and reflected state-machine fields.
+3. **Action journal** — inferred menu actions plus optional explicit `KspObservation.action(...)` instrumentation, with a baseline, expected postcondition and action-specific deadline.
+4. **State-machine history** — reflected fields whose names look like state/phase/step/stage/task/mode, including script objects, with repeated-sequence and no-progress detection.
 
-### Custom command
+A low-confidence observation is recorded but does not automatically rewrite source. The default autonomous repair threshold is 85%.
 
-Select `Custom command` to use another local coding-agent launcher. The command template supports:
+## Failure detection
 
-- `{repo}` - managed KSP source repository path
-- `{prompt}` - generated incident prompt file
+v0.2 detects and classifies failed action postconditions, repeated state-machine loops, state stalls, global no-progress stalls, client-thread violations, null-pointer failures, API incompatibilities, widget/dialogue/banking/pathing failures, source-loader/compilation failures, Git authentication failures, network failures, and coding-agent authentication/executable failures.
 
-The custom process must edit files in the managed repository and exit when finished. The repair bridge performs guardrail validation, compilation, commit, push, and rollback.
+Infrastructure failures are captured but are not treated as source-code bugs.
 
-## Important settings
+## Incident replay bundle
 
-- `Full auto repair`: enables the diagnose/edit/compile/push loop.
-- `Stall threshold (sec)`: default 120 seconds.
-- `Incident cooldown (sec)`: default 180 seconds.
-- `Post-fix validation (sec)`: default 60 seconds after the source loader observes the repaired revision.
-- `Agent attempts`: default 3 compile/edit attempts per incident.
-- `Capture screenshots`: includes the RuneLite canvas in incident evidence.
-- `Push validated fixes`: allows the bridge to commit and push a locally compiling repair.
+Each incident is stored under:
 
-## Guardrails
+`%USERPROFILE%\.runelite\ksp-agent-repair\incidents\<incident-id>\`
 
-The coding agent is not allowed to modify the repair bridge, KSP Source Loader, credentials, build infrastructure, or files outside the target plugin's Java source directory. Non-Java changes and renames are rejected. The bridge, not the coding agent, owns Git commit/push/reset/revert operations.
+The bundle can contain `incident.json`, `events.jsonl`, `actions.jsonl`, `states.jsonl`, `environment.json`, `client-tail.log`, `screenshot.png`, `source-revision.txt`, `repair-history-match.json`, `compile-validation.txt`, agent prompts/outputs, changed-files data, repair status, and Git logs.
+
+## Source Loader integration
+
+KSP Source Loader is a separately installed runtime plugin, so v0.2 does not hard-link against its classes. `KspSourceLoaderBridge` discovers lifecycle/listener callbacks, revision getters/fields, immediate refresh methods, candidate validation methods, and `InMemoryJavaCompiler` when safely visible. When direct hooks are unavailable, the observer retains the revision/client-log fallback.
+
+## Candidate staging and validation
+
+The coding agent does not commit or push directly. The bridge resets a managed candidate worktree, constrains changes to the failing plugin's Java directory, rejects protected paths and non-Java edits, performs `git diff --check`, preflights compilation, commits/pushes only passing candidates, requests Source Loader refresh, observes the loaded revision, and automatically rolls back failed runtime validation when configured.
+
+## Default settings
+
+- Full auto repair: **on**
+- Global stall threshold: **120 s**
+- State stall threshold: **45 s**
+- Loop repetitions: **3**
+- Incident cooldown: **180 s**
+- Auto-repair confidence: **85%**
+- Post-fix validation: **60 s**
+- Required post-fix semantic progress events: **2**
+- Agent attempts: **3**
+- Scene radius: **20 tiles**
+- Timeline capacity: **1200 events**
+- Prefer Source Loader compiler: **on**
+- Request loader refresh: **on**
+- Automatic rollback: **on**
+- Capture screenshots: **on**
+- Push validated fixes: **on**
 
 ## Build
-
-From the Microbot-Hub repository root:
 
 ```powershell
 ./gradlew build -PpluginList=KspAutoRepairPlugin
 ```
-
-## Runtime prerequisites
-
-For full autonomous repair, the Microbot machine needs:
-
-- Git available on `PATH` and authenticated for push access to the configured source repository.
-- A configured coding-agent executable that can run without interactive prompts.
-- KSP Source Loader enabled and watching the same repository/branch as this plugin.
-
-If any of these prerequisites are missing, incidents are still written to disk but the autonomous repair stage cannot complete.
