@@ -24,11 +24,13 @@ import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.plugins.microbot.PluginConstants;
 
 import javax.inject.Inject;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 
 @PluginDescriptor(
         name = PluginConstants.KSP + "Auto Repair Agent",
         description = "Autonomously observes KSP intent, actions and game-state results and validates self-healing source repairs",
-        tags = {"ksp", "agent", "repair", "debug", "autonomous", "development", "observer"},
+        tags = {"ksp", "agent", "repair", "debug", "autonomous", "development", "observer", "codex", "chatgpt"},
         version = KspAutoRepairPlugin.VERSION,
         cardUrl = "",
         iconUrl = "",
@@ -38,7 +40,7 @@ import javax.inject.Inject;
 )
 public class KspAutoRepairPlugin extends Plugin
 {
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = "0.2.1";
 
     @Inject
     private Client client;
@@ -60,7 +62,7 @@ public class KspAutoRepairPlugin extends Plugin
     @Override
     protected void startUp()
     {
-        coordinator = new KspAutoRepairCoordinator(client, pluginManager, config);
+        coordinator = new KspAutoRepairCoordinator(client, pluginManager, coordinatorConfig());
         coordinator.start();
     }
 
@@ -72,6 +74,103 @@ public class KspAutoRepairPlugin extends Plugin
             coordinator.stop();
             coordinator = null;
         }
+    }
+
+    /**
+     * KspAutoRepairCoordinator already owns a hardened generic command backend.  Keep that
+     * coordinator stable and adapt the first-class Codex / ChatGPT selection onto the hardened
+     * path internally.  To the user Codex remains a native backend: no custom command is needed.
+     */
+    private KspAutoRepairConfig coordinatorConfig()
+    {
+        return (KspAutoRepairConfig) Proxy.newProxyInstance(
+                KspAutoRepairConfig.class.getClassLoader(),
+                new Class<?>[]{KspAutoRepairConfig.class},
+                (proxy, method, args) -> {
+                    KspAgentBackend selectedBackend = config.agentBackend();
+                    if (selectedBackend == KspAgentBackend.CODEX_CHATGPT)
+                    {
+                        if ("agentBackend".equals(method.getName()))
+                        {
+                            return KspAgentBackend.CUSTOM;
+                        }
+                        if ("customAgentCommand".equals(method.getName()))
+                        {
+                            return buildCodexCommand();
+                        }
+                    }
+
+                    try
+                    {
+                        return method.invoke(config, args);
+                    }
+                    catch (InvocationTargetException invocationFailure)
+                    {
+                        throw invocationFailure.getCause();
+                    }
+                });
+    }
+
+    private String buildCodexCommand()
+    {
+        String executable = clean(config.codexExecutable());
+        if (executable.isEmpty())
+        {
+            executable = "codex";
+        }
+
+        String model = clean(config.codexModel());
+        StringBuilder command = new StringBuilder();
+        if (isWindows())
+        {
+            command.append(windowsToken(executable));
+        }
+        else
+        {
+            command.append(posixToken(executable));
+        }
+
+        command.append(" exec -C \"{repo}\"")
+                .append(" --sandbox workspace-write")
+                .append(" -a never")
+                .append(" --ephemeral")
+                .append(" --color never");
+
+        if (!model.isEmpty())
+        {
+            command.append(" -m ")
+                    .append(isWindows() ? windowsToken(model) : posixToken(model));
+        }
+
+        // The coordinator replaces {prompt} with the generated incident prompt file.  Redirecting
+        // that file to stdin lets Codex consume the exact prompt via its documented '-' input mode.
+        command.append(" - < \"{prompt}\"");
+        return command.toString();
+    }
+
+    private static String windowsToken(String value)
+    {
+        String clean = clean(value).replace("\"", "");
+        if (clean.matches("[A-Za-z0-9_./:\\\\-]+"))
+        {
+            return clean;
+        }
+        return "\"" + clean + "\"";
+    }
+
+    private static String posixToken(String value)
+    {
+        return "'" + clean(value).replace("'", "'\"'\"'") + "'";
+    }
+
+    private static boolean isWindows()
+    {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    private static String clean(String value)
+    {
+        return value == null ? "" : value.trim();
     }
 
     @Subscribe
