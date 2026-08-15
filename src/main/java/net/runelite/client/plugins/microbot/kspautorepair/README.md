@@ -1,6 +1,6 @@
-# KSP Auto Repair Agent v0.2
+# KSP Auto Repair Agent v0.2.1
 
-KSP Auto Repair Agent is a continuous self-healing development bridge for KSP Microbot plugins. Version 0.2 observes **intent, action and postcondition**, not only player movement or log errors.
+KSP Auto Repair Agent is a continuous self-healing development bridge for KSP Microbot plugins. Version 0.2 observes **intent, action and postcondition**, not only player movement or log errors. Version 0.2.1 adds a first-class **Codex / ChatGPT** agent backend alongside Claude Code and Custom command.
 
 ## Reliability model
 
@@ -174,6 +174,28 @@ Managed worktree:
 
 ## Agent backends
 
+### Codex / ChatGPT
+
+Select **Codex / ChatGPT** in the plugin configuration. No custom command is required.
+
+The backend uses the local Codex CLI non-interactively against the managed repair worktree. It launches `codex exec` with a workspace-write sandbox, no approval pauses, an ephemeral session and the generated incident prompt supplied on stdin. Git commits, pushes, loader refreshes, validation and rollback remain owned by KSP Auto Repair.
+
+Default Codex executable:
+
+`codex`
+
+Leave **Codex model** blank to use the model configured for your signed-in Codex/ChatGPT environment, or set a model override when required.
+
+One-time local setup:
+
+```powershell
+npm install -g @openai/codex
+codex login
+codex login status
+```
+
+Sign into Codex with the same ChatGPT account you use in the ChatGPT desktop app.
+
 ### Claude Code
 
 The built-in backend invokes the configured executable non-interactively and only grants source reading/editing tools. Git remains controlled by the repair bridge.
@@ -198,7 +220,7 @@ The process edits source and exits. The bridge performs guardrails, compilation,
 Full autonomous repair requires:
 
 - Git on `PATH` with push access to the configured KSP source repository.
-- A coding-agent executable that can run without interactive prompts.
+- The selected coding-agent executable authenticated and able to run without interactive prompts.
 - KSP Source Loader enabled and watching the same repository/branch.
 
 If one of those prerequisites is missing, the observer still records replayable incidents; infrastructure failures are not converted into speculative source patches.
