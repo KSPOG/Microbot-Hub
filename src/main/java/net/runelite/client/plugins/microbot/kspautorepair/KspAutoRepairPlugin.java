@@ -16,6 +16,7 @@ import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -25,7 +26,11 @@ import net.runelite.client.plugins.microbot.PluginConstants;
 
 import javax.inject.Inject;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @PluginDescriptor(
         name = PluginConstants.KSP + "Auto Repair Agent",
@@ -40,10 +45,14 @@ import java.lang.reflect.Proxy;
 )
 public class KspAutoRepairPlugin extends Plugin
 {
-    public static final String VERSION = "0.2.2";
+    public static final String VERSION = "0.2.3";
+    private static final long CLIENT_CALL_TIMEOUT_SECONDS = 5L;
 
     @Inject
     private Client client;
+
+    @Inject
+    private ClientThread clientThread;
 
     @Inject
     private PluginManager pluginManager;
@@ -62,7 +71,7 @@ public class KspAutoRepairPlugin extends Plugin
     @Override
     protected void startUp()
     {
-        coordinator = new KspAutoRepairCoordinator(client, pluginManager, coordinatorConfig());
+        coordinator = new KspAutoRepairCoordinator(clientForCoordinator(), pluginManager, coordinatorConfig());
         coordinator.start();
     }
 
@@ -73,6 +82,91 @@ public class KspAutoRepairPlugin extends Plugin
         {
             coordinator.stop();
             coordinator = null;
+        }
+    }
+
+    /**
+     * The coordinator deliberately performs Git, Codex and validation work off the game thread.
+     * Some evidence capture calls still touch RuneLite's Client API, which must run on the Client
+     * thread. This proxy keeps ordinary event-driven calls direct, while synchronously marshalling
+     * background Client API calls through ClientThread before returning their value to the worker.
+     */
+    private Client clientForCoordinator()
+    {
+        return (Client) Proxy.newProxyInstance(
+                Client.class.getClassLoader(),
+                new Class<?>[]{Client.class},
+                (proxy, method, args) -> {
+                    if (method.getDeclaringClass() == Object.class)
+                    {
+                        return invokeClientMethod(method, args);
+                    }
+
+                    if ("isClientThread".equals(method.getName()) && method.getParameterCount() == 0)
+                    {
+                        return client.isClientThread();
+                    }
+
+                    if (client.isClientThread())
+                    {
+                        return invokeClientMethod(method, args);
+                    }
+
+                    AtomicReference<Object> result = new AtomicReference<>();
+                    AtomicReference<Throwable> failure = new AtomicReference<>();
+                    CountDownLatch completed = new CountDownLatch(1);
+
+                    clientThread.invoke(() -> {
+                        try
+                        {
+                            result.set(invokeClientMethod(method, args));
+                        }
+                        catch (Throwable t)
+                        {
+                            failure.set(t);
+                        }
+                        finally
+                        {
+                            completed.countDown();
+                        }
+                    });
+
+                    boolean finished;
+                    try
+                    {
+                        finished = completed.await(CLIENT_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+                    }
+                    catch (InterruptedException interrupted)
+                    {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted while waiting for RuneLite client-thread call: "
+                                + method.getName(), interrupted);
+                    }
+
+                    if (!finished)
+                    {
+                        throw new IllegalStateException("Timed out waiting for RuneLite client-thread call: "
+                                + method.getName());
+                    }
+
+                    Throwable thrown = failure.get();
+                    if (thrown != null)
+                    {
+                        throw thrown;
+                    }
+                    return result.get();
+                });
+    }
+
+    private Object invokeClientMethod(Method method, Object[] args) throws Throwable
+    {
+        try
+        {
+            return method.invoke(client, args);
+        }
+        catch (InvocationTargetException invocationFailure)
+        {
+            throw invocationFailure.getCause();
         }
     }
 
