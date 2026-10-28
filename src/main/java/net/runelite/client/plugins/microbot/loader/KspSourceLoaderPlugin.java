@@ -812,15 +812,49 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         edt(() ->
         {
+            PluginManager manager = Microbot.getPluginManager();
+            if (!manager.isActive(plugin))
+            {
+                manager.setPluginEnabled(plugin, false);
+                return;
+            }
+
             try
             {
-                PluginManager manager = Microbot.getPluginManager();
+                // Compile-time PluginManager.stopPlugin descriptors differ
+                // between client builds: (Plugin)void and (Plugin)boolean.
+                // Reflection binds by name and parameter types at runtime,
+                // avoiding a NoSuchMethodError caused only by return type.
+                Method method = manager.getClass().getMethod("stopPlugin", Plugin.class);
+                Object result;
+                try
+                {
+                    result = method.invoke(manager, plugin);
+                }
+                catch (java.lang.reflect.InvocationTargetException e)
+                {
+                    throw new IllegalStateException(
+                            "PluginManager.stopPlugin failed for " + name(plugin), e.getCause());
+                }
+
+                if (manager.isActive(plugin))
+                {
+                    throw new IllegalStateException(
+                            "PluginManager.stopPlugin did not deactivate " + name(plugin)
+                                    + " (result=" + result + ")");
+                }
+
+                // Disable only after stop is confirmed, so failed unloads
+                // retain their prior enabled configuration and can be retried.
                 manager.setPluginEnabled(plugin, false);
-                manager.stopPlugin(plugin);
+                log.info("Stopped {} | PluginManager.stopPlugin returned {}",
+                        name(plugin), result);
             }
-            catch (Exception e)
+            catch (ReflectiveOperationException e)
             {
-                throw new RuntimeException(e);
+                throw new IllegalStateException(
+                        "Unable to resolve runtime PluginManager.stopPlugin(Plugin) for "
+                                + name(plugin), e);
             }
         });
     }
