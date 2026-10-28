@@ -84,7 +84,7 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private static final String OWNER = "KSPOG";
     private static final String REPO = "ksppluginsrelease";
-    private static final String BRANCH = "main";
+    // Branch is selected in KspSourceLoaderConfig (Main or Dev).
     private static final String API = "https://api.github.com/repos/" + OWNER + "/" + REPO;
     private static final String RAW = "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/";
     private static final long REFRESH_MINUTES = 5L;
@@ -214,7 +214,8 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         if (event != null
                 && KspSourceLoaderConfig.GROUP.equals(event.getGroup())
-                && KspSourceLoaderConfig.REFRESH_KEY.equals(event.getKey())
+                && (KspSourceLoaderConfig.REFRESH_KEY.equals(event.getKey())
+                    || KspSourceLoaderConfig.BRANCH_KEY.equals(event.getKey()))
                 && timer != null)
         {
             timer.execute(this::refreshSafe);
@@ -933,7 +934,10 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private RemoteRepo readRepo() throws Exception
     {
-        String commit = json(API + "/commits/" + BRANCH).get("sha").getAsString();
+        KspSourceLoaderConfig.SourceBranch selection =
+                configManager.getConfig(KspSourceLoaderConfig.class).sourceBranch();
+        String branch = selection == KspSourceLoaderConfig.SourceBranch.DEV ? "dev" : "main";
+        String commit = json(API + "/commits/" + branch).get("sha").getAsString();
         JsonObject tree = json(API + "/git/trees/" + commit + "?recursive=1");
 
         if (tree.has("truncated") && tree.get("truncated").getAsBoolean())
