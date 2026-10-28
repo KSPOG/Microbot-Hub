@@ -73,7 +73,7 @@ import java.util.stream.Stream;
         description = "Incrementally hot-loads changed KSP plugins from GitHub source",
         tags = {"ksp", "source", "loader", "hot reload"},
         authors = {"KSP"},
-        version = "2.2.5",
+        version = "2.2.6",
         minClientVersion = "2.6.28",
         enabledByDefault = true,
         isExternal = true
@@ -84,7 +84,7 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private static final String OWNER = "KSPOG";
     private static final String REPO = "ksppluginsrelease";
-    private static final String BRANCH = "main";
+    // Branch is selected in KspSourceLoaderConfig (Main or Dev).
     private static final String API = "https://api.github.com/repos/" + OWNER + "/" + REPO;
     private static final String RAW = "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/";
     private static final long REFRESH_MINUTES = 5L;
@@ -178,7 +178,7 @@ public class KspSourceLoaderPlugin extends Plugin
             return t;
         });
         timer.scheduleWithFixedDelay(this::refreshSafe, 0L, REFRESH_MINUTES, TimeUnit.MINUTES);
-        log.info("KSP Source Loader v2.2.5 started | incremental per-plugin refresh enabled");
+        log.info("KSP Source Loader v2.2.6 started | ABI-safe stop + guarded unit refresh");
     }
 
     @Override
@@ -190,8 +190,21 @@ public class KspSourceLoaderPlugin extends Plugin
             timer = null;
         }
 
-        new ArrayList<>(loaded.values()).forEach(this::unload);
-        loaded.clear();
+        for (LoadedUnit unit : new ArrayList<>(loaded.values()))
+        {
+            try
+            {
+                unload(unit);
+                loaded.remove(unit.key);
+            }
+            catch (Throwable t)
+            {
+                // Keep the classloaders reachable if stop failed. Closing
+                // them while the plugin remains active would orphan its code.
+                log.error("Cannot unload KSP unit {} during loader shutdown; plugin retained",
+                        unit.key, t);
+            }
+        }
         seen.clear();
         pluginsChanged();
     }
@@ -201,7 +214,8 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         if (event != null
                 && KspSourceLoaderConfig.GROUP.equals(event.getGroup())
-                && KspSourceLoaderConfig.REFRESH_KEY.equals(event.getKey())
+                && (KspSourceLoaderConfig.REFRESH_KEY.equals(event.getKey())
+                    || KspSourceLoaderConfig.BRANCH_KEY.equals(event.getKey()))
                 && timer != null)
         {
             timer.execute(this::refreshSafe);
@@ -260,12 +274,22 @@ public class KspSourceLoaderPlugin extends Plugin
 
         for (String key : removed)
         {
-            LoadedUnit old = loaded.remove(key);
+            LoadedUnit old = loaded.get(key);
             if (old != null)
             {
                 log.info("Removing deleted KSP unit {}", key);
-                unload(old);
-                uiChanged = true;
+                try
+                {
+                    unload(old);
+                    loaded.remove(key);
+                    uiChanged = true;
+                }
+                catch (Throwable t)
+                {
+                    log.error("Deleted KSP unit {} could not stop; retaining its active runtime",
+                            key, t);
+                    continue;
+                }
             }
             seen.remove(key);
         }
@@ -296,7 +320,19 @@ public class KspSourceLoaderPlugin extends Plugin
         if (old != null)
         {
             log.info("Refreshing only KSP unit {} | active={}", remote.key, active);
-            unload(old);
+            try
+            {
+                unload(old);
+            }
+            catch (Throwable stopFailure)
+            {
+                // Do not install another instance when the old one could
+                // still be registered/active; retry on a later poll.
+                log.error("KSP refresh aborted | unit={} old runtime retained; stop failed",
+                        remote.key, stopFailure);
+                seen.remove(remote.key, remote.fingerprint);
+                return false;
+            }
             loaded.remove(remote.key);
         }
         else
@@ -700,26 +736,37 @@ public class KspSourceLoaderPlugin extends Plugin
         return plugin;
     }
 
-    private void unload(LoadedUnit unit)
+    private void unload(LoadedUnit unit) throws Exception
     {
         List<Plugin> plugins = new ArrayList<>(unit.plugins.values());
         Collections.reverse(plugins);
 
         plugins.forEach(this::prepareUnload);
 
+        // Unload is a prerequisite for hot replacement, not a best-effort
+        // operation. An active old plugin must never be removed from the
+        // manager or have its classloader closed after a failed stop.
         for (Plugin plugin : plugins)
         {
-            try
+            if (Microbot.getPluginManager().isActive(plugin))
             {
-                if (Microbot.getPluginManager().isActive(plugin)) stop(plugin);
-            }
-            catch (Throwable t)
-            {
-                log.warn("Failed stopping {}", name(plugin), t);
+                stop(plugin);
             }
         }
 
-        plugins.forEach(this::removeQuietly);
+        for (Plugin plugin : plugins)
+        {
+            if (Microbot.getPluginManager().isActive(plugin))
+            {
+                throw new IllegalStateException(
+                        "Refusing to unload active plugin " + name(plugin));
+            }
+        }
+
+        for (Plugin plugin : plugins)
+        {
+            Microbot.getPluginManager().remove(plugin);
+        }
         unit.plugins.clear();
         close(unit.loader);
         close(unit.dependencies);
@@ -766,15 +813,49 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         edt(() ->
         {
+            PluginManager manager = Microbot.getPluginManager();
+            if (!manager.isActive(plugin))
+            {
+                manager.setPluginEnabled(plugin, false);
+                return;
+            }
+
             try
             {
-                PluginManager manager = Microbot.getPluginManager();
+                // Compile-time PluginManager.stopPlugin descriptors differ
+                // between client builds: (Plugin)void and (Plugin)boolean.
+                // Reflection binds by name and parameter types at runtime,
+                // avoiding a NoSuchMethodError caused only by return type.
+                Method method = manager.getClass().getMethod("stopPlugin", Plugin.class);
+                Object result;
+                try
+                {
+                    result = method.invoke(manager, plugin);
+                }
+                catch (java.lang.reflect.InvocationTargetException e)
+                {
+                    throw new IllegalStateException(
+                            "PluginManager.stopPlugin failed for " + name(plugin), e.getCause());
+                }
+
+                if (manager.isActive(plugin))
+                {
+                    throw new IllegalStateException(
+                            "PluginManager.stopPlugin did not deactivate " + name(plugin)
+                                    + " (result=" + result + ")");
+                }
+
+                // Disable only after stop is confirmed, so failed unloads
+                // retain their prior enabled configuration and can be retried.
                 manager.setPluginEnabled(plugin, false);
-                manager.stopPlugin(plugin);
+                log.info("Stopped {} | PluginManager.stopPlugin returned {}",
+                        name(plugin), result);
             }
-            catch (Exception e)
+            catch (ReflectiveOperationException e)
             {
-                throw new RuntimeException(e);
+                throw new IllegalStateException(
+                        "Unable to resolve runtime PluginManager.stopPlugin(Plugin) for "
+                                + name(plugin), e);
             }
         });
     }
@@ -798,14 +879,17 @@ public class KspSourceLoaderPlugin extends Plugin
         try
         {
             if (Microbot.getPluginManager().isActive(plugin)) stop(plugin);
-        }
-        catch (Throwable ignored) { }
-
-        try
-        {
+            if (Microbot.getPluginManager().isActive(plugin))
+            {
+                log.error("Skipping removal of still-active plugin {}", name(plugin));
+                return;
+            }
             Microbot.getPluginManager().remove(plugin);
         }
-        catch (Throwable ignored) { }
+        catch (Throwable t)
+        {
+            log.error("Failed to clean up plugin {}; keeping runtime referenced", name(plugin), t);
+        }
     }
 
     private void edt(Runnable action) throws Exception
@@ -850,7 +934,10 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private RemoteRepo readRepo() throws Exception
     {
-        String commit = json(API + "/commits/" + BRANCH).get("sha").getAsString();
+        KspSourceLoaderConfig.SourceBranch selection =
+                configManager.getConfig(KspSourceLoaderConfig.class).sourceBranch();
+        String branch = selection == KspSourceLoaderConfig.SourceBranch.DEV ? "dev" : "main";
+        String commit = json(API + "/commits/" + branch).get("sha").getAsString();
         JsonObject tree = json(API + "/git/trees/" + commit + "?recursive=1");
 
         if (tree.has("truncated") && tree.get("truncated").getAsBoolean())
