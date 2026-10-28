@@ -4,7 +4,7 @@ Incrementally hot-loads changed KSP plugins from GitHub source
 
 | | |
 |---|---|
-| Version | 2.2.5 |
+| Version | 2.2.6 |
 | Works with Microbot | 2.6.28 or newer |
 | Author | KSP |
 | Tags | ksp, source, loader, hot reload |
