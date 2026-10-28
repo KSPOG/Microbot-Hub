@@ -73,7 +73,7 @@ import java.util.stream.Stream;
         description = "Incrementally hot-loads changed KSP plugins from GitHub source",
         tags = {"ksp", "source", "loader", "hot reload"},
         authors = {"KSP"},
-        version = "2.2.5",
+        version = "2.2.6",
         minClientVersion = "2.6.28",
         enabledByDefault = true,
         isExternal = true
@@ -178,7 +178,7 @@ public class KspSourceLoaderPlugin extends Plugin
             return t;
         });
         timer.scheduleWithFixedDelay(this::refreshSafe, 0L, REFRESH_MINUTES, TimeUnit.MINUTES);
-        log.info("KSP Source Loader v2.2.5 started | incremental per-plugin refresh enabled");
+        log.info("KSP Source Loader v2.2.6 started | ABI-safe stop + guarded unit refresh");
     }
 
     @Override
@@ -190,8 +190,21 @@ public class KspSourceLoaderPlugin extends Plugin
             timer = null;
         }
 
-        new ArrayList<>(loaded.values()).forEach(this::unload);
-        loaded.clear();
+        for (LoadedUnit unit : new ArrayList<>(loaded.values()))
+        {
+            try
+            {
+                unload(unit);
+                loaded.remove(unit.key);
+            }
+            catch (Throwable t)
+            {
+                // Keep the classloaders reachable if stop failed. Closing
+                // them while the plugin remains active would orphan its code.
+                log.error("Cannot unload KSP unit {} during loader shutdown; plugin retained",
+                        unit.key, t);
+            }
+        }
         seen.clear();
         pluginsChanged();
     }
@@ -260,12 +273,22 @@ public class KspSourceLoaderPlugin extends Plugin
 
         for (String key : removed)
         {
-            LoadedUnit old = loaded.remove(key);
+            LoadedUnit old = loaded.get(key);
             if (old != null)
             {
                 log.info("Removing deleted KSP unit {}", key);
-                unload(old);
-                uiChanged = true;
+                try
+                {
+                    unload(old);
+                    loaded.remove(key);
+                    uiChanged = true;
+                }
+                catch (Throwable t)
+                {
+                    log.error("Deleted KSP unit {} could not stop; retaining its active runtime",
+                            key, t);
+                    continue;
+                }
             }
             seen.remove(key);
         }
@@ -296,7 +319,19 @@ public class KspSourceLoaderPlugin extends Plugin
         if (old != null)
         {
             log.info("Refreshing only KSP unit {} | active={}", remote.key, active);
-            unload(old);
+            try
+            {
+                unload(old);
+            }
+            catch (Throwable stopFailure)
+            {
+                // Do not install another instance when the old one could
+                // still be registered/active; retry on a later poll.
+                log.error("KSP refresh aborted | unit={} old runtime retained; stop failed",
+                        remote.key, stopFailure);
+                seen.remove(remote.key, remote.fingerprint);
+                return false;
+            }
             loaded.remove(remote.key);
         }
         else
