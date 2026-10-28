@@ -735,26 +735,37 @@ public class KspSourceLoaderPlugin extends Plugin
         return plugin;
     }
 
-    private void unload(LoadedUnit unit)
+    private void unload(LoadedUnit unit) throws Exception
     {
         List<Plugin> plugins = new ArrayList<>(unit.plugins.values());
         Collections.reverse(plugins);
 
         plugins.forEach(this::prepareUnload);
 
+        // Unload is a prerequisite for hot replacement, not a best-effort
+        // operation. An active old plugin must never be removed from the
+        // manager or have its classloader closed after a failed stop.
         for (Plugin plugin : plugins)
         {
-            try
+            if (Microbot.getPluginManager().isActive(plugin))
             {
-                if (Microbot.getPluginManager().isActive(plugin)) stop(plugin);
-            }
-            catch (Throwable t)
-            {
-                log.warn("Failed stopping {}", name(plugin), t);
+                stop(plugin);
             }
         }
 
-        plugins.forEach(this::removeQuietly);
+        for (Plugin plugin : plugins)
+        {
+            if (Microbot.getPluginManager().isActive(plugin))
+            {
+                throw new IllegalStateException(
+                        "Refusing to unload active plugin " + name(plugin));
+            }
+        }
+
+        for (Plugin plugin : plugins)
+        {
+            Microbot.getPluginManager().remove(plugin);
+        }
         unit.plugins.clear();
         close(unit.loader);
         close(unit.dependencies);
@@ -833,14 +844,17 @@ public class KspSourceLoaderPlugin extends Plugin
         try
         {
             if (Microbot.getPluginManager().isActive(plugin)) stop(plugin);
-        }
-        catch (Throwable ignored) { }
-
-        try
-        {
+            if (Microbot.getPluginManager().isActive(plugin))
+            {
+                log.error("Skipping removal of still-active plugin {}", name(plugin));
+                return;
+            }
             Microbot.getPluginManager().remove(plugin);
         }
-        catch (Throwable ignored) { }
+        catch (Throwable t)
+        {
+            log.error("Failed to clean up plugin {}; keeping runtime referenced", name(plugin), t);
+        }
     }
 
     private void edt(Runnable action) throws Exception
