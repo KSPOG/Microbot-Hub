@@ -47,7 +47,14 @@ jobs:
           assert 'seen.remove(remote.key, remote.fingerprint);' in refresh
           assert 'old runtime retained; stop failed' in refresh
           assert 'return false;' in refresh
-          print('PASS: return-ABI independent stop, no unload after failure, reload retry preserved')
+          cfg = Path('src/main/java/net/runelite/client/plugins/microbot/loader/KspSourceLoaderConfig.java').read_text()
+          assert 'enum SourceBranch' in cfg and 'MAIN' in cfg and 'DEV' in cfg
+          assert 'BRANCH_KEY = "sourceBranch"' in cfg
+          assert 'getConfig(KspSourceLoaderConfig.class).sourceBranch()' in source
+          assert 'REFRESH_KEY.equals(event.getKey())' in source
+          assert 'BRANCH_KEY.equals(event.getKey())' in source
+          assert 'String branch = selection == KspSourceLoaderConfig.SourceBranch.DEV' in source
+          print('PASS: ABI-compatible stop, safe unload, retry, and Main/Dev branch selector')
       - name: Compile KSP Source Loader against current Microbot API
         run: |
           chmod +x gradlew
