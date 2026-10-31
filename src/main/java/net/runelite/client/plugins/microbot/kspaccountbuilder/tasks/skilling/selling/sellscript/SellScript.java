@@ -1,63 +1,54 @@
-/*
- * Decompiled with CFR 0.152.
- * 
- * Could not load the following classes:
- *  javax.inject.Singleton
- *  net.runelite.api.MenuAction
- *  net.runelite.api.Skill
- *  net.runelite.api.coords.WorldPoint
- *  net.runelite.api.widgets.Widget
- *  net.runelite.client.plugins.Plugin
- *  net.runelite.client.plugins.microbot.Microbot
- *  net.runelite.client.plugins.microbot.Script
- *  net.runelite.client.plugins.microbot.util.bank.Rs2Bank
- *  net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction
- *  net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest
- *  net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange
- *  net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory
- *  net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel
- *  net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard
- *  net.runelite.client.plugins.microbot.util.math.Rs2Random
- *  net.runelite.client.plugins.microbot.util.menu.NewMenuEntry
- *  net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper
- *  net.runelite.client.plugins.microbot.util.npc.Rs2Npc
- *  net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel
- *  net.runelite.client.plugins.microbot.util.player.Rs2Player
- *  net.runelite.client.plugins.microbot.util.walker.Rs2Walker
- *  net.runelite.client.plugins.microbot.util.widget.Rs2Widget
- *  org.slf4j.Logger
- *  org.slf4j.LoggerFactory
- */
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.sellscript;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
-import java.util.ArrayList;
-import java.util.Arrays;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
+
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import javax.inject.Inject;
 import javax.inject.Singleton;
+
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspGrandExchangeHelper;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountPlayTimeCache;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderConfig;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTrainSingleSkillTask;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTaskDebug;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWalkerGuard;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWorldMapGuard;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.questing.cooksassistant.reqs.Items;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.questing.goblindip.reqs.GobReqs;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.buyscript.Buy;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.equipment.armour.Armour;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.equipment.weapon.Weapons;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.buyscript.BuyScript;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.gearea.GEArea;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.GeOfferRepricePolicy;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.GeOfferPriceModifier;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.sell.SellList;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.sellscript.SellState;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeAction;
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequest;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeSlots;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
@@ -67,616 +58,1136 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Singleton
-public class SellScript
-extends Script {
+public class SellScript extends KspManagedScript
+{
     private static final Logger log = LoggerFactory.getLogger(SellScript.class);
-    private static final int LOOP_DELAY_MS = 600;
-    private static final int WEB_WALK_COOLDOWN_MS = 3000;
-    private static final int ACTION_COOLDOWN_MS = 1200;
-    private static final int GE_OFFER_INPUT_DELAY_MS = 900;
-    private static final int INVENTORY_WAIT_TIMEOUT_MS = 3000;
-    private static final int OFFER_SCREEN_WAIT_TIMEOUT_MS = 3000;
-    private static final int TRADE_RESTRICTION_CACHE_MS = 300000;
+    private static final int LOOP_DELAY_MS = 100;
+    private static final long BANK_ACTION_TIMEOUT_NS = TimeUnit.SECONDS.toNanos(3);
+    private static final long GE_ACTION_TIMEOUT_NS = TimeUnit.SECONDS.toNanos(5);
+    private static final long BANK_EXCEPTION_BACKOFF_NS = TimeUnit.MILLISECONDS.toNanos(500);
+    private static final int TRADE_RESTRICTION_CACHE_MS = 10_000;
     private static final int TRADE_RESTRICTION_MIN_TOTAL_LEVEL = 100;
     private static final int TRADE_RESTRICTION_MIN_QUEST_POINTS = 10;
     private static final int TRADE_RESTRICTION_MIN_HOURS_PLAYED = 20;
-    private static final int SIDE_JOURNAL_TAB_CONTAINER_WIDGET_ID = 41222157;
-    private static final int ACCOUNT_SUMMARY_WIDGET_ID = 46661633;
-    private static final int TIME_PLAYED_WIDGET_ID = 46661634;
+    private static final long BUY_AFFORDABILITY_CACHE_MS = 3_000L;
+
+    private static final String WALK_KEY = "GE Sell:target-area";
     private static final String[] PICKAXE_NAMES = Buy.PICKAXE_NAMES;
     private static final String[] AXE_NAMES = Buy.AXE_NAMES;
-    private static final Set<String> TRADE_RESTRICTED_ITEM_NAMES = new HashSet<String>(Arrays.asList("rune essence", "pure essence", "air rune", "water rune", "earth rune", "fire rune", "mind rune", "chaos rune", "nature rune", "law rune", "death rune", "blood rune", "feather", "cowhide", "leather", "green dragonhide", "copper ore", "tin ore", "iron ore", "coal", "gold ore", "mithril ore", "adamantite ore", "runite ore", "iron bar", "steel bar", "mithril bar", "adamantite bar", "runite bar", "logs", "oak logs", "willow logs", "maple logs", "yew logs", "magic logs", "raw shrimp", "shrimp", "raw anchovies", "anchovies", "raw trout", "trout", "raw salmon", "salmon", "raw tuna", "tuna", "raw lobster", "lobster", "raw swordfish", "swordfish", "raw shark", "shark", "sapphire", "emerald", "ruby", "diamond", "bow string", "bronze arrow", "iron arrow", "steel arrow", "mithril arrow", "adamant arrow", "rune arrow", "bronze bolts", "iron bolts", "steel bolts", "bones", "big bones", "wine of zamorak"));
+    private static final SellList[] SELL_ENTRIES = SellList.values();
+    private static final Skill[] SKILLS = Skill.values();
+
+    private static final Set<SellList> PROTECTED_SKILL_RESOURCES = EnumSet.of(
+            SellList.LOGS, SellList.OAK_LOGS, SellList.YEW_LOGS,
+            SellList.COWHIDE, SellList.RAW_CHICKEN,
+            SellList.SMALL_FISHING_NET, SellList.FISHING_ROD, SellList.FISHING_BAIT,
+            SellList.SILVER_ORE, SellList.SILVER_BAR,
+            SellList.LIMPWURT_ROOT, SellList.EARTH_TALISMAN, SellList.BODY_TALISMAN,
+            SellList.TUNA, SellList.LOBSTER, SellList.SWORDFISH, SellList.SPINACH_ROLL);
+
+    private enum BankAction { NONE, OPEN, SET_NOTE, DEPOSIT, WITHDRAW, CLOSE }
+
+    @Inject private KspAccountPlayTimeCache accountPlayTimeCache;
+    @Inject private BuyScript buyScript;
+    @Inject private KspAccountBuilderConfig config;
+
+    private final Set<String> blockedSellItems = new HashSet<>();
+    // Avoid infinite bank loops if a particular item's withdrawal cannot be
+    // confirmed. Other eligible items should still be processed.
+    private final Map<String, Integer> failedBankWithdrawals = new HashMap<>();
+    private final Set<String> skippedBankWithdrawals = new HashSet<>();
+    private static final int MAX_WITHDRAW_FAILURES = 3;
+    private Set<String> outdatedMeleeGearCache;
+
     private GEArea targetArea = GEArea.GRAND_EXCHANGE;
-    private boolean debugLogging;
-    private long lastWebWalkAtMs;
-    private long lastActionAtMs;
-    private final Set<String> blockedSellItems = new HashSet<String>();
-    private Boolean tradeRestrictionUnlockedCache;
-    private Integer cachedHoursPlayed;
-    private long lastTradeRestrictionCheckAtMs;
-    private boolean attemptedHoursPlayedLookup;
     private SellState state = SellState.GOING_TO_GE;
+    private boolean debugLogging;
     private boolean complete;
+    private boolean bankInventoryPrepared;
+    private boolean completeAfterBankClose;
 
-    public void setDebugLogging(boolean debugLogging) {
-        this.debugLogging = debugLogging;
-    }
+    private BankAction bankAction = BankAction.NONE;
+    private long bankActionStartedNs;
+    private int bankActionEmptySlots;
+    private String pendingWithdrawName;
+    private int pendingWithdrawBankBefore;
+    private int pendingWithdrawInventoryBefore;
+    private long nextBankOpenAttemptNs;
 
-    public boolean run(GEArea area) {
-        this.shutdown();
-        this.targetArea = area;
-        this.complete = false;
+    private boolean geOpenRequested;
+    private long geOpenRequestedNs;
+    private boolean geOverviewRequested;
+    private long geOverviewRequestedNs;
+
+    private int pendingOfferItemId;
+    private String pendingOfferItemName;
+    private long pendingOfferStartedNs;
+    private final GeOfferRepricePolicy sellRepricing = new GeOfferRepricePolicy();
+
+    private Boolean tradeRestrictionUnlockedCache;
+    private long lastTradeRestrictionCheckAtMs;
+    private long lastBuyAffordabilityCheckAtMs;
+    private boolean cachedBuyAffordability;
+
+    public void setDebugLogging(boolean debugLogging) { this.debugLogging = debugLogging; }
+
+    public boolean run(GEArea area)
+    {
+        shutdown();
+        targetArea = area == null ? GEArea.GRAND_EXCHANGE : area;
+        state = SellState.GOING_TO_GE;
+        complete = false;
         Microbot.status = "Walking to GE";
-        this.mainScheduledFuture = this.scheduledExecutorService.scheduleWithFixedDelay(() -> {
-            if (!super.run() || !Microbot.isLoggedIn()) {
-                return;
+
+        mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() ->
+        {
+            try
+            {
+                if (KspAccountBuilderPauseGate.isPaused() || !super.run() || !Microbot.isLoggedIn() || complete) return;
+                tick();
             }
-            if (this.complete) {
-                Microbot.status = "GE Sell Complete";
-                return;
+            catch (RuntimeException ex)
+            {
+                log.warn("KSP Account Builder SellScript tick failed", ex);
+                recoverGeState("tick exception: " + ex.getMessage());
             }
-            if (this.completeIfBankHasNothingToSell()) {
-                return;
-            }
-            this.updateState();
-            KspTaskDebug.throttled(log, this.debugLogging, "GE Sell", "loop", 5_000L,
-                    "loop | state={} complete={} player={} moving={} interacting={} bankOpen={} geOpen={} offerScreen={} slots={} hasInvSellable={} hasBankSellable={} blockedItems={}",
-                    this.state,
-                    this.complete,
-                    Rs2Player.getWorldLocation(),
-                    Rs2Player.isMoving(),
-                    Rs2Player.isInteracting(),
-                    Rs2Bank.isOpen(),
-                    Rs2GrandExchange.isOpen(),
-                    Rs2GrandExchange.isOfferScreenOpen(),
-                    Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1,
-                    this.hasSellableInventoryItems(),
-                    this.hasSellableBankItems(),
-                    this.blockedSellItems);
-            switch (this.state) {
-                case GOING_TO_GE: {
-                    if (!this.ensureInTargetArea()) {
-                        return;
-                    }
-                    this.state = SellState.RESTOCKING_FROM_BANK;
-                    return;
-                }
-                case RESTOCKING_FROM_BANK: {
-                    if (!this.hasSellableInventoryItems()) {
-                        this.prepareSellInventoryFromBank();
-                        return;
-                    }
-                    this.state = SellState.SELLING_ITEMS;
-                    return;
-                }
-                case SELLING_ITEMS: {
-                    this.handleSellingItems();
-                    return;
-                }
-            }
-        }, 0L, 600L, TimeUnit.MILLISECONDS);
+        }, 0L, LOOP_DELAY_MS, TimeUnit.MILLISECONDS);
         return true;
     }
 
-    private boolean completeIfBankHasNothingToSell() {
-        if (!Rs2Bank.isOpen()) {
+    private void tick()
+    {
+        // Gear ranking is shared by bank checks, inventory checks and the
+        // SellList filter; only compute it once per scheduler tick.
+        outdatedMeleeGearCache = null;
+        if (!KspWorldMapGuard.isSceneReady())
+        {
+            Microbot.status = "Waiting for game scene";
+            return;
+        }
+
+        WorldPoint player = Rs2Player.getWorldLocation();
+        if (player == null)
+        {
+            Microbot.status = "Waiting for game scene";
+            return;
+        }
+
+        if (!targetArea.toWorldArea().contains(player))
+        {
+            state = SellState.GOING_TO_GE;
+            walkToGe();
+            return;
+        }
+
+        Rs2Walker.clearWalkingRoute(WALK_KEY);
+
+        // Once a bank batch starts, keep ownership of the state until every
+        // eligible item that fits has been withdrawn and the bank is closed.
+        if (Rs2Bank.isOpen() || bankAction != BankAction.NONE || bankInventoryPrepared)
+        {
+            state = SellState.RESTOCKING_FROM_BANK;
+        }
+        else if (pendingOfferItemId > 0 || geOpenRequested || geOverviewRequested
+                || hasSellableInventoryItems() || hasCompletedSellOffers() || hasOpenSellOffers())
+        {
+            state = SellState.SELLING_ITEMS;
+        }
+        else
+        {
+            state = SellState.RESTOCKING_FROM_BANK;
+        }
+
+        if (state == SellState.RESTOCKING_FROM_BANK) bankSellItems();
+        else sellInventory();
+    }
+
+    private void walkToGe()
+    {
+        Microbot.status = "Walking to GE";
+        Rs2Walker.walkUntil(targetArea.getRandomPoint(), 2, () -> targetArea.toWorldArea().contains(Rs2Player.getWorldLocation()));
+    }
+
+    private void bankSellItems()
+    {
+        if (!KspWorldMapGuard.isSceneReady()) return;
+
+        if (Rs2GrandExchange.isOpen())
+        {
+            Rs2GrandExchange.closeExchange();
+            return;
+        }
+
+        if (processPendingBankAction()) return;
+
+        if (!Rs2Bank.isOpen())
+        {
+            Microbot.status = "Opening GE Bank";
+            if (System.nanoTime() < nextBankOpenAttemptNs) return;
+            try
+            {
+                boolean sent = Rs2Bank.openBank();
+                if (!sent && !Rs2Player.isMoving()) sent = Rs2Bank.walkToBankAndUseBank();
+                if (sent) startBankAction(BankAction.OPEN);
+            }
+            catch (RuntimeException ex)
+            {
+                nextBankOpenAttemptNs = System.nanoTime() + BANK_EXCEPTION_BACKOFF_NS;
+                debug("GE bank open deferred | message={}", ex.getMessage());
+            }
+            return;
+        }
+
+        nextBankOpenAttemptNs = 0L;
+        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return;
+
+        if (!Rs2Bank.hasWithdrawAsNote())
+        {
+            Microbot.status = "Setting Withdraw-as-Note";
+            if (Rs2Bank.setWithdrawAsNote()) startBankAction(BankAction.SET_NOTE);
+            return;
+        }
+
+        if (!bankInventoryPrepared)
+        {
+            if (!Rs2Inventory.isEmpty())
+            {
+                Microbot.status = "Clearing Inventory";
+                bankActionEmptySlots = Rs2Inventory.emptySlotCount();
+                if (Rs2Bank.depositAll()) startBankAction(BankAction.DEPOSIT);
+                return;
+            }
+            bankInventoryPrepared = true;
+        }
+
+        // Drain every eligible item into this inventory before leaving the bank.
+        if (dispatchNextWithdrawal()) return;
+
+        if (hasSellableInventoryItems())
+        {
+            closeBank(false);
+            return;
+        }
+
+        if (hasOpenSellOffers() || hasCompletedSellOffers())
+        {
+            closeBank(false);
+            return;
+        }
+
+        if (!hasSellableBankItems()) closeBank(true);
+    }
+
+    private void closeBank(boolean finishWhenClosed)
+    {
+        Microbot.status = "Closing Bank";
+        completeAfterBankClose = finishWhenClosed;
+        if (Rs2Bank.closeBank()) startBankAction(BankAction.CLOSE);
+    }
+
+    private boolean processPendingBankAction()
+    {
+        if (bankAction == BankAction.NONE) return false;
+
+        boolean completeNow;
+        switch (bankAction)
+        {
+            case OPEN:
+                completeNow = Rs2Bank.isOpen();
+                break;
+            case SET_NOTE:
+                completeNow = Rs2Bank.hasWithdrawAsNote();
+                break;
+            case DEPOSIT:
+                completeNow = Rs2Inventory.isEmpty()
+                        || Rs2Inventory.emptySlotCount() > bankActionEmptySlots;
+                if (completeNow && Rs2Inventory.isEmpty()) bankInventoryPrepared = true;
+                break;
+            case WITHDRAW:
+                completeNow = pendingWithdrawName == null
+                        || Rs2Inventory.itemQuantity(pendingWithdrawName, true) > pendingWithdrawInventoryBefore
+                        || Rs2Bank.count(pendingWithdrawName, true) < pendingWithdrawBankBefore;
+                break;
+            case CLOSE:
+                completeNow = !Rs2Bank.isOpen();
+                break;
+            default:
+                completeNow = true;
+                break;
+        }
+
+        if (completeNow)
+        {
+            BankAction finished = bankAction;
+            String finishedItem = pendingWithdrawName;
+            clearBankAction();
+            if (finished == BankAction.WITHDRAW && finishedItem != null)
+                failedBankWithdrawals.remove(finishedItem.toLowerCase(Locale.ROOT));
+            if (finished == BankAction.CLOSE)
+            {
+                bankInventoryPrepared = false;
+                if (completeAfterBankClose)
+                {
+                    completeAfterBankClose = false;
+                    complete = true;
+                    Microbot.status = "GE Sell Complete";
+                }
+                else state = SellState.SELLING_ITEMS;
+                return true;
+            }
+
+            // OPEN/SET_NOTE/DEPOSIT/WITHDRAW completed from actual widget,
+            // inventory or bank changes. Continue this same tick instead of
+            // burning an extra scheduler cycle per item.
             return false;
         }
 
-        if (this.hasSellableInventoryItems() || this.hasSellableBankItems()) {
+        if (bankActionExpired())
+        {
+            debug("Bank action recovery | action={} item={}", bankAction, pendingWithdrawName);
+            if (bankAction == BankAction.WITHDRAW && pendingWithdrawName != null)
+                recordFailedWithdrawal(pendingWithdrawName);
+            clearBankAction();
             return false;
         }
-
-        this.complete = true;
-        this.state = SellState.GOING_TO_GE;
-        Microbot.status = "GE Sell Skipped";
-        this.debug("Skipping GE sell; bank contains no sellable items | blockedItems={}", this.blockedSellItems);
         return true;
     }
 
-    private boolean ensureInTargetArea() {
-        if (this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation())) {
-            KspWalkerGuard.clear("GE Sell:target-area");
-            return true;
+    private void startBankAction(BankAction action)
+    {
+        bankAction = action;
+        bankActionStartedNs = System.nanoTime();
+    }
+
+    private boolean bankActionExpired()
+    {
+        return bankActionStartedNs > 0L
+                && System.nanoTime() - bankActionStartedNs >= BANK_ACTION_TIMEOUT_NS;
+    }
+
+    private void recordFailedWithdrawal(String name)
+    {
+        String key = name.toLowerCase(Locale.ROOT);
+        int failures = failedBankWithdrawals.merge(key, 1, Integer::sum);
+        if (failures >= MAX_WITHDRAW_FAILURES && skippedBankWithdrawals.add(key))
+            log.warn("[KSP GE Sell] Skipping bank withdrawal for {} after {} failed attempts this run", name, failures);
+    }
+
+    private boolean isWithdrawalSkipped(String name)
+    {
+        return name != null && skippedBankWithdrawals.contains(name.toLowerCase(Locale.ROOT));
+    }
+
+    private void clearBankAction()
+    {
+        bankAction = BankAction.NONE;
+        bankActionStartedNs = 0L;
+        pendingWithdrawName = null;
+        pendingWithdrawBankBefore = 0;
+        pendingWithdrawInventoryBefore = 0;
+    }
+
+    private boolean dispatchNextWithdrawal()
+    {
+        if (Rs2Inventory.emptySlotCount() <= 0) return false;
+
+        for (SellList entry : SELL_ENTRIES)
+        {
+            String name = entry.getDisplayName();
+            if (!shouldSellEntry(entry) || isBlocked(name) || isWithdrawalSkipped(name)) continue;
+            int quantity = getSellableBankQuantity(name);
+            if (quantity > 0) return dispatchWithdrawal(name, quantity);
         }
-        if (Rs2Player.isMoving()) {
-            return false;
+
+        // Outdated combat equipment may be sold even when buy requirements
+        // are not affordable; this sale can be what funds the next purchase.
+        for (String name : getOutdatedMeleeGearNames())
+        {
+            int count = Rs2Bank.count(name, true);
+            if (count > 0 && !isWithdrawalSkipped(name))
+                return dispatchWithdrawal(name, count);
         }
-        Microbot.status = "Walking to GE";
-        if (KspWalkerGuard.walkToDestination(
-                "GE Sell:target-area",
-                this.targetArea::getRandomPoint,
-                this.targetArea.toWorldArea()::contains,
-                2,
-                WEB_WALK_COOLDOWN_MS)) {
-            this.lastWebWalkAtMs = System.currentTimeMillis();
-            this.debug("Requested GE sell area walk | player={} area={}",
-                    Rs2Player.getWorldLocation(),
-                    this.targetArea.getDisplayName());
+        if (!canAffordGeBuyRequirements()) return false;
+
+        String desiredPickaxe = resolveDesiredPickaxeName();
+        for (String name : PICKAXE_NAMES)
+        {
+            int count = Rs2Bank.count(name, true);
+            if (!name.equalsIgnoreCase(desiredPickaxe) && count > 0 && !isWithdrawalSkipped(name))
+                return dispatchWithdrawal(name, count);
+        }
+
+        String desiredAxe = resolveDesiredAxeName();
+        for (String name : AXE_NAMES)
+        {
+            int count = Rs2Bank.count(name, true);
+            if (!name.equalsIgnoreCase(desiredAxe) && count > 0 && !isWithdrawalSkipped(name))
+                return dispatchWithdrawal(name, count);
         }
         return false;
     }
 
-    private void prepareSellInventoryFromBank() {
-        if (!Rs2Bank.isOpen()) {
-            if (Rs2GrandExchange.isOpen()) {
-                Microbot.status = "Closing GE";
-                Rs2GrandExchange.closeExchange();
-                SellScript.sleepUntil(() -> !Rs2GrandExchange.isOpen(), (int)2000);
-                return;
-            }
-            if (this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation())) {
-                Microbot.status = "Using GE Bank";
-                Rs2Bank.walkToBankAndUseBank();
-                SellScript.sleepUntil(Rs2Bank::isOpen, (int)3000);
-                return;
-            }
-            Microbot.status = "Opening Bank";
-            if (Rs2Bank.openBank()) {
-                SellScript.sleepUntil(Rs2Bank::isOpen, (int)3000);
-            } else {
-                Microbot.status = "Walking to Bank";
-                Rs2Bank.walkToBankAndUseBank();
-            }
-            return;
-        }
-        Microbot.status = "Withdrawing Sell Items";
-        this.debug("Preparing sell inventory | bankOpen={} withdrawAsNote={} sellableBankItems={} inventoryEmpty={}",
-                Rs2Bank.isOpen(),
-                Rs2Bank.hasWithdrawAsNote(),
-                this.hasSellableBankItems(),
-                Rs2Inventory.isEmpty());
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return;
-        }
-        if (!Rs2Inventory.isEmpty()) {
-            Rs2Bank.depositAll();
-            SellScript.sleepUntil(Rs2Inventory::isEmpty, (int)3000);
-        }
-        if (!Rs2Bank.hasWithdrawAsNote()) {
-            Rs2Bank.setWithdrawAsNote();
-            SellScript.sleepUntil(Rs2Bank::hasWithdrawAsNote, (int)2000);
-        }
-        boolean withdrewAny = false;
-        for (SellList sellList : SellList.values()) {
-            if (!this.shouldSellEntry(sellList)) continue;
-            if (Rs2Inventory.isFull()) break;
-            if (this.isBlockedSellItem(sellList.getDisplayName())) continue;
-            int quantityToSell = this.getSellableBankQuantity(sellList.getDisplayName());
-            if (quantityToSell <= 0) continue;
-            if (quantityToSell >= Rs2Bank.count(sellList.getDisplayName())) {
-                Rs2Bank.withdrawAll((String)sellList.getDisplayName(), (boolean)true);
-            } else {
-                Rs2Bank.withdrawX(sellList.getDisplayName(), quantityToSell);
-            }
-            boolean withdrew = SellScript.sleepUntil(() -> Rs2Inventory.hasItem((String)sellList.getDisplayName(), (boolean)true), (int)3000);
-            this.debug("Withdraw sell item | item={} qty={} reservedForQuests={} withdrew={} invFull={}",
-                    sellList.getDisplayName(),
-                    quantityToSell,
-                    this.getReservedQuestRequirementQuantity(sellList.getDisplayName()),
-                    withdrew,
-                    Rs2Inventory.isFull());
-            withdrewAny = withdrewAny || withdrew;
-        }
-        withdrewAny = this.withdrawOutdatedToolsAsNotes() || withdrewAny;
-        if (!withdrewAny) {
-            if (!this.hasSellableBankItems()) {
-                this.complete = true;
-                Microbot.status = "GE Sell Complete";
-            } else {
-                Microbot.status = "Waiting for sell item withdraw";
-            }
-            return;
-        }
-        Rs2Bank.closeBank();
-        SellScript.sleepUntil(() -> !Rs2Bank.isOpen(), (int)2000);
-        Microbot.status = "Opening GE";
-    }
+    private boolean dispatchWithdrawal(String itemName, int quantity)
+    {
+        if (itemName == null || quantity <= 0 || Rs2Inventory.emptySlotCount() <= 0 || isWithdrawalSkipped(itemName)) return false;
 
-    private void updateState() {
-        if (!this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation())) {
-            this.state = SellState.GOING_TO_GE;
-            return;
-        }
-        if (!this.hasSellableInventoryItems()) {
-            this.state = SellState.RESTOCKING_FROM_BANK;
-            return;
-        }
-        this.state = SellState.SELLING_ITEMS;
-    }
+        int bankBefore = Rs2Bank.count(itemName, true);
+        int amount = Math.min(quantity, bankBefore);
+        if (amount <= 0) return false;
 
-    private void handleSellingItems() {
-        if (Rs2Player.isMoving() || Rs2Player.isInteracting()) {
-            Microbot.status = "Waiting at GE";
-            return;
+        int inventoryBefore = Rs2Inventory.itemQuantity(itemName, true);
+        boolean sent = amount >= bankBefore
+                ? Rs2Bank.withdrawAll(itemName, true)
+                : Rs2Bank.withdrawX(itemName, amount, true);
+        if (!sent)
+        {
+            recordFailedWithdrawal(itemName);
+            return true; // Yield until the next tick; do not close the bank mid-batch.
         }
-        if (Rs2GrandExchange.hasSoldOffer() && this.ensureGrandExchangeOpen()) {
-            Microbot.status = "Collecting Sold Items";
-            Rs2GrandExchange.collectAllToBank();
-            SellScript.sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), (int)5000);
-            return;
-        }
-        if (Rs2GrandExchange.isOfferScreenOpen()) {
-            Microbot.status = "Opening GE Overview";
-            this.returnToGrandExchangeOverview();
-            return;
-        }
-        if (!this.ensureGrandExchangeOpen()) {
-            return;
-        }
-        if (Rs2GrandExchange.getAvailableSlotsCount() <= 0) {
-            if (Rs2GrandExchange.hasSoldOffer()) {
-                Rs2GrandExchange.collectAllToBank();
-                SellScript.sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), (int)5000);
-            }
-            return;
-        }
-        Rs2ItemModel nextItem = this.getNextSellableInventoryItem();
-        if (nextItem == null) {
-            Microbot.status = "Waiting at GE";
-            this.state = SellState.RESTOCKING_FROM_BANK;
-            return;
-        }
-        this.placeFallbackSellOffer(nextItem);
-    }
 
-    private boolean shouldSellEntry(SellList sellList) {
-        if (this.isTradeRestrictedItemName(sellList.getDisplayName())) {
-            return false;
-        }
-        int firemakingLevel = Microbot.getClient().getRealSkillLevel(Skill.FIREMAKING);
-        if (sellList == SellList.LOGS) {
-            return firemakingLevel >= 15;
-        }
-        if (sellList == SellList.OAK_LOGS) {
-            return firemakingLevel >= 30;
-        }
-        if (sellList == SellList.SMALL_FISHING_NET
-                || sellList == SellList.FISHING_ROD
-                || sellList == SellList.FISHING_BAIT) {
-            return Microbot.getClient().getRealSkillLevel(Skill.FISHING) >= 20;
-        }
+        Microbot.status = "Batch withdrawing " + itemName;
+        pendingWithdrawName = itemName;
+        pendingWithdrawBankBefore = bankBefore;
+        pendingWithdrawInventoryBefore = inventoryBefore;
+        startBankAction(BankAction.WITHDRAW);
         return true;
     }
 
-    private int getSellableBankQuantity(String itemName) {
-        int bankQuantity = Math.max(0, Rs2Bank.count(itemName));
-        return Math.max(0, bankQuantity - this.getReservedQuestRequirementQuantity(itemName));
-    }
+    private void sellInventory()
+    {
+        if (!KspWorldMapGuard.isSceneReady()) return;
+        if (Rs2Bank.isOpen())
+        {
+            state = SellState.RESTOCKING_FROM_BANK;
+            return;
+        }
+        if (pendingOfferItemId > 0)
+        {
+            advancePendingOffer();
+            return;
+        }
+        if (!ensureGeOverview()) return;
+        if (checkStalledSellOffers()) return;
 
-    private int getSellableInventoryQuantity(String itemName, int inventoryQuantity) {
-        return Math.max(0, inventoryQuantity - this.getReservedQuestRequirementQuantity(itemName));
-    }
-
-    private int getReservedQuestRequirementQuantity(String itemName) {
-        if (itemName == null) {
-            return 0;
+        if (hasCompletedSellOffers())
+        {
+            Microbot.status = "Collecting Sold Items";
+            Rs2GrandExchange.collectAllToBank();
+            return;
         }
 
-        int reservedQuantity = 0;
-        if (this.isQuestIncomplete(Quest.COOKS_ASSISTANT)) {
-            for (Items item : Items.values()) {
-                if (item.getDisplayName().equalsIgnoreCase(itemName)) {
-                    reservedQuantity += 1;
-                }
+        Rs2ItemModel item = getNextSellableInventoryItem();
+        if (item != null)
+        {
+            int quantity = getSellableInventoryQuantity(item.getName(), item.getQuantity());
+            if (quantity > 0) placeSellOffer(item, quantity);
+            return;
+        }
+
+        if (hasOpenSellOffers())
+        {
+            Microbot.status = "Waiting for GE sales";
+            return;
+        }
+
+        if (hasSellableBankItems())
+        {
+            Rs2GrandExchange.closeExchange();
+            state = SellState.RESTOCKING_FROM_BANK;
+            return;
+        }
+
+        Rs2GrandExchange.closeExchange();
+        complete = true;
+        Microbot.status = "GE Sell Complete";
+    }
+
+    private void placeSellOffer(Rs2ItemModel item, int quantity)
+    {
+        if (item == null || item.getName() == null || quantity <= 0) return;
+        int itemId = canonicalItemId(item);
+        if (itemId <= 0) return;
+
+        GrandExchangeSlots existing = findSellOfferSlot(itemId);
+        if (existing != null)
+        {
+            Microbot.status = "GE sell already active: " + item.getName();
+            return;
+        }
+        if (Rs2GrandExchange.getAvailableSlotsCount() <= 0)
+        {
+            Microbot.status = "Waiting for GE Slot";
+            return;
+        }
+
+        int price = getAdjustedSellPrice(item);
+        Microbot.status = "Selling " + quantity + " x " + item.getName() + " @ " + price;
+        GrandExchangeRequest request = GrandExchangeRequest.builder()
+                .action(GrandExchangeAction.SELL)
+                .itemName(item.getName())
+                .exact(true)
+                .quantity(quantity)
+                .price(price)
+                .closeAfterCompletion(false)
+                .build();
+
+        boolean accepted;
+        try { accepted = Rs2GrandExchange.processOffer(request); }
+        catch (RuntimeException ex)
+        {
+            debug("GE sell request failed | item={} message={}", item.getName(), ex.getMessage());
+            recoverGeState("processOffer exception");
+            return;
+        }
+
+        if (!accepted)
+        {
+            String restriction = findTradeRestrictionNotice();
+            if (restriction != null)
+            {
+                blockedSellItems.add(item.getName().toLowerCase(Locale.ROOT));
+                debug("GE refused item | item={} notice={}", item.getName(), restriction);
             }
+            recoverGeState("processOffer returned false");
+            return;
         }
-        if (this.isQuestIncomplete(Quest.GOBLIN_DIPLOMACY)) {
-            for (GobReqs item : GobReqs.values()) {
-                if (item.getDisplayName().equalsIgnoreCase(itemName)) {
-                    reservedQuantity += item.getQuantity();
-                }
+        pendingOfferItemId = itemId;
+        pendingOfferItemName = item.getName();
+        pendingOfferStartedNs = System.nanoTime();
+        sellRepricing.placed(itemId, price, System.currentTimeMillis());
+    }
+
+    private void advancePendingOffer()
+    {
+        if (findSellOfferSlot(pendingOfferItemId) != null)
+        {
+            debug("GE sell registered | item={} id={}", pendingOfferItemName, pendingOfferItemId);
+            clearPendingOffer();
+            return;
+        }
+
+        String restriction = findTradeRestrictionNotice();
+        if (restriction != null)
+        {
+            if (pendingOfferItemName != null)
+                blockedSellItems.add(pendingOfferItemName.toLowerCase(Locale.ROOT));
+            debug("GE refused pending item | item={} notice={}", pendingOfferItemName, restriction);
+            recoverGeState("trade restriction");
+            clearPendingOffer();
+            return;
+        }
+
+        if (!Rs2GrandExchange.isOpen())
+        {
+            recoverGeState("GE closed while registering offer");
+            clearPendingOffer();
+            return;
+        }
+
+        if (pendingOfferStartedNs > 0L
+                && System.nanoTime() - pendingOfferStartedNs >= GE_ACTION_TIMEOUT_NS)
+        {
+            debug("GE registration recovery | item={}", pendingOfferItemName);
+            recoverGeState("offer registration timeout");
+            clearPendingOffer();
+        }
+    }
+
+    /**
+     * Check only offers this script placed; never touch an unrelated user
+     * offer or one with a manually changed price. Completed offers and
+     * partial progress reset their individual repricing timers.
+     */
+    private boolean checkStalledSellOffers()
+    {
+        for (GrandExchangeSlots slot : GrandExchangeSlots.values())
+        {
+            GrandExchangeOffer offer = clientValue(() ->
+            {
+                GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+                return offers != null && slot.ordinal() < offers.length
+                        ? offers[slot.ordinal()] : null;
+            }, null);
+            if (offer == null) continue;
+            int id = offer.getItemId();
+            if (offer.getState() == GrandExchangeOfferState.SOLD)
+            {
+                sellRepricing.forget(id);
+                continue;
             }
-        }
-        return reservedQuantity;
-    }
+            if (offer.getState() != GrandExchangeOfferState.SELLING) continue;
 
-    private boolean isQuestIncomplete(Quest quest) {
-        return Rs2Player.getQuestState(quest) != QuestState.FINISHED;
-    }
+            int oldPrice = (int) Math.min(Integer.MAX_VALUE, offer.getPrice());
+            int newPrice = sellRepricing.candidate(id, oldPrice,
+                    offer.getQuantitySold(), System.currentTimeMillis(), false);
+            if (newPrice <= 0) continue;
 
-    private boolean hasSellableInventoryItems() {
-        return this.getNextSellableInventoryItem() != null;
-    }
-
-    private boolean hasSellableBankItems() {
-        for (SellList sellList : SellList.values()) {
-            if (!this.shouldSellEntry(sellList)
-                    || this.isBlockedSellItem(sellList.getDisplayName())
-                    || this.getSellableBankQuantity(sellList.getDisplayName()) <= 0) continue;
+            Microbot.status = "Modifying GE sell " + id + " to " + newPrice + " gp";
+            // Unlike aborting/reposting, in-place Modify preserves the
+            // existing order's total quantity and already-sold portion.
+            boolean updated = GeOfferPriceModifier.modify(slot, id, oldPrice, newPrice);
+            if (updated)
+            {
+                sellRepricing.modified(id, newPrice, System.currentTimeMillis());
+                debug("GE sell modified | item={} slot={} oldPrice={} newPrice={} filled={} retry={}",
+                        id, slot, oldPrice, newPrice, offer.getQuantitySold(), sellRepricing.retries(id));
+            }
+            else
+            {
+                sellRepricing.defer(id, System.currentTimeMillis());
+                debug("GE sell modification deferred | item={} slot={} current={} proposed={}",
+                        id, slot, oldPrice, newPrice);
+                // The UI might be on its details screen after a failed
+                // modification; normal GE overview recovery handles that.
+            }
             return true;
         }
-        return this.hasOutdatedToolInBank();
+        return false;
     }
 
-    private Rs2ItemModel getNextSellableInventoryItem() {
-        List<String> sellNames = this.getAllowedSellNames();
-        String desiredPickaxe = this.resolveDesiredPickaxeName();
-        String desiredAxe = this.resolveDesiredAxeName();
-        for (Rs2ItemModel item : Rs2Inventory.all()) {
-            if (item == null
-                    || item.getName() == null
-                    || this.isBlockedSellItem(item.getName())
-                    || this.getSellableInventoryQuantity(item.getName(), item.getQuantity()) <= 0
-                    || !sellNames.stream().anyMatch(name -> name.equalsIgnoreCase(item.getName())) && !this.isOutdatedToolName(item.getName(), desiredPickaxe, desiredAxe)) continue;
-            return item;
+    private boolean ensureGeOverview()
+    {
+        if (Rs2Bank.isOpen()) return false;
+
+        if (!Rs2GrandExchange.isOpen())
+        {
+            geOverviewRequested = false;
+            if (geOpenRequested)
+            {
+                if (System.nanoTime() - geOpenRequestedNs < GE_ACTION_TIMEOUT_NS) return false;
+                geOpenRequested = false;
+            }
+            Microbot.status = "Opening Grand Exchange";
+            try
+            {
+                if (Rs2GrandExchange.openExchange())
+                {
+                    geOpenRequested = true;
+                    geOpenRequestedNs = System.nanoTime();
+                }
+            }
+            catch (RuntimeException ex) { debug("GE open deferred | message={}", ex.getMessage()); }
+            return false;
         }
+
+        geOpenRequested = false;
+        if (geSubScreenOpen())
+        {
+            if (geOverviewRequested && System.nanoTime() - geOverviewRequestedNs < GE_ACTION_TIMEOUT_NS)
+                return false;
+            Microbot.status = "Returning to GE overview";
+            Rs2GrandExchange.backToOverview();
+            geOverviewRequested = true;
+            geOverviewRequestedNs = System.nanoTime();
+            return false;
+        }
+        geOverviewRequested = false;
+        return true;
+    }
+
+    private boolean geSubScreenOpen()
+    {
+        return Rs2GrandExchange.isOfferScreenOpen() || Rs2Widget.isWidgetVisible(InterfaceID.GeOffers.SETUP);
+    }
+
+    private void recoverGeState(String reason)
+    {
+        debug("GE recovery | reason={} open={} subScreen={}", reason, Rs2GrandExchange.isOpen(), geSubScreenOpen());
+        if (Rs2GrandExchange.isOpen() && geSubScreenOpen())
+        {
+            Rs2GrandExchange.backToOverview();
+            geOverviewRequested = true;
+            geOverviewRequestedNs = System.nanoTime();
+        }
+    }
+
+    private GrandExchangeSlots findSellOfferSlot(int itemId)
+    {
+        if (itemId <= 0) return null;
+        return clientValue(() ->
+        {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null) return null;
+            int max = Math.min(offers.length, GrandExchangeSlots.values().length);
+            for (int i = 0; i < max; i++)
+            {
+                GrandExchangeOffer offer = offers[i];
+                if (offer == null || offer.getItemId() != itemId) continue;
+                GrandExchangeOfferState state = offer.getState();
+                if (state == GrandExchangeOfferState.SELLING || state == GrandExchangeOfferState.SOLD)
+                    return GrandExchangeSlots.values()[i];
+            }
+            return null;
+        }, null);
+    }
+
+    private boolean hasOpenSellOffers()
+    {
+        return clientValue(() ->
+        {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null) return false;
+            for (GrandExchangeOffer offer : offers)
+                if (offer != null && offer.getState() == GrandExchangeOfferState.SELLING) return true;
+            return false;
+        }, false);
+    }
+
+    private boolean hasCompletedSellOffers()
+    {
+        return clientValue(() ->
+        {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null) return false;
+            for (GrandExchangeOffer offer : offers)
+                if (offer != null && offer.getState() == GrandExchangeOfferState.SOLD) return true;
+            return false;
+        }, false);
+    }
+
+    private void clearPendingOffer()
+    {
+        pendingOfferItemId = 0;
+        pendingOfferItemName = null;
+        pendingOfferStartedNs = 0L;
+    }
+
+    private String findTradeRestrictionNotice()
+    {
+        return clientValue(() ->
+        {
+            Widget setup = Microbot.getClient().getWidget(InterfaceID.GeOffers.SETUP);
+            Widget match = findWidgetRecursive(setup, widget ->
+            {
+                String text = normalize(widget == null ? null : widget.getText());
+                return text.contains("restricted for trading") || text.contains("restrictions will lift");
+            }, 0);
+            return match == null ? null : match.getText().replaceAll("<[^>]*>", "").trim();
+        }, null);
+    }
+
+    private Widget findWidgetRecursive(Widget root, Predicate<Widget> predicate, int depth)
+    {
+        if (root == null || root.isHidden() || predicate == null || depth > 14) return null;
+        if (predicate.test(root)) return root;
+        Widget[] dynamic = root.getDynamicChildren();
+        if (dynamic != null)
+            for (Widget child : dynamic)
+            {
+                Widget match = findWidgetRecursive(child, predicate, depth + 1);
+                if (match != null) return match;
+            }
+        Widget[] statics = root.getStaticChildren();
+        if (statics != null)
+            for (Widget child : statics)
+            {
+                Widget match = findWidgetRecursive(child, predicate, depth + 1);
+                if (match != null) return match;
+            }
         return null;
     }
 
-    private List<String> getAllowedSellNames() {
-        ArrayList<String> names = new ArrayList<String>();
-        for (SellList sellList : SellList.values()) {
-            if (!this.shouldSellEntry(sellList) || this.isBlockedSellItem(sellList.getDisplayName())) continue;
-            names.add(sellList.getDisplayName());
-        }
-        return names;
+    private int canonicalItemId(Rs2ItemModel item)
+    {
+        if (item == null) return 0;
+        int unnoted = item.getUnNotedId();
+        return unnoted > 0 ? unnoted : item.getId();
     }
 
-    private boolean withdrawOutdatedToolsAsNotes() {
-        boolean withdrew;
-        boolean withdrewAny = false;
-        String desiredPickaxe = this.resolveDesiredPickaxeName();
-        String desiredAxe = this.resolveDesiredAxeName();
-        for (String pickaxeName : PICKAXE_NAMES) {
-            if (pickaxeName.equalsIgnoreCase(desiredPickaxe) || Rs2Inventory.isFull() || Rs2Bank.count((String)pickaxeName) <= 0) continue;
-            Rs2Bank.withdrawAll((String)pickaxeName, (boolean)true);
-            withdrew = SellScript.sleepUntil(() -> Rs2Inventory.hasItem((String)pickaxeName, (boolean)true), (int)3000);
-            withdrewAny = withdrewAny || withdrew;
-        }
-        for (String axeName : AXE_NAMES) {
-            if (axeName.equalsIgnoreCase(desiredAxe) || Rs2Inventory.isFull() || Rs2Bank.count((String)axeName) <= 0) continue;
-            Rs2Bank.withdrawAll((String)axeName, (boolean)true);
-            withdrew = SellScript.sleepUntil(() -> Rs2Inventory.hasItem((String)axeName, (boolean)true), (int)3000);
-            withdrewAny = withdrewAny || withdrew;
-        }
-        return withdrewAny;
+    private int getAdjustedSellPrice(Rs2ItemModel item)
+    {
+        if (item == null) return 1;
+        int id = canonicalItemId(item);
+        int guide = Rs2GrandExchange.getPrice(id);
+        if (guide <= 0 && item.getPrice() > 0L)
+            guide = (int) Math.min(Integer.MAX_VALUE, item.getPrice());
+        return Math.max(1, (int) ((long) Math.max(1, guide) * 90L / 100L));
     }
 
-    private boolean hasOutdatedToolInBank() {
-        String desiredPickaxe = this.resolveDesiredPickaxeName();
-        String desiredAxe = this.resolveDesiredAxeName();
-        for (String pickaxeName : PICKAXE_NAMES) {
-            if (pickaxeName.equalsIgnoreCase(desiredPickaxe) || Rs2Bank.count((String)pickaxeName) <= 0) continue;
-            return true;
+    /**
+     * Do not sell the only reusable tool needed by an enabled activity.
+     * In normal automatic mode all skills remain eligible; forced single-skill
+     * mode narrows the resource reservation to that activity.
+     */
+    private boolean taskAvailable(KspTrainSingleSkillTask task)
+    {
+        if (config == null) return true;
+        if (config.runSingleQuest()) return false;
+        if (config.trainSingleSkill()) return config.singleSkillTask() == task;
+        return true;
+    }
+
+    private boolean taskNeedsItem(SellList entry)
+    {
+        switch (entry)
+        {
+            case SMALL_FISHING_NET:
+            case FISHING_ROD:
+            case FISHING_BAIT:
+                return taskAvailable(KspTrainSingleSkillTask.FISHING);
+            case LOGS:
+            case OAK_LOGS:
+            case YEW_LOGS:
+                return taskAvailable(KspTrainSingleSkillTask.FIREMAKING);
+            case RAW_CHICKEN:
+                return taskAvailable(KspTrainSingleSkillTask.COOKING);
+            case COWHIDE:
+                return taskAvailable(KspTrainSingleSkillTask.CRAFTING);
+            case SILVER_ORE:
+                return taskAvailable(KspTrainSingleSkillTask.SMELTING);
+            case SILVER_BAR:
+                return taskAvailable(KspTrainSingleSkillTask.SMITHING)
+                        || taskAvailable(KspTrainSingleSkillTask.CRAFTING);
+            case BRONZE_BAR:
+            case IRON_BAR:
+            case STEEL_BAR:
+            case GOLD_BAR:
+            case MITHRIL_BAR:
+            case ADAMANT_BAR:
+            case RUNE_BAR:
+                return taskAvailable(KspTrainSingleSkillTask.SMITHING)
+                        || taskAvailable(KspTrainSingleSkillTask.CRAFTING);
+            case TUNA:
+            case LOBSTER:
+            case SWORDFISH:
+            case SPINACH_ROLL:
+                return taskAvailable(KspTrainSingleSkillTask.MELEE);
+            default:
+                return false;
         }
-        for (String axeName : AXE_NAMES) {
-            if (axeName.equalsIgnoreCase(desiredAxe) || Rs2Bank.count((String)axeName) <= 0) continue;
-            return true;
+    }
+
+    private boolean shouldSellEntry(SellList entry)
+    {
+        if (entry.isTradeRestricted() && !hasUnlockedTradeRestrictedItems()) return false;
+        if (isSupportedMeleeEquipment(entry.getDisplayName())
+                && !getOutdatedMeleeGearNames().contains(entry.getDisplayName())) return false;
+        // A resource that no enabled task uses can be sold without blocking
+        // the sale on the affordability of unrelated future GE purchases.
+        if (!taskNeedsItem(entry)) return true;
+        if (PROTECTED_SKILL_RESOURCES.contains(entry) && !canAffordGeBuyRequirements()) return false;
+
+        int firemakingLevel = Microbot.getClient().getRealSkillLevel(Skill.FIREMAKING);
+        if (entry == SellList.LOGS) return firemakingLevel >= 15;
+        if (entry == SellList.OAK_LOGS) return firemakingLevel >= 30;
+        if (entry == SellList.SILVER_ORE)
+            return Microbot.getClient().getRealSkillLevel(Skill.SMITHING) < 20;
+        if (entry == SellList.SMALL_FISHING_NET || entry == SellList.FISHING_ROD || entry == SellList.FISHING_BAIT)
+            return Microbot.getClient().getRealSkillLevel(Skill.FISHING) >= 20;
+        return true;
+    }
+
+    private boolean hasSellableInventoryItems() { return getNextSellableInventoryItem() != null; }
+
+    private boolean hasSellableBankItems()
+    {
+        for (SellList entry : SELL_ENTRIES)
+            if (shouldSellEntry(entry) && !isBlocked(entry.getDisplayName())
+                    && !isWithdrawalSkipped(entry.getDisplayName()) && getSellableBankQuantity(entry.getDisplayName()) > 0) return true;
+        return hasOutdatedToolInBank() || hasOutdatedMeleeGearInBank();
+    }
+
+    public boolean hasSellListItemsAvailable()
+    {
+        return hasSellableInventoryItems() || hasSellableBankItems()
+                || hasOpenSellOffers() || hasCompletedSellOffers();
+    }
+
+    private Rs2ItemModel getNextSellableInventoryItem()
+    {
+        List<Rs2ItemModel> items = Rs2Inventory.all();
+        for (Rs2ItemModel item : items)
+        {
+            if (item == null || item.getName() == null || isBlocked(item.getName())) continue;
+            if (getSellableInventoryQuantity(item.getName(), item.getQuantity()) <= 0) continue;
+            if (isAllowedSellItemName(item.getName())) return item;
         }
+        Set<String> outdatedMeleeGear = getOutdatedMeleeGearNames();
+        for (Rs2ItemModel item : items)
+            if (item != null && item.getName() != null && !isBlocked(item.getName())
+                    && outdatedMeleeGear.contains(item.getName())
+                    && getSellableInventoryQuantity(item.getName(), item.getQuantity()) > 0)
+                return item;
+        if (!canAffordGeBuyRequirements()) return null;
+        String desiredPickaxe = resolveDesiredPickaxeName();
+        String desiredAxe = resolveDesiredAxeName();
+        for (Rs2ItemModel item : items)
+            if (item != null && item.getName() != null && !isBlocked(item.getName())
+                    && Buy.isOutdatedToolName(item.getName(), desiredPickaxe, desiredAxe)) return item;
+        return null;
+    }
+
+    private boolean isAllowedSellItemName(String name)
+    {
+        for (SellList entry : SELL_ENTRIES)
+            if (entry.getDisplayName().equalsIgnoreCase(name)
+                    && shouldSellEntry(entry) && !isBlocked(entry.getDisplayName())) return true;
         return false;
     }
 
-    private boolean isOutdatedToolName(String itemName, String desiredPickaxe, String desiredAxe) {
-        return Buy.isOutdatedToolName(itemName, desiredPickaxe, desiredAxe);
+    private int getSellableBankQuantity(String itemName)
+    {
+        return Math.max(0, Rs2Bank.count(itemName, true) - getReservedRequirementQuantity(itemName));
     }
 
-    private String resolveDesiredPickaxeName() {
-        return Buy.resolveDesiredPickaxeNameForBuy();
+    private int getSellableInventoryQuantity(String itemName, int inventoryQuantity)
+    {
+        return Math.max(0, inventoryQuantity - getReservedRequirementQuantity(itemName));
     }
 
-    private String resolveDesiredAxeName() {
-        return Buy.resolveDesiredAxeNameForBuy();
+    private int getReservedRequirementQuantity(String itemName)
+    {
+        int questReserved = getReservedQuestRequirementQuantity(itemName);
+        if (itemName == null) return questReserved;
+        // Explicit reservations for future clue-solving and reusable supplies.
+        // Clues and scroll boxes must never become generic GE liquidation items.
+        if ("Clue scroll (beginner)".equalsIgnoreCase(itemName)
+                || "Scroll box (beginner)".equalsIgnoreCase(itemName)
+                || "Reward casket (beginner)".equalsIgnoreCase(itemName))
+            return Integer.MAX_VALUE;
+        if (taskAvailable(KspTrainSingleSkillTask.FISHING)
+                && ("Small fishing net".equalsIgnoreCase(itemName)
+                || "Fishing rod".equalsIgnoreCase(itemName)
+                || "Fly fishing rod".equalsIgnoreCase(itemName)
+                || "Harpoon".equalsIgnoreCase(itemName)
+                || "Lobster pot".equalsIgnoreCase(itemName)))
+            return Math.max(questReserved, 1);
+        // Protect a dig tool for clue/quest use instead of selling every spade.
+        if ("Spade".equalsIgnoreCase(itemName)) return Math.max(questReserved, 1);
+        return questReserved;
     }
 
-    private boolean isBlockedSellItem(String itemName) {
-        return itemName != null && this.blockedSellItems.contains(itemName.toLowerCase(Locale.ENGLISH));
-    }
-
-    private boolean isTradeRestrictedItemName(String itemName) {
-        if (itemName == null || !TRADE_RESTRICTED_ITEM_NAMES.contains(itemName.toLowerCase(Locale.ENGLISH))) {
-            return false;
+    private int getReservedQuestRequirementQuantity(String itemName)
+    {
+        if (itemName == null) return 0;
+        int reserved = 0;
+        if (isQuestIncomplete(Quest.COOKS_ASSISTANT))
+            for (Items item : Items.values())
+                if (item.getDisplayName().equalsIgnoreCase(itemName)) reserved++;
+        if (isQuestIncomplete(Quest.GOBLIN_DIPLOMACY))
+            for (GobReqs item : GobReqs.values())
+                if (item.getDisplayName().equalsIgnoreCase(itemName)) reserved += item.getQuantity();
+        if (isQuestIncomplete(Quest.SHEEP_SHEARER) && "Ball of wool".equalsIgnoreCase(itemName))
+        {
+            int stage = Microbot.getClientThread().runOnClientThreadOptional(
+                    () -> Microbot.getClient().getVarpValue(net.runelite.api.gameval.VarPlayerID.SHEEP)).orElse(0);
+            reserved += stage > 1 ? Math.max(0, 21 - stage) : 20;
         }
-        return !this.hasUnlockedTradeRestrictedItems();
+        if (isQuestIncomplete(Quest.IMP_CATCHER)
+                && ("Black bead".equalsIgnoreCase(itemName) || "White bead".equalsIgnoreCase(itemName)
+                || "Red bead".equalsIgnoreCase(itemName) || "Yellow bead".equalsIgnoreCase(itemName))) reserved++;
+        if (isQuestIncomplete(Quest.X_MARKS_THE_SPOT) && "Spade".equalsIgnoreCase(itemName)) reserved++;
+        return reserved;
     }
 
-    private boolean hasUnlockedTradeRestrictedItems() {
+    private boolean isQuestIncomplete(Quest quest) { return Rs2Player.getQuestState(quest) != QuestState.FINISHED; }
+
+    private boolean hasOutdatedMeleeGearInBank()
+    {
+        for (String name : getOutdatedMeleeGearNames())
+            if (!isWithdrawalSkipped(name) && Rs2Bank.count(name, true) > 0) return true;
+        return false;
+    }
+
+    private boolean isSupportedMeleeEquipment(String name)
+    {
+        for (Weapons weapon : Weapons.values())
+            if (weapon.getDisplayName().equalsIgnoreCase(name)) return true;
+        for (Armour armour : Armour.values())
+            if (armour.getDisplayName().equalsIgnoreCase(name)) return true;
+        return false;
+    }
+
+    /** Only sell an equipped-tier weapon or armour piece if a better piece
+     * for the same equipment slot is already owned. Future-level gear is kept.
+     */
+    private Set<String> getOutdatedMeleeGearNames()
+    {
+        if (outdatedMeleeGearCache != null) return outdatedMeleeGearCache;
+        Set<String> outdated = new HashSet<>();
+        int attack = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
+        int defence = Microbot.getClient().getRealSkillLevel(Skill.DEFENCE);
+        Set<String> protectedGear = new HashSet<>();
+        Buy.MeleeGearPlan plan = Buy.buildMeleeGearPlan(attack, defence,
+                Rs2Player.getQuestState(Quest.DRAGON_SLAYER_I) == QuestState.FINISHED,
+                this::hasGearAnywhere);
+        for (String name : plan.getDesiredItems())
+            if (name != null) protectedGear.add(name.toLowerCase(Locale.ROOT));
+
+        for (Weapons weapon : Weapons.values())
+        {
+            String name = weapon.getDisplayName();
+            if (weapon.getRequiredAttackLevel() <= attack && hasGearAnywhere(name)
+                    && !protectedGear.contains(name.toLowerCase(Locale.ROOT))
+                    && hasOwnedWeaponUpgrade(name, attack))
+                outdated.add(name);
+        }
+        for (Armour armour : Armour.values())
+        {
+            String name = armour.getDisplayName();
+            if (armour.getRequiredDefenceLevel() <= defence && hasGearAnywhere(name)
+                    && !protectedGear.contains(name.toLowerCase(Locale.ROOT))
+                    && hasOwnedArmourUpgrade(name, armour.getRequiredDefenceLevel(), defence))
+                outdated.add(name);
+        }
+        outdatedMeleeGearCache = outdated;
+        return outdated;
+    }
+
+    private boolean hasOwnedWeaponUpgrade(String current, int attack)
+    {
+        for (Weapons weapon : Weapons.values())
+            if (weapon.getRequiredAttackLevel() <= attack
+                    && !weapon.getDisplayName().equalsIgnoreCase(current)
+                    && hasGearAnywhere(weapon.getDisplayName()))
+                return true;
+        return false;
+    }
+
+    private boolean hasOwnedArmourUpgrade(String current, int currentLevel, int defence)
+    {
+        String slot = meleeArmourSlot(current);
+        for (Armour armour : Armour.values())
+            if (armour.getRequiredDefenceLevel() <= defence
+                    && armour.getRequiredDefenceLevel() >= currentLevel
+                    && !armour.getDisplayName().equalsIgnoreCase(current)
+                    && meleeArmourSlot(armour.getDisplayName()).equals(slot)
+                    && hasGearAnywhere(armour.getDisplayName()))
+                return true;
+        return false;
+    }
+
+    private String meleeArmourSlot(String name)
+    {
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (lower.contains("helm")) return "head";
+        if (lower.contains("shield")) return "shield";
+        if (lower.contains("legs")) return "legs";
+        return "body";
+    }
+
+    private boolean hasGearAnywhere(String name)
+    {
+        return Rs2Equipment.isWearing(name) || Rs2Inventory.hasItem(name)
+                || Rs2Inventory.hasItem(name, true) || Rs2Bank.count(name, true) > 0;
+    }
+
+    private boolean hasOutdatedToolInBank()
+    {
+        if (!canAffordGeBuyRequirements()) return false;
+        String desiredPickaxe = resolveDesiredPickaxeName();
+        String desiredAxe = resolveDesiredAxeName();
+        for (String name : PICKAXE_NAMES)
+            if (!name.equalsIgnoreCase(desiredPickaxe) && !isWithdrawalSkipped(name) && Rs2Bank.count(name, true) > 0) return true;
+        for (String name : AXE_NAMES)
+            if (!name.equalsIgnoreCase(desiredAxe) && !isWithdrawalSkipped(name) && Rs2Bank.count(name, true) > 0) return true;
+        return false;
+    }
+
+    private String resolveDesiredPickaxeName() { return Buy.resolveDesiredPickaxeNameForBuy(); }
+    private String resolveDesiredAxeName() { return Buy.resolveDesiredAxeNameForBuy(); }
+
+    private boolean canAffordGeBuyRequirements()
+    {
         long now = System.currentTimeMillis();
-        if (this.tradeRestrictionUnlockedCache != null && now - this.lastTradeRestrictionCheckAtMs < 300000L) {
-            return this.tradeRestrictionUnlockedCache;
-        }
-        boolean unlocked = false;
-        if (this.getTotalLevel() >= 100 && this.getQuestPoints() >= 10) {
-            unlocked = this.getHoursPlayed() >= 20;
-        }
-        this.tradeRestrictionUnlockedCache = unlocked;
-        this.lastTradeRestrictionCheckAtMs = now;
+        if (now - lastBuyAffordabilityCheckAtMs < BUY_AFFORDABILITY_CACHE_MS) return cachedBuyAffordability;
+        cachedBuyAffordability = buyScript.canAffordMissingBuys();
+        lastBuyAffordabilityCheckAtMs = now;
+        return cachedBuyAffordability;
+    }
+
+    private boolean hasUnlockedTradeRestrictedItems()
+    {
+        long now = System.currentTimeMillis();
+        if (tradeRestrictionUnlockedCache != null
+                && now - lastTradeRestrictionCheckAtMs < TRADE_RESTRICTION_CACHE_MS)
+            return tradeRestrictionUnlockedCache;
+
+        long accountHash = getCurrentAccountHash();
+        long playTimeMillis = accountHash != 0L && accountPlayTimeCache != null
+                && accountPlayTimeCache.hasCachedPlayTime(accountHash)
+                ? accountPlayTimeCache.getPlayTimeMillis(accountHash) : -1L;
+
+        boolean unlocked = getTotalLevel() >= TRADE_RESTRICTION_MIN_TOTAL_LEVEL
+                && getQuestPoints() >= TRADE_RESTRICTION_MIN_QUEST_POINTS
+                && playTimeMillis >= TimeUnit.HOURS.toMillis(TRADE_RESTRICTION_MIN_HOURS_PLAYED);
+        tradeRestrictionUnlockedCache = unlocked;
+        lastTradeRestrictionCheckAtMs = now;
         return unlocked;
     }
 
-    private int getTotalLevel() {
+    private long getCurrentAccountHash()
+    {
+        if (!Microbot.isLoggedIn() || Microbot.getClient() == null) return 0L;
+        return Microbot.getClientThread().runOnClientThreadOptional(
+                () -> Microbot.getClient().getAccountHash()).orElse(0L);
+    }
+
+    private int getTotalLevel()
+    {
         int total = 0;
-        for (Skill skill : Skill.values()) {
-            if (skill == Skill.OVERALL) continue;
-            total += Microbot.getClient().getRealSkillLevel(skill);
-        }
+        for (Skill skill : SKILLS)
+            if (skill != Skill.OVERALL) total += Microbot.getClient().getRealSkillLevel(skill);
         return total;
     }
 
-    private int getQuestPoints() {
-        return Microbot.getVarbitPlayerValue((int)101);
+    private int getQuestPoints() { return Microbot.getVarbitPlayerValue(101); }
+
+    private boolean isBlocked(String itemName)
+    {
+        if (itemName == null) return false;
+        if (getReservedRequirementQuantity(itemName) == Integer.MAX_VALUE) return true;
+        return blockedSellItems.contains(itemName.toLowerCase(Locale.ROOT));
     }
 
-    private int getHoursPlayed() {
-        String[] parts;
-        if (this.cachedHoursPlayed != null) {
-            return this.cachedHoursPlayed;
-        }
-        String timePlayedText = this.getTimePlayedText();
-        if (timePlayedText == null || timePlayedText.isEmpty()) {
-            return 0;
-        }
-        int totalHours = 0;
-        for (String rawPart : parts = timePlayedText.toLowerCase(Locale.ENGLISH).split(",")) {
-            String part = rawPart.trim();
-            if (part.endsWith("days") || part.endsWith("day")) {
-                totalHours += this.extractLeadingNumber(part) * 24;
-                continue;
-            }
-            if (part.endsWith("hours") || part.endsWith("hour")) {
-                totalHours += this.extractLeadingNumber(part);
-                continue;
-            }
-            if (!part.endsWith("minutes") && !part.endsWith("minute")) continue;
-            totalHours += this.extractLeadingNumber(part) / 60;
-        }
-        this.cachedHoursPlayed = totalHours;
-        return totalHours;
+    private String normalize(String value)
+    {
+        return value == null ? "" : value.replaceAll("<[^>]*>", "").trim().toLowerCase(Locale.ROOT);
     }
 
-    private int extractLeadingNumber(String text) {
-        String digits = text.replaceAll("[^0-9]", "");
-        if (digits.isEmpty()) {
-            return 0;
+    private <T> T clientValue(Supplier<T> supplier, T fallback)
+    {
+        if (supplier == null) return fallback;
+        try
+        {
+            T value = Microbot.getClientThread().invoke(supplier);
+            return value == null ? fallback : value;
         }
-        try {
-            return Integer.parseInt(digits);
-        }
-        catch (NumberFormatException ex) {
-            return 0;
-        }
+        catch (RuntimeException ex) { return fallback; }
     }
 
-    private String getTimePlayedText() {
-        Widget timePlayedWidget = Rs2Widget.getWidget((int)46661634);
-        if (timePlayedWidget == null || !Rs2Widget.isWidgetVisible((int)timePlayedWidget.getId()) || timePlayedWidget.getText() == null || timePlayedWidget.getText().isEmpty()) {
-            if (this.attemptedHoursPlayedLookup) {
-                return null;
-            }
-            if (!this.ensureTimePlayedPanelVisible()) {
-                return null;
-            }
-            timePlayedWidget = Rs2Widget.getWidget((int)46661634);
-            if (timePlayedWidget == null || timePlayedWidget.getText() == null || timePlayedWidget.getText().isEmpty()) {
-                return null;
-            }
-        }
-        return this.stripWidgetTags(timePlayedWidget.getText());
+    private void debug(String message, Object... args)
+    {
+        if (debugLogging) KspTaskDebug.info(log, true, "GE Sell", message, args);
     }
 
-    private boolean ensureTimePlayedPanelVisible() {
-        Widget accountSummaryWidget;
-        this.attemptedHoursPlayedLookup = true;
-        Widget timePlayedWidget = Rs2Widget.getWidget((int)46661634);
-        if (timePlayedWidget != null && Rs2Widget.isWidgetVisible((int)timePlayedWidget.getId())) {
-            return true;
-        }
-        if (Rs2GrandExchange.isOpen() || Rs2Bank.isOpen() || Rs2Player.isMoving() || Rs2Player.isInteracting()) {
-            return false;
-        }
-        Widget sideJournalTabContainer = Rs2Widget.getWidget((int)41222157);
-        if (sideJournalTabContainer != null) {
-            Rs2Widget.clickWidget((Widget)sideJournalTabContainer);
-            SellScript.sleep((int)200, (int)350);
-        }
-        if ((accountSummaryWidget = Rs2Widget.getWidget((int)46661633)) != null) {
-            Rs2Widget.clickWidget((Widget)accountSummaryWidget);
-            SellScript.sleepUntil(() -> {
-                Widget widget = Rs2Widget.getWidget((int)46661634);
-                return widget != null && widget.getText() != null && !widget.getText().isEmpty();
-            }, (int)2000);
-        }
-        return (timePlayedWidget = Rs2Widget.getWidget((int)46661634)) != null && timePlayedWidget.getText() != null && !timePlayedWidget.getText().isEmpty();
-    }
-
-    private String stripWidgetTags(String text) {
-        return text == null ? null : text.replaceAll("<[^>]+>", "").trim();
-    }
-
-    private boolean ensureGrandExchangeOpen() {
-        if (Rs2GrandExchange.isOpen()) {
-            return true;
-        }
-        if (Rs2Bank.isOpen()) {
-            Microbot.status = "Closing Bank";
-            KspGrandExchangeHelper.closeBankBeforeExchange();
-            SellScript.sleepUntil(() -> !Rs2Bank.isOpen(), (int)2000);
-            return false;
-        }
-        Microbot.status = "Opening GE";
-        this.debug("Opening GE for sell task | player={} bankOpen={} geOpen={}", Rs2Player.getWorldLocation(), Rs2Bank.isOpen(), Rs2GrandExchange.isOpen());
-        if (KspGrandExchangeHelper.openExchangeDirectly()) {
-            SellScript.sleepUntil(Rs2GrandExchange::isOpen, (int)3000);
-            return Rs2GrandExchange.isOpen();
-        }
-        if (KspGrandExchangeHelper.interactClerk()) {
-            SellScript.sleepUntil(Rs2GrandExchange::isOpen, (int)3000);
-            return Rs2GrandExchange.isOpen();
-        }
-        return false;
-    }
-
-    private boolean placeFallbackSellOffer(Rs2ItemModel item) {
-        GrandExchangeRequest request;
-        boolean offered;
-        if (item == null || System.currentTimeMillis() - this.lastActionAtMs < 1200L) {
-            return false;
-        }
-        int quantityToSell = this.getSellableInventoryQuantity(item.getName(), item.getQuantity());
-        if (quantityToSell <= 0) {
-            return false;
-        }
-        Microbot.status = "Selling " + item.getName();
-        this.waitForGrandExchangeOfferInput();
-        if (offered = Rs2GrandExchange.processOffer((GrandExchangeRequest)(request = GrandExchangeRequest.builder().action(GrandExchangeAction.SELL).itemName(item.getName()).quantity(quantityToSell).percent(-10).closeAfterCompletion(false).build()))) {
-            this.lastActionAtMs = System.currentTimeMillis();
-            SellScript.sleepUntil(() -> this.getSellableInventoryQuantity(item.getName(), Rs2Inventory.itemQuantity(item.getName())) <= 0, (int)5000);
-        }
-        this.debug("GE sell offer | item={} qty={} reservedForQuests={} percent=-10 offered={} slots={} offerScreen={}",
-                item.getName(),
-                quantityToSell,
-                this.getReservedQuestRequirementQuantity(item.getName()),
-                offered,
-                Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1,
-                Rs2GrandExchange.isOfferScreenOpen());
-        return offered;
-    }
-
-    private void waitForGrandExchangeOfferInput() {
-        SellScript.sleep(GE_OFFER_INPUT_DELAY_MS);
-    }
-
-    private void returnToGrandExchangeOverview() {
-        if (System.currentTimeMillis() - this.lastActionAtMs < 1200L) {
-            return;
-        }
-        Rs2GrandExchange.backToOverview();
-        this.lastActionAtMs = System.currentTimeMillis();
-        SellScript.sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), (int)2000);
-    }
-
-    private WorldPoint getAreaCenter() {
-        int centerX = (this.targetArea.getSouthWest().getX() + this.targetArea.getNorthEast().getX()) / 2;
-        int centerY = (this.targetArea.getSouthWest().getY() + this.targetArea.getNorthEast().getY()) / 2;
-        int plane = this.targetArea.getSouthWest().getPlane();
-        return new WorldPoint(centerX, centerY, plane);
-    }
-
-    private void debug(String message, Object ... args) {
-        if (this.debugLogging) {
-            KspTaskDebug.info(log, true, "GE Sell", message, args);
-        }
-    }
-
-    public void shutdown() {
-        this.state = SellState.GOING_TO_GE;
-        this.lastWebWalkAtMs = 0L;
-        this.lastActionAtMs = 0L;
-        this.blockedSellItems.clear();
-        this.tradeRestrictionUnlockedCache = null;
-        this.cachedHoursPlayed = null;
-        this.lastTradeRestrictionCheckAtMs = 0L;
-        this.attemptedHoursPlayedLookup = false;
-        this.complete = false;
-        KspWalkerGuard.clear("GE Sell:target-area");
+    @Override
+    public void shutdown()
+    {
+        Rs2Walker.clearWalkingRoute(WALK_KEY);
+        state = SellState.GOING_TO_GE;
+        complete = false;
+        bankInventoryPrepared = false;
+        completeAfterBankClose = false;
+        clearBankAction();
+        clearPendingOffer();
+        sellRepricing.reset();
+        blockedSellItems.clear();
+        failedBankWithdrawals.clear();
+        skippedBankWithdrawals.clear();
+        outdatedMeleeGearCache = null;
+        tradeRestrictionUnlockedCache = null;
+        lastTradeRestrictionCheckAtMs = 0L;
+        lastBuyAffordabilityCheckAtMs = 0L;
+        cachedBuyAffordability = false;
+        geOpenRequested = false;
+        geOpenRequestedNs = 0L;
+        geOverviewRequested = false;
+        geOverviewRequestedNs = 0L;
+        nextBankOpenAttemptNs = 0L;
         super.shutdown();
     }
 
-    public boolean isComplete() {
-        return this.complete;
-    }
-
-    public GEArea getTargetArea() {
-        return this.targetArea;
-    }
+    public boolean isComplete() { return complete; }
+    public GEArea getTargetArea() { return targetArea; }
 }

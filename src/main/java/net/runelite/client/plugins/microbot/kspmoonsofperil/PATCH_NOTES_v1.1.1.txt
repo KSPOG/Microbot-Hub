@@ -1,0 +1,13 @@
+KSP Perilous Moons v1.1.1
+
+Compile fixes for Microbot 2.6.19 / Microbot-Hub:
+- Fixed accidental imports from net.runelite.client.plugins.microbot.moonsofperil.*.
+- All handlers now resolve the KSP-local Config, State, Widgets, Locations, GameObjects and handler classes.
+- BloodMoonHandler now reads bloodPoolTick from KSPMoonsOfPerilPlugin.
+- MoonsOfPerilScript now constructs KSP-local handlers directly; removed invalid upstream config casts.
+- DeathHandler now resolves the KSP-local two-argument constructor.
+- Overlay/plugin reward counter now resolves the KSP-local RewardHandler.
+- Changed @ConfigGroup from perilousMoons to kspPerilousMoons to avoid settings collisions with the existing upstream Moons Of Peril plugin.
+
+Build command:
+./gradlew build -PpluginList=KSPMoonsOfPerilPlugin

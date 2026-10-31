@@ -1,20 +1,22 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.meleescript;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
-import java.util.ArrayList;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
+
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import javax.inject.Singleton;
 import net.runelite.api.Actor;
 import net.runelite.api.Player;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
+import net.runelite.api.TileObject;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -24,7 +26,8 @@ import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspBankMode;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTaskDebug;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWalkerGuard;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspLiveScene;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.areas.CombatAreas;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.equipment.weapon.Weapons;
@@ -33,12 +36,13 @@ import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.com
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.loot.cowloot.CowLoot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.loot.hillgiantloot.HillGiantLoot;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.loot.mossgiantloot.MossGiantLoot;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.meleescript.CombatState;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.npc.NPC;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.buyscript.Buy;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.sell.SellList;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -47,34 +51,107 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Singleton
-public class MeleeScript
-        extends Script {
+public class MeleeScript extends KspManagedScript {
     private static final Logger log = LoggerFactory.getLogger(MeleeScript.class);
-    private static final int LOOP_DELAY_MS = 600;
-    private static final int WEB_WALK_COOLDOWN_MS = 3000;
+    private static final int LOOP_DELAY_MS = 100;
+    private static final int WEB_WALK_COOLDOWN_MS = 1_000;
     private static final int TARGET_FOOD_COUNT = Buy.MELEE_TARGET_FOOD_COUNT;
     private static final int CHICKEN_TARGET_COMBAT_STAT_LEVEL = 15;
     private static final int LOOT_RADIUS = 12;
+    private static final long ACTION_DISPATCH_TIMEOUT_MS = 1_500L;
+    private static final long EQUIPMENT_RETRY_DELAY_MS = 1_500L;
+    private static final int EQUIPMENT_MAX_RETRIES = 3;
+    private static final long LOOT_PICKUP_RECOVERY_MS = 900L;
+    private static final long BONE_BURY_RECOVERY_MS = 1_200L;
+    private static final WorldPoint CHICKEN_WALK_TARGET = new WorldPoint(3177, 3298, 0);
+    private static final WorldPoint CHICKEN_GATE_EAST = new WorldPoint(3262, 3321, 0);
+    private static final WorldPoint CHICKEN_GATE_WEST = new WorldPoint(3261, 3321, 0);
+    private static final int CHICKEN_GATE_EAST_ID = 1560;
+    private static final int CHICKEN_GATE_WEST_ID = 1558;
+    private static final int CHICKEN_GATE_INTERACTION_DISTANCE = 12;
+    private static final int CHICKEN_COMBAT_RADIUS = 6;
+    private static final int PASSIVE_ATTACKER_MAX_DISTANCE = 3;
+    private static final String[] CHICKEN_LOOT_NAMES = {"Bones", "Feather", "Raw chicken"};
+    private static final List<String> IGNORED_COMBAT_NPC_NAMES = Arrays.asList("skeleton", "hobgoblin");
+    private static final WorldPoint EDGEVILLE_TRAPDOOR = new WorldPoint(3096, 3468, 0);
+    private static final int EDGEVILLE_TRAPDOOR_CLOSED_ID = 1579;
+    private static final int EDGEVILLE_TRAPDOOR_OPEN_ID = 1581;
+    private static final int EDGEVILLE_TRAPDOOR_INTERACTION_DISTANCE = 4;
+    private static final WorldPoint HILL_GIANT_WALK_TARGET = new WorldPoint(3112, 9847, 0);
+
     private String status = "Idle";
     private CombatState state = CombatState.PREPARING;
     private boolean debugLogging;
     private long lastWebWalkAtMs;
     private WorldPoint lastWalkTarget;
+    private CombatAreas forcedCombatArea;
+    private long lastConfirmedFoodAtMs;
+    private long pendingAttackAtMs;
+    private int pendingAttackNpcIndex = -1;
+    private long pendingWorldActionAtMs;
+    private String pendingWorldAction;
+    private long pendingBankActionAtMs;
+    private int pendingBankInventoryCount = -1;
+    private String pendingBankItem;
+    private int pendingBankItemBefore = -1;
+    private String pendingEquipItem;
+    private long pendingEquipAtMs;
+    private int pendingEquipAttempts;
+    private String equipFailureItem;
+    private int pendingLootId = -1;
+    private int pendingLootSceneX = -1;
+    private int pendingLootSceneY = -1;
+    private int pendingLootWorldViewId = -1;
+    private long pendingLootUntilMs;
+    private int pendingBuryBoneId = -1;
+    private int pendingBuryBoneCount = -1;
+    private long pendingBuryAtMs;
+    private volatile boolean pendingSellHandoff;
+    // One bank gear inspection per melee run; missing gear is optional.
+    private boolean gearCheckedAtBank;
+    private boolean bankingInventoryPrepared;
+    private volatile long runGeneration;
+    private long lastWarriorCombatXpAtMs;
+    private int lastWarriorCombatXp = -1;
 
     public void setDebugLogging(boolean debugLogging) {
         this.debugLogging = debugLogging;
     }
 
     public boolean run() {
+        return this.run(null);
+    }
+
+    public boolean run(CombatAreas forcedCombatArea) {
         this.shutdown();
+        long generation = ++this.runGeneration;
+        this.pendingSellHandoff = false;
+        this.gearCheckedAtBank = false;
+        this.bankingInventoryPrepared = false;
+        this.pendingEquipItem = null;
+        this.pendingEquipAtMs = 0L;
+        this.pendingEquipAttempts = 0;
+        this.equipFailureItem = null;
+        this.pendingBankItem = null;
+        this.lastWarriorCombatXpAtMs = 0L;
+        this.lastWarriorCombatXp = -1;
+        this.forcedCombatArea = forcedCombatArea;
+        this.lastConfirmedFoodAtMs = System.currentTimeMillis();
         this.setStatus("Starting melee training");
         this.state = CombatState.PREPARING;
         this.mainScheduledFuture = this.scheduledExecutorService.scheduleWithFixedDelay(() -> {
+            if (generation != this.runGeneration) return;
             try {
-                if (!super.run() || !Microbot.isLoggedIn()) {
+                if (generation != this.runGeneration || KspAccountBuilderPauseGate.isPaused() || !super.run() || !Microbot.isLoggedIn()) {
                     return;
                 }
+
                 TrainingStage stage = this.resolveTrainingStage();
+                updateWarriorCombatXp(stage);
+                // Successful combat satisfies optional gear inspection for this run.
+                // Temporary loss of combat detection must not trigger a distant bank trip.
+                this.gearCheckedAtBank = MeleeBankPolicy.inspectionSatisfied(
+                        this.gearCheckedAtBank, this.isActivelyFighting(stage));
                 KspTaskDebug.throttled(log, this.debugLogging, "Melee", "loop", 5_000L,
                         "loop | state={} status={} area={} npc={} player={} moving={} animating={} interacting={} inCombat={} hp={}/{} bankOpen={}",
                         this.state,
@@ -85,19 +162,62 @@ public class MeleeScript
                         Rs2Player.isMoving(),
                         Rs2Player.isAnimating(),
                         Rs2Player.isInteracting(),
-                        Rs2Combat.inCombat(),
+                        this.isActivelyFighting(stage),
                         Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS),
                         Microbot.getClient().getRealSkillLevel(Skill.HITPOINTS),
                         Rs2Bank.isOpen());
+
+                if (MeleeBankPolicy.shouldInspectOptionalGear(this.gearCheckedAtBank, this.isActivelyFighting(stage))) {
+                    // Startup equipment inspection is OPTIONAL. The previous
+                    // unconditional bank visit removed an already equipped
+                    // player from the combat area on every fresh Melee run.
+                    if (this.shouldVisitBankForMissingWeapon()) {
+                        this.state = CombatState.BANKING;
+                        this.debug("Banking for known missing usable weapon | area={} hp={}",
+                                stage.area.getDisplayName(),
+                                Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS));
+                        this.handleBanking(stage);
+                        return;
+                    }
+                    this.gearCheckedAtBank = true;
+                    this.debug("Skipping optional startup gear bank | area={} usableWeapon={}",
+                            stage.area.getDisplayName(), this.hasCurrentTaskWeaponEquippedOrInInventory());
+                }
+                if (this.needsWarriorFoodRestock(stage)) {
+                    this.state = CombatState.BANKING;
+                    this.handleBanking(stage);
+                    return;
+                }
                 if (this.handleHealing()) {
                     this.state = CombatState.PREPARING;
                     return;
                 }
-                if (this.lootOwnDrops(stage)) {
+
+                // Emergency safety takes priority over loot, equipment changes and new attacks.
+                // An actively fighting player must not wait for combat to end before retreating
+                // when food is exhausted and HP is already dangerously low.
+                if (requiresCombatFood(stage) && this.getFoodCountInInventory() <= 0) {
+                    int currentHp = Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS);
+                    int maxHp = Microbot.getClient().getRealSkillLevel(Skill.HITPOINTS);
+                    if (currentHp > 0 && maxHp > 0
+                            && (long) currentHp * 3L <= (long) maxHp * 2L) {
+                        this.state = CombatState.BANKING;
+                        this.setStatus("Emergency retreat: low HP and no food");
+                        this.handleBanking(stage);
+                        return;
+                    }
+                }
+
+                // Ground loot is time-sensitive. Pick owned drops before inventory cleanup so
+                // burying a previous bone can never delay a fresh owned drop.
+                boolean looted = this.lootOwnDrops(stage);
+                if (looted || this.shouldBlockAttackForLoot(stage)) {
                     this.state = CombatState.LOOTING;
+                    if (!looted) this.setStatus("Checking drops");
                     return;
                 }
-                if (this.buryBonesInInventory()) {
+
+                if (this.buryBonesInInventory(stage)) {
                     this.state = CombatState.PREPARING;
                     return;
                 }
@@ -110,11 +230,8 @@ public class MeleeScript
                     this.state = CombatState.EQUIPPING;
                     return;
                 }
-                if (!this.hasCurrentTaskWeaponEquippedOrInInventory()) {
-                    this.state = CombatState.PREPARING;
-                    this.setStatus("Waiting for melee weapon");
-                    return;
-                }
+                // Missing weapons are not fatal. Continue unarmed when no
+                // supported weapon is owned, rather than polling the bank forever.
                 if (this.ensureBalancedAttackStyle()) {
                     this.state = CombatState.PREPARING;
                     return;
@@ -123,21 +240,19 @@ public class MeleeScript
                     this.state = CombatState.WALKING_TO_AREA;
                     return;
                 }
+
+                // Recheck immediately after the walker is released. A drop can become visible
+                // while walking into the area and should beat target acquisition.
                 if (this.hasLootNearby(stage)) {
                     this.state = CombatState.LOOTING;
                     this.lootOwnDrops(stage);
                     return;
                 }
-                if (Rs2Player.isMoving()) {
-                    this.state = CombatState.WALKING_TO_AREA;
-                    this.setStatus("Moving to " + stage.primaryNpc.getDisplayName());
-                    return;
-                }
-                if (Rs2Player.isAnimating() || Rs2Combat.inCombat()) {
+                if (this.isActivelyFighting(stage)) {
                     this.state = CombatState.FIGHTING;
                     this.handleHealing();
                     this.ensureBalancedAttackStyle();
-                    if (Rs2Combat.inCombat() || Rs2Player.isAnimating()) {
+                    if (this.isActivelyFighting(stage)) {
                         this.setStatus("Fighting " + stage.primaryNpc.getDisplayName());
                     }
                     return;
@@ -146,80 +261,180 @@ public class MeleeScript
                     this.state = CombatState.PREPARING;
                     return;
                 }
+
                 this.state = CombatState.FIGHTING;
                 this.attackTarget(stage);
             }
             catch (Exception ex) {
-                Microbot.logStackTrace((String)((Object)((Object)this)).getClass().getSimpleName(), (Exception)ex);
+                if (generation != this.runGeneration || isExpectedCancellation(ex)) {
+                    return;
+                }
+                Microbot.logStackTrace(this.getClass().getSimpleName(), ex);
             }
-        }, 0L, 600L, TimeUnit.MILLISECONDS);
+        }, 0L, LOOP_DELAY_MS, TimeUnit.MILLISECONDS);
         return true;
     }
 
     private TrainingStage resolveTrainingStage() {
+        if (this.forcedCombatArea != null) {
+            if (this.forcedCombatArea == CombatAreas.COWPEN) {
+                return new TrainingStage(CombatAreas.COWPEN, NPC.COW, NPC.COW_CALF,
+                        Arrays.stream(CowLoot.values()).map(CowLoot::getDisplayName).toArray(String[]::new));
+            }
+            if (this.forcedCombatArea == CombatAreas.CHICKENS) {
+                return new TrainingStage(CombatAreas.CHICKENS, NPC.CHICKEN, null, CHICKEN_LOOT_NAMES);
+            }
+            if (this.forcedCombatArea == CombatAreas.AL_KHARID_WARRIOR) {
+                return new TrainingStage(CombatAreas.AL_KHARID_WARRIOR, NPC.AL_KHARID_WARRIOR, null,
+                        Arrays.stream(WarriorLoot.values()).map(WarriorLoot::getDisplayName).toArray(String[]::new));
+            }
+            if (this.forcedCombatArea == CombatAreas.HILL_GIANTS) {
+                return new TrainingStage(CombatAreas.HILL_GIANTS, NPC.HILL_GIANT, null,
+                        Arrays.stream(HillGiantLoot.values()).map(HillGiantLoot::getDisplayName).toArray(String[]::new));
+            }
+            return new TrainingStage(CombatAreas.MOSS_GIANTS, NPC.MOSS_GIANT, null,
+                    Arrays.stream(MossGiantLoot.values()).map(MossGiantLoot::getDisplayName).toArray(String[]::new));
+        }
+
         int attackLevel = this.getSkillLevel(Skill.ATTACK);
         int strengthLevel = this.getSkillLevel(Skill.STRENGTH);
         int defenceLevel = this.getSkillLevel(Skill.DEFENCE);
         if (attackLevel < CHICKEN_TARGET_COMBAT_STAT_LEVEL
                 || strengthLevel < CHICKEN_TARGET_COMBAT_STAT_LEVEL
                 || defenceLevel < CHICKEN_TARGET_COMBAT_STAT_LEVEL) {
-            return new TrainingStage(CombatAreas.CHICKENS, NPC.CHICKEN, null, (String[])Arrays.stream(CowLoot.values()).map(CowLoot::getDisplayName).toArray(String[]::new));
+            return new TrainingStage(CombatAreas.CHICKENS, NPC.CHICKEN, null, CHICKEN_LOOT_NAMES);
         }
         if (attackLevel < 30 || strengthLevel < 30 || defenceLevel < 30) {
-            return new TrainingStage(CombatAreas.AL_KHARID_WARRIOR, NPC.AL_KHARID_WARRIOR, null, (String[])Arrays.stream(WarriorLoot.values()).map(WarriorLoot::getDisplayName).toArray(String[]::new));
+            return new TrainingStage(CombatAreas.AL_KHARID_WARRIOR, NPC.AL_KHARID_WARRIOR, null,
+                    Arrays.stream(WarriorLoot.values()).map(WarriorLoot::getDisplayName).toArray(String[]::new));
         }
         if (attackLevel < 40 || strengthLevel < 40 || defenceLevel < 40) {
-            return new TrainingStage(CombatAreas.HILL_GIANTS, NPC.HILL_GIANT, null, (String[])Arrays.stream(HillGiantLoot.values()).map(HillGiantLoot::getDisplayName).toArray(String[]::new));
+            return new TrainingStage(CombatAreas.HILL_GIANTS, NPC.HILL_GIANT, null,
+                    Arrays.stream(HillGiantLoot.values()).map(HillGiantLoot::getDisplayName).toArray(String[]::new));
         }
-        return new TrainingStage(CombatAreas.MOSS_GIANTS, NPC.MOSS_GIANT, null, (String[])Arrays.stream(MossGiantLoot.values()).map(MossGiantLoot::getDisplayName).toArray(String[]::new));
+        return new TrainingStage(CombatAreas.MOSS_GIANTS, NPC.MOSS_GIANT, null,
+                Arrays.stream(MossGiantLoot.values()).map(MossGiantLoot::getDisplayName).toArray(String[]::new));
     }
 
     private boolean handleHealing() {
-        Food bestInventoryFood = this.getBestFoodInInventory();
-        if (bestInventoryFood == null) {
-            return false;
-        }
+        Food food = getBestFoodInInventory();
+        if (food == null) return false;
 
-        int currentHp = Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS);
+        int hp = Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS);
         int maxHp = Microbot.getClient().getRealSkillLevel(Skill.HITPOINTS);
+        if (!shouldHealNow(hp, maxHp)) return false;
 
-        if (!this.shouldHealNow(currentHp, maxHp)) {
+        setStatus("Eating " + food.getDisplayName() + " at " + hp + "/" + maxHp + " hp");
+        return Rs2Inventory.interact(food.getItemId(), "Eat");
+    }
+
+    private boolean buryBonesInInventory(TrainingStage stage) {
+        if (Rs2Bank.isOpen() || isActivelyFighting(stage)) {
+            clearPendingBury();
             return false;
         }
 
-        this.setStatus("Eating " + bestInventoryFood.getDisplayName() + " at " + currentHp + "/" + maxHp + " hp");
+        if (isBoneBuryPending()) return true;
+        if (Rs2Player.isMoving()) return false;
 
-        if (Rs2Inventory.interact(bestInventoryFood.getItemId(), "Eat")) {
-            MeleeScript.sleepUntil(() -> Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS) > currentHp, 1800);
-            return true;
+        Rs2ItemModel bone = getBuryableInventoryBone();
+        if (bone == null) return false;
+
+        int before = Rs2Inventory.count(bone.getId());
+        String boneName = bone.getName() == null || bone.getName().isBlank() ? "bones" : bone.getName();
+        setStatus("Burying " + boneName);
+
+        if (!Rs2Inventory.interact(boneName, "Bury", true)) return false;
+
+        pendingBuryBoneId = bone.getId();
+        pendingBuryBoneCount = before;
+        pendingBuryAtMs = System.currentTimeMillis();
+        return true;
+    }
+
+    private boolean isBoneBuryPending() {
+        if (pendingBuryBoneId < 0 || pendingBuryAtMs <= 0L) return false;
+
+        int currentCount = Rs2Inventory.count(pendingBuryBoneId);
+        if (currentCount < pendingBuryBoneCount) {
+            clearPendingBury();
+            return Rs2Player.isAnimating();
         }
 
+        // Animation is the immediate acknowledgement that the bury interaction was accepted.
+        if (Rs2Player.isAnimating()) return true;
+
+        if (System.currentTimeMillis() - pendingBuryAtMs < BONE_BURY_RECOVERY_MS) return true;
+
+        clearPendingBury();
         return false;
     }
 
-    private boolean buryBonesInInventory() {
-        if (Rs2Player.isMoving() || Rs2Player.isInteracting()) {
+    private void clearPendingBury() {
+        pendingBuryBoneId = -1;
+        pendingBuryBoneCount = -1;
+        pendingBuryAtMs = 0L;
+    }
+
+    private Rs2ItemModel getBuryableInventoryBone() {
+        List<Rs2ItemModel> bones = Rs2Inventory.getList(this::isBuryableBone);
+        return bones.stream().findFirst().orElse(null);
+    }
+
+    private boolean isBuryableBone(Rs2ItemModel item) {
+        if (item == null || item.isNoted()) return false;
+
+        String[] actions = item.getInventoryActions();
+        if (actions == null || Arrays.stream(actions)
+                .filter(Objects::nonNull)
+                .noneMatch("Bury"::equalsIgnoreCase)) {
             return false;
         }
-        List<Rs2ItemModel> bones = Rs2Inventory.getBones();
-        if (bones == null || bones.isEmpty()) {
-            return false;
-        }
-        this.setStatus("Burying bones");
-        for (Rs2ItemModel bone : bones) {
-            if (bone == null || bone.getName() == null || !Rs2Inventory.interact((Rs2ItemModel)bone, (String)"Bury")) continue;
-            MeleeScript.sleep((int)250, (int)400);
-            return true;
-        }
-        return false;
+
+        String name = item.getName();
+        return name != null && name.toLowerCase(Locale.ENGLISH).contains("bone");
+    }
+
+    private boolean needsWarriorFoodRestock(TrainingStage stage) {
+        return stage != null
+                && stage.primaryNpc == NPC.AL_KHARID_WARRIOR
+                && this.getFoodCountInInventory() <= 0
+                // Avoid leaving a healthy combat character merely because its food ran out.
+                // Restock proactively only when bank food is known to be available,
+                // health is at or below two thirds, and combat has ended.
+                && this.getBestFoodAvailableInBank() != null
+                && !this.isActivelyFighting(stage)
+                && Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS) > 0
+                && (long) Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS) * 3L
+                        <= (long) Microbot.getClient().getRealSkillLevel(Skill.HITPOINTS) * 2L;
     }
 
     private boolean shouldBank(TrainingStage stage) {
+        if (this.needsWarriorFoodRestock(stage)) return true;
+
         if (this.hasInventoryEquipmentToEquip()) {
             return false;
         }
+
         int foodCount = this.getFoodCountInInventory();
-        if (foodCount <= 0) {
+        if (foodCount > 0) {
+            this.lastConfirmedFoodAtMs = System.currentTimeMillis();
+        } else if (requiresCombatFood(stage)) {
+            long noFoodObservedForMs = System.currentTimeMillis() - this.lastConfirmedFoodAtMs;
+            int currentHp = Microbot.getClient().getBoostedSkillLevel(Skill.HITPOINTS);
+            int maxHp = Microbot.getClient().getRealSkillLevel(Skill.HITPOINTS);
+            if (!MeleeBankPolicy.needsFoodBank(currentHp, maxHp, noFoodObservedForMs,
+                    Rs2Player.isAnimating() || this.isActivelyFighting(stage))) {
+                KspTaskDebug.throttled(log, this.debugLogging, "Melee", "no-food-confirmation", 15_000L,
+                        "No food bank required yet | hp={}/{} noFoodMs={} animating={} activelyFighting={} emptySlots={}",
+                        currentHp, maxHp, noFoodObservedForMs,
+                        Rs2Player.isAnimating(), this.isActivelyFighting(stage),
+                        Rs2Inventory.emptySlotCount());
+                return false;
+            }
+
+            this.debug("Banking for confirmed low-health/no-food | hp={}/{} noFoodMs={} area={}",
+                    currentHp, maxHp, noFoodObservedForMs, stage.area.getDisplayName());
             return this.shouldBankForNoFood(stage);
         }
         if (Rs2Inventory.isFull() && this.projectedFreeSlotsAfterBury() <= 0) {
@@ -229,164 +444,284 @@ public class MeleeScript
     }
 
     private void handleBanking(TrainingStage stage) {
-        this.setStatus("Banking for " + stage.primaryNpc.getDisplayName());
+        setStatus("Banking for " + stage.primaryNpc.getDisplayName());
 
         if (!Rs2Bank.isOpen()) {
-            if (!Rs2Bank.walkToBankAndUseBank() && !Rs2Bank.openBank()) {
+            if (isWorldActionPending("open-bank")) return;
+            if (Rs2Bank.openBank()) markWorldAction("open-bank");
+            else Rs2Bank.walkToBankAndUseBank();
+            return;
+        }
+
+        if (!KspBankMode.ensureWithdrawAsItem()
+                || KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) {
+            return;
+        }
+
+        // Reaching an open bank completes the banking journey. Release any
+        // outstanding core-walker route before preparing gear and food, or a
+        // delayed route click can pull the player away from the bank again.
+        // This also covers bank routes started directly by Rs2Bank, which are
+        // not registered under a Rs2Walker task key.
+        if (net.runelite.client.plugins.microbot.util.walker.Rs2Walker.getCurrentTarget() != null)
+        {
+            net.runelite.client.plugins.microbot.util.walker.Rs2Walker.clearWalkingRoute(
+                    "ksp_account_builder_melee_bank_open");
+        }
+
+        GearPlan gearPlan = buildGearPlan();
+
+        // Clear the previous combat/loot inventory once per bank visit.
+        // Keeping any setup item used to bypass cleanup entirely, leaving a
+        // full inventory of raw chicken and immediately triggering re-banking.
+        // Re-withdraw the chosen equipment and food after the inventory is clear.
+        if (!bankingInventoryPrepared) {
+            if (!Rs2Inventory.isEmpty()) {
+                boolean hadSellableLoot = hasSellListItemInInventory();
+                if (!isBankInventoryActionPending()) {
+                    int before = Rs2Inventory.emptySlotCount();
+                    if (Rs2Bank.depositAll()) {
+                        markBankInventoryAction(before);
+                        if (hadSellableLoot) pendingSellHandoff = true;
+                    }
+                }
                 return;
             }
-            MeleeScript.sleepUntil(Rs2Bank::isOpen, 3000);
-            return;
-        }
-
-        if (!KspBankMode.ensureWithdrawAsItem()) {
-            this.debug("Waiting for withdraw-as-item mode before melee banking withdrawals");
-            return;
-        }
-
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return;
-        }
-
-        GearPlan gearPlan = this.buildGearPlan();
-
-        if (!Rs2Inventory.isEmpty() && !this.hasMeleeSetupItemsInInventory(gearPlan)) {
-            Rs2Bank.depositAll();
-            MeleeScript.sleepUntil(Rs2Inventory::isEmpty, 3000);
-            return;
+            bankingInventoryPrepared = true;
+            debug("Melee bank inventory prepared; withdrawing available gear and food");
         }
 
         for (String desiredItem : gearPlan.desiredItems) {
             if (desiredItem == null
-                    || Rs2Equipment.isWearing((String[]) new String[]{desiredItem})
-                    || Rs2Inventory.hasItem((String[]) new String[]{desiredItem})) {
-                continue;
-            }
+                    || Rs2Equipment.isWearing(desiredItem)
+                    || Rs2Inventory.hasItem(desiredItem, true)) continue;
 
-            if (Rs2Bank.count(desiredItem) > 0) {
-                Rs2Bank.withdrawX(desiredItem, 1);
-                MeleeScript.sleepUntil(() -> Rs2Inventory.hasItem((String[]) new String[]{desiredItem}), 2000);
-                continue;
+            if (Rs2Bank.count(desiredItem, true) > 0) {
+                if (!isBankInventoryActionPending()) {
+                    int before = Rs2Inventory.emptySlotCount();
+                    int beforeItem = Rs2Inventory.count(desiredItem, true);
+                    if (Rs2Bank.withdrawOne(desiredItem, true))
+                        markBankInventoryAction(before, desiredItem, beforeItem);
+                }
+                return;
             }
-
-            this.debug("Missing melee gear outside bank; GE_BUY should handle purchase | item={}", desiredItem);
         }
 
-        Food bankFood = this.getBestFoodAvailableInBank();
-        int currentFoodCount = this.getFoodCountInInventory();
-        int missingFoodCount = Math.max(0, TARGET_FOOD_COUNT - currentFoodCount);
+        Food bankFood = getBestFoodAvailableInBank();
+        // Hill Giants require a long dungeon-to-bank journey. Carry more food per trip
+        // while preserving inventory space for loot and keeping other stages unchanged.
+        int missingFood = Math.max(0,
+                (stage.primaryNpc == NPC.HILL_GIANT ? 10 : TARGET_FOOD_COUNT)
+                        - getFoodCountInInventory());
 
-        if (bankFood != null && missingFoodCount > 0) {
-            this.debug("Withdrawing combat food by item id | food={} id={} amount={}",
-                    bankFood.getDisplayName(),
-                    bankFood.getItemId(),
-                    missingFoodCount);
-
-            Rs2Bank.withdrawX(bankFood.getItemId(), missingFoodCount);
-            MeleeScript.sleepUntil(() -> Rs2Inventory.itemQuantity(bankFood.getItemId()) >= 1, 2000);
-        } else if (bankFood == null && currentFoodCount <= 0) {
-            this.debug("No melee food available in bank; GE_BUY should handle food purchases");
+        if (bankFood != null && missingFood > 0) {
+            if (!isBankInventoryActionPending()) {
+                int before = Rs2Inventory.emptySlotCount();
+                int amount = Math.min(missingFood, Math.max(0, Rs2Bank.count(bankFood.getItemId())));
+                if (amount > 0 && Rs2Bank.withdrawX(bankFood.getItemId(), amount))
+                    markBankInventoryAction(before, bankFood.getDisplayName(),
+                            Rs2Inventory.count(bankFood.getItemId()));
+            }
+            return;
         }
 
+        if (bankFood == null && this.getFoodCountInInventory() <= 0 && requiresCombatFood(stage)) {
+            setStatus("Waiting for Trout/Salmon: no food in bank or inventory");
+            return;
+        }
+
+        gearCheckedAtBank = true;
+        bankingInventoryPrepared = false;
         Rs2Bank.closeBank();
-        MeleeScript.sleepUntil(() -> !Rs2Bank.isOpen(), 2000);
     }
 
     private boolean equipInventoryUpgrades() {
         if (Rs2Bank.isOpen()) {
             Rs2Bank.closeBank();
-            MeleeScript.sleepUntil(() -> !Rs2Bank.isOpen(), 2000);
             return true;
         }
 
-        GearPlan gearPlan = this.buildGearPlan();
-        for (String desiredItem : gearPlan.desiredItems) {
-            if (desiredItem == null || Rs2Equipment.isWearing((String[])new String[]{desiredItem}) || !Rs2Inventory.hasItem((String[])new String[]{desiredItem})) continue;
-            this.setStatus("Equipping " + desiredItem);
-            boolean interactionStarted = Rs2Inventory.wield((String[])new String[]{desiredItem});
-            boolean equipped = interactionStarted
-                    && MeleeScript.sleepUntil(() -> Rs2Equipment.isWearing((String[])new String[]{desiredItem}), 2000);
-            this.debug("Equipment interaction | item={} interactionStarted={} equipped={} inventoryPresent={}",
-                    desiredItem,
-                    interactionStarted,
-                    equipped,
-                    Rs2Inventory.hasItem((String[]) new String[]{desiredItem}));
-            if (!equipped) {
-                this.setStatus("Retrying equipment: " + desiredItem);
+        if (pendingEquipItem != null) {
+            if (Rs2Equipment.isWearing(pendingEquipItem)) {
+                debug("Confirmed equipped item {}", pendingEquipItem);
+                pendingEquipItem = null;
+                pendingEquipAttempts = 0;
+                pendingEquipAtMs = 0L;
+            } else if (System.currentTimeMillis() - pendingEquipAtMs < EQUIPMENT_RETRY_DELAY_MS) {
+                setStatus("Waiting for equipped item " + pendingEquipItem);
+                return true;
             }
-            return equipped;
         }
+
+        GearPlan gearPlan = buildGearPlan();
+        for (String desiredItem : gearPlan.desiredItems) {
+            if (desiredItem == null
+                    || Rs2Equipment.isWearing(desiredItem)
+                    || !Rs2Inventory.hasItem(desiredItem, true)) continue;
+
+            if (!desiredItem.equalsIgnoreCase(pendingEquipItem)) {
+                pendingEquipAttempts = 0;
+                pendingEquipItem = desiredItem;
+            }
+            if (pendingEquipAttempts >= EQUIPMENT_MAX_RETRIES) {
+                equipFailureItem = desiredItem;
+                setStatus("Equipment action failed: " + desiredItem + " (manual check needed)");
+                KspTaskDebug.throttled(log, true, "Melee", "equip-failed-" + desiredItem,
+                        10_000L, "Unable to confirm equipment after {} attempts: {}",
+                        pendingEquipAttempts, desiredItem);
+                return true; // Never run off with an incomplete selected loadout.
+            }
+
+            setStatus("Equipping " + desiredItem);
+            pendingEquipAttempts++;
+            pendingEquipAtMs = System.currentTimeMillis();
+            Rs2Inventory.wield(desiredItem);
+            return true; // Wait for actual equipment-state acknowledgement.
+        }
+        pendingEquipItem = null;
+        pendingEquipAttempts = 0;
+        equipFailureItem = null;
         return false;
     }
 
     private boolean lootOwnDrops(TrainingStage stage) {
-        if (Rs2Player.isMoving() || Rs2Player.isInteracting()) {
-            return false;
-        }
-        if (this.projectedFreeSlotsAfterBury() <= 0) {
-            return false;
-        }
-        Rs2TileItemModel loot = this.findNearestLoot(stage);
-        if (loot == null) {
+        if (Rs2Inventory.isFull() || isActivelyFighting(stage)) {
+            clearPendingLoot();
             return false;
         }
 
-        this.setStatus("Looting " + loot.getName());
-        boolean clicked = loot.pickup();
-        this.debug("Loot pickup interaction | clicked={} item={} id={} qty={} loc={} player={}",
-                clicked,
-                loot.getName(),
-                loot.getId(),
-                loot.getQuantity(),
-                loot.getWorldLocation(),
-                Rs2Player.getWorldLocation());
+        if (isLootPickupPending()) return true;
+
+        Rs2TileItemModel loot = findNearestLoot(stage);
+        if (loot == null) {
+            clearPendingLoot();
+            return false;
+        }
+
+        setStatus("Looting " + loot.getName());
+        boolean clicked = MeleeLootingHelper.take(loot, log, debugLogging);
         if (clicked) {
-            MeleeScript.sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isInteracting() || this.findNearestLoot(stage) == null, 1_200);
+            markLootPickupPending(loot);
         }
         return clicked;
     }
 
     private boolean hasLootNearby(TrainingStage stage) {
-        return this.findNearestLoot(stage) != null;
+        return isLootPickupPending() || this.findNearestLoot(stage) != null;
+    }
+
+    private boolean shouldBlockAttackForLoot(TrainingStage stage) {
+        if (Rs2Inventory.isFull() || isActivelyFighting(stage)) return false;
+        return isLootPickupPending() || findNearestLoot(stage) != null;
+    }
+
+    private boolean isLootPickupPending() {
+        if (pendingLootUntilMs <= 0L) return false;
+
+        boolean stillOnGround = Microbot.getRs2TileItemCache().query()
+                .fromWorldView()
+                .where(item -> item != null)
+                .where(item -> item.getId() == pendingLootId)
+                .where(item -> {
+                    LocalPoint localPoint = item.getLocalLocation();
+                    return localPoint != null
+                            && localPoint.getSceneX() == pendingLootSceneX
+                            && localPoint.getSceneY() == pendingLootSceneY
+                            && localPoint.getWorldView() == pendingLootWorldViewId;
+                })
+                .nearestOnClientThread() != null;
+
+        if (!stillOnGround) {
+            clearPendingLoot();
+            return false;
+        }
+
+        if (System.currentTimeMillis() >= pendingLootUntilMs) {
+            // The click was not accepted or movement stalled. Release immediately so the next
+            // 100 ms loop can retry the still-owned item instead of idling for seconds.
+            clearPendingLoot();
+            return false;
+        }
+
+        setStatus(Rs2Player.isMoving() ? "Moving to owned loot" : "Waiting for loot pickup");
+        return true;
+    }
+
+    private void markLootPickupPending(Rs2TileItemModel loot) {
+        LocalPoint localPoint = loot.getLocalLocation();
+        if (localPoint == null) {
+            clearPendingLoot();
+            return;
+        }
+
+        pendingLootId = loot.getId();
+        pendingLootSceneX = localPoint.getSceneX();
+        pendingLootSceneY = localPoint.getSceneY();
+        pendingLootWorldViewId = localPoint.getWorldView();
+        pendingLootUntilMs = System.currentTimeMillis() + LOOT_PICKUP_RECOVERY_MS;
+    }
+
+    private void clearPendingLoot() {
+        pendingLootId = -1;
+        pendingLootSceneX = -1;
+        pendingLootSceneY = -1;
+        pendingLootWorldViewId = -1;
+        pendingLootUntilMs = 0L;
     }
 
     private Rs2TileItemModel findNearestLoot(TrainingStage stage) {
-        if (stage == null || stage.lootNames == null) {
-            return null;
-        }
-        HashSet<String> lootNames = Arrays.stream(stage.lootNames)
-                .filter(Objects::nonNull)
-                .map(name -> name.trim().toLowerCase(Locale.ENGLISH))
-                .filter(name -> !name.isEmpty())
-                .collect(Collectors.toCollection(HashSet::new));
-        if (lootNames.isEmpty()) {
+        if (stage == null || stage.lootNames == null || stage.lootNames.length == 0) {
             return null;
         }
 
         return Microbot.getRs2TileItemCache().query()
                 .fromWorldView()
-                .within(12)
-                .where(item -> item.getName() != null
-                        && lootNames.contains(item.getName().trim().toLowerCase(Locale.ENGLISH))
-                        && item.isLootAble())
-                .nearestOnClientThread(12);
+                .where(item -> item != null)
+                .where(item -> !item.isDespawned())
+                .where(Rs2TileItemModel::isLootAble)
+                .where(Rs2TileItemModel::isOwned)
+                .where(this::canStoreLoot)
+                .where(item -> this.matchesConfiguredLootName(stage.lootNames, item.getName()))
+                .within(LOOT_RADIUS)
+                .nearestOnClientThread(LOOT_RADIUS);
+    }
+
+    private boolean matchesConfiguredLootName(String[] lootNames, String itemName) {
+        for (String lootName : lootNames) {
+            if (lootName != null && lootName.equalsIgnoreCase(itemName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean canStoreLoot(Rs2TileItemModel item) {
+        if (Rs2Inventory.emptySlotCount() > 0) {
+            return true;
+        }
+        return item.isStackable() && Rs2Inventory.hasItem(item.getId());
     }
 
     private boolean ensureInTargetArea(CombatAreas targetArea) {
-        if (targetArea.contains(Rs2Player.getWorldLocation())) {
-            KspWalkerGuard.clear("Melee:target-area");
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (isPlayerInsideCombatArea(playerLocation, targetArea)) {
+            // Release the core route as soon as the attack area is reached. Leaving the old
+            // route alive was visible in the log and delayed target acquisition while the
+            // player kept following the final route clicks.
+            Rs2Walker.clearWalkingRoute("ksp_account_builder_melee_reached_area");
             return true;
+        }
+        if (this.handleHillGiantDungeonEntry(targetArea)) {
+            return false;
+        }
+        if (targetArea == CombatAreas.CHICKENS && this.openChickenRouteGateIfNeeded()) {
+            return false;
         }
         if (Rs2Player.isMoving()) {
             return false;
         }
         this.setStatus("Walking to " + targetArea.getDisplayName());
-        if (KspWalkerGuard.walkToDestination(
-                "Melee:target-area",
-                targetArea::getRandomPoint,
-                targetArea::contains,
-                2,
-                WEB_WALK_COOLDOWN_MS)) {
+        if (Rs2Walker.walkUntil((this.resolveWalkTarget(targetArea)), 2, () -> { WorldPoint point = Rs2Player.getWorldLocation(); return this.isPlayerInsideCombatArea(point, targetArea); })) {
             this.lastWebWalkAtMs = System.currentTimeMillis();
             this.lastWalkTarget = null;
             this.debug("Requested melee area walk | player={} area={}",
@@ -396,49 +731,184 @@ public class MeleeScript
         return false;
     }
 
+    private boolean handleHillGiantDungeonEntry(CombatAreas targetArea) {
+        WorldPoint player = Rs2Player.getWorldLocation();
+        if (targetArea != CombatAreas.HILL_GIANTS || player == null) return false;
+
+        if (player.getY() > 5000) {
+            return false;
+        }
+
+
+        if (player.distanceTo(EDGEVILLE_TRAPDOOR) > EDGEVILLE_TRAPDOOR_INTERACTION_DISTANCE) {
+            setStatus("Walking to Edgeville dungeon");
+            Rs2Walker.walkTo(EDGEVILLE_TRAPDOOR, 2);
+            return true;
+        }
+
+        TileObject trapdoor = Rs2GameObject.getTileObject(
+                EDGEVILLE_TRAPDOOR_OPEN_ID, EDGEVILLE_TRAPDOOR, EDGEVILLE_TRAPDOOR_INTERACTION_DISTANCE);
+        if (trapdoor != null && Rs2GameObject.hasAction(trapdoor, "Climb-down")) {
+            setStatus("Entering Edgeville dungeon");
+            if (isWorldActionPending("trapdoor-climb")) return true;
+            if (Rs2GameObject.interact(trapdoor, "Climb-down")) markWorldAction("trapdoor-climb");
+            return true;
+        }
+
+        trapdoor = Rs2GameObject.getTileObject(
+                EDGEVILLE_TRAPDOOR_CLOSED_ID, EDGEVILLE_TRAPDOOR, EDGEVILLE_TRAPDOOR_INTERACTION_DISTANCE);
+        if (trapdoor != null && Rs2GameObject.hasAction(trapdoor, "Open")) {
+            setStatus("Opening Edgeville trapdoor");
+            if (!isWorldActionPending("trapdoor-open")
+                    && Rs2GameObject.interact(trapdoor, "Open")) {
+                markWorldAction("trapdoor-open");
+            }
+        }
+        return true;
+    }
+
+    private boolean isPlayerInsideCombatArea(WorldPoint location, CombatAreas area) {
+        if (location == null || area == null || !area.contains(location)) {
+            return false;
+        }
+
+        return area != CombatAreas.CHICKENS
+                || location.distanceTo(CHICKEN_WALK_TARGET) <= CHICKEN_COMBAT_RADIUS;
+    }
+
+    private WorldPoint resolveWalkTarget(CombatAreas targetArea) {
+        if (targetArea == CombatAreas.CHICKENS) {
+            return CHICKEN_WALK_TARGET;
+        }
+        if (targetArea == CombatAreas.HILL_GIANTS) {
+            return HILL_GIANT_WALK_TARGET;
+        }
+        return targetArea.getRandomPoint();
+    }
+
+    private boolean openChickenRouteGateIfNeeded() {
+        WorldPoint player = Rs2Player.getWorldLocation();
+        if (player == null
+                || player.getPlane() != CHICKEN_GATE_EAST.getPlane()
+                || player.getY() <= CHICKEN_GATE_EAST.getY()
+                || player.distanceTo(CHICKEN_GATE_EAST) > CHICKEN_GATE_INTERACTION_DISTANCE) {
+            return false;
+        }
+
+        TileObject gate = Rs2GameObject.getTileObject(
+                CHICKEN_GATE_EAST_ID, CHICKEN_GATE_EAST, CHICKEN_GATE_INTERACTION_DISTANCE);
+        if (gate == null) {
+            gate = Rs2GameObject.getTileObject(
+                    CHICKEN_GATE_WEST_ID, CHICKEN_GATE_WEST, CHICKEN_GATE_INTERACTION_DISTANCE);
+        }
+
+        if (gate == null || !Rs2GameObject.hasAction(gate, "Open")) return false;
+
+        setStatus("Opening gate to chickens");
+        if (isWorldActionPending("chicken-gate")) return true;
+        if (Rs2GameObject.interact(gate, "Open")) markWorldAction("chicken-gate");
+        return true;
+    }
+
     private void attackTarget(TrainingStage stage) {
-        List<Rs2NpcModel> candidates;
-        Rs2NpcModel target;
         Player localPlayer = Microbot.getClient().getLocalPlayer();
         Actor currentInteracting = Rs2Player.getInteracting();
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
         if (stage == null || localPlayer == null || playerLocation == null) {
             return;
         }
-        ArrayList<String> npcNames = new ArrayList<String>();
-        npcNames.add(stage.primaryNpc.getDisplayName().toLowerCase(Locale.ENGLISH));
-        if (stage.secondaryNpc != null) {
-            npcNames.add(stage.secondaryNpc.getDisplayName().toLowerCase(Locale.ENGLISH));
-        }
-        candidates = Microbot.getRs2NpcCache().query()
-                .fromWorldView()
-                .where(npc -> npc.getCombatLevel() > 0 && !npc.isDead())
-                .where(npc -> {
-                    String name = npc.getName();
-                    return name != null && npcNames.contains(name.toLowerCase(Locale.ENGLISH));
-                })
-                .where(npc -> this.isNpcInTargetArea(npc, stage))
-                .toListOnClientThread()
-                .stream()
-                .filter(npc -> this.canAttackNpc(npc, localPlayer))
-                .sorted(Comparator.comparingInt((Rs2NpcModel npc) -> npc.getInteracting() == null ? 0 : 1)
-                        .thenComparingInt(npc -> npc.getWorldLocation().distanceTo(playerLocation)))
-                .collect(Collectors.toList());
-        target = candidates.isEmpty() ? null : candidates.get(0);
-        if (target == null) {
-            this.setStatus("Waiting for " + stage.primaryNpc.getDisplayName());
-            KspTaskDebug.throttled(log, this.debugLogging, "Melee", "no-target", 3_000L,
-                    "no attack target found | primary={} secondary={} player={} area={}",
-                    stage.primaryNpc.getDisplayName(),
-                    stage.secondaryNpc != null ? stage.secondaryNpc.getDisplayName() : "none",
-                    playerLocation,
-                    stage.area.getDisplayName());
+
+        if (!isPlayerInsideCombatArea(playerLocation, stage.area)) {
+            this.setStatus("Walking to " + stage.area.getDisplayName());
+            this.debug("Blocked attack outside combat area | area={} player={} walkTarget={}",
+                    stage.area.getDisplayName(), playerLocation, resolveWalkTarget(stage.area));
             return;
         }
-        if (Objects.equals(currentInteracting, target.getNpc())) {
+
+        if (isAttackDispatchPending() || hasRecentWarriorCombatXp(stage)) return;
+
+        Rs2NpcModel currentAttacker = findNpcAttackingPlayer(localPlayer, playerLocation, stage);
+        if (currentAttacker != null) {
+            // An NPC targeting us does not mean we have attacked it.
+            // Retaliate once; pending attack dispatch prevents repeat clicks.
+            if (!Rs2Player.isInteracting() && !Rs2Player.isAnimating()) {
+                this.setStatus("Retaliating against " + currentAttacker.getName());
+                if (currentAttacker.click("Attack")) {
+                    pendingAttackAtMs = System.currentTimeMillis();
+                    pendingAttackNpcIndex = currentAttacker.getIndex();
+                }
+                return;
+            }
+            this.setStatus("Fighting " + currentAttacker.getName());
+            if (this.debugLogging) {
+                KspTaskDebug.throttled(log, true, "Melee", "already-under-attack", 3_000L,
+                        "Skipping new target; player is actively fighting attacker | attacker={} id={} loc={} playerInteracting={} animating={}",
+                        currentAttacker.getName(),
+                        currentAttacker.getId(),
+                        currentAttacker.getWorldLocation(),
+                        currentInteracting,
+                        Rs2Player.isAnimating());
+            }
+            return;
+        }
+
+        if (Rs2Player.isInCombat() || Rs2Player.isInteracting() || shouldBlockAttackForLoot(stage)) {
+            return;
+        }
+
+        String primaryName = stage.primaryNpc.getDisplayName();
+        String secondaryName = stage.secondaryNpc == null ? null : stage.secondaryNpc.getDisplayName();
+
+        // Read the live NPC list from the player's current WorldView rather
+        // than reusing cached NPC models after a despawn/replacement.
+        Rs2NpcModel target = KspLiveScene.nearestNpcModel(playerLocation, 40,
+                npc -> npc != null && npc.getCombatLevel() > 0 && !npc.isDead()
+                        && npc.getName() != null
+                        && (npc.getName().equalsIgnoreCase(primaryName)
+                            || (secondaryName != null && npc.getName().equalsIgnoreCase(secondaryName)))
+                        && this.isNpcInTargetArea(npc, stage)
+                        && this.canAttackNpc(npc, localPlayer));
+
+        if (target == null) {
+            this.setStatus("Waiting for " + primaryName);
+            if (this.debugLogging) {
+                KspTaskDebug.throttled(log, true, "Melee", "no-target", 3_000L,
+                        "no attack target found | primary={} secondary={} player={} area={}",
+                        primaryName,
+                        secondaryName == null ? "none" : secondaryName,
+                        playerLocation,
+                        stage.area.getDisplayName());
+            }
+            return;
+        }
+        if (Objects.equals(currentInteracting, target.getNpc()) && Rs2Player.isAnimating()) {
             this.setStatus("Fighting " + target.getName());
             return;
         }
+        if (!this.canAttackNpc(target, localPlayer)) {
+            this.setStatus("Waiting for an available " + primaryName);
+            this.debug(
+                    "Skipped claimed npc before attack | target={} id={} interacting={} healthRatio={}",
+                    target.getName(),
+                    target.getId(),
+                    target.getInteracting(),
+                    target.getHealthRatio());
+            return;
+        }
+
+        currentAttacker = findNpcAttackingPlayer(localPlayer, playerLocation, stage);
+        if (isActivelyFighting(stage)) {
+            this.setStatus("Fighting " + (currentAttacker != null
+                    ? currentAttacker.getName()
+                    : primaryName));
+            this.debug(
+                    "Cancelled npc attack because combat started before click | selectedTarget={} attacker={} playerInteracting={}",
+                    target.getName(),
+                    currentAttacker != null ? currentAttacker.getName() : "unknown",
+                    Rs2Player.getInteracting());
+            return;
+        }
+
         this.setStatus("Attacking " + target.getName());
         this.debug("Attempting npc attack | target={} id={} loc={} combatLevel={} reachable={} player={} distance={} targetInteracting={}",
                 target.getName(),
@@ -449,97 +919,222 @@ public class MeleeScript
                 playerLocation,
                 playerLocation.distanceTo(target.getWorldLocation()),
                 target.getInteracting());
-        target.click("Attack");
-        boolean activityStarted = MeleeScript.sleepUntil(() -> Rs2Player.isInteracting() || Rs2Player.isAnimating(), (int)2000);
-        this.debug("Npc attack post-click wait | activityStarted={} target={} player={} moving={} animating={} interacting={} inCombat={}",
-                activityStarted,
-                target.getName(),
-                Rs2Player.getWorldLocation(),
-                Rs2Player.isMoving(),
-                Rs2Player.isAnimating(),
-                Rs2Player.isInteracting(),
-                Rs2Combat.inCombat());
+        if (target.click("Attack")) {
+            pendingAttackAtMs = System.currentTimeMillis();
+            pendingAttackNpcIndex = target.getIndex();
+        }
+    }
+
+    private boolean isAttackDispatchPending() {
+        if (pendingAttackAtMs == 0L) return false;
+
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) {
+            // Movement, the attack animation and active combat acknowledge the
+            // dispatched click; they do not mean another Attack is required.
+            // Keep the dispatch pending until combat settles instead of
+            // clearing it on the first movement tick and allowing repeat clicks.
+            return true;
+        }
+
+        if (System.currentTimeMillis() - pendingAttackAtMs < ACTION_DISPATCH_TIMEOUT_MS) return true;
+
+        pendingAttackAtMs = 0L;
+        pendingAttackNpcIndex = -1;
+        return false;
+    }
+
+    private boolean isWorldActionPending(String action) {
+        if (pendingWorldActionAtMs == 0L || pendingWorldAction == null) return false;
+        if (!pendingWorldAction.equals(action)) return false;
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) return true;
+        if (System.currentTimeMillis() - pendingWorldActionAtMs < ACTION_DISPATCH_TIMEOUT_MS) return true;
+        pendingWorldActionAtMs = 0L;
+        pendingWorldAction = null;
+        return false;
+    }
+
+    private void markWorldAction(String action) {
+        pendingWorldAction = action;
+        pendingWorldActionAtMs = System.currentTimeMillis();
+    }
+
+    private boolean isBankInventoryActionPending() {
+        if (pendingBankActionAtMs == 0L) return false;
+        boolean itemChanged = pendingBankItem != null
+                && Rs2Inventory.count(pendingBankItem, true) != pendingBankItemBefore;
+        if (itemChanged || Rs2Inventory.emptySlotCount() != pendingBankInventoryCount
+                || System.currentTimeMillis() - pendingBankActionAtMs >= ACTION_DISPATCH_TIMEOUT_MS) {
+            pendingBankActionAtMs = 0L;
+            pendingBankInventoryCount = -1;
+            pendingBankItem = null;
+            pendingBankItemBefore = -1;
+            return false;
+        }
+        return true;
+    }
+
+    private void markBankInventoryAction(int beforeEmptySlots) {
+        markBankInventoryAction(beforeEmptySlots, null, -1);
+    }
+
+    private void markBankInventoryAction(int beforeEmptySlots, String item, int beforeCount) {
+        pendingBankInventoryCount = beforeEmptySlots;
+        pendingBankItem = item;
+        pendingBankItemBefore = beforeCount;
+        pendingBankActionAtMs = System.currentTimeMillis();
     }
 
     private boolean isNpcInTargetArea(Rs2NpcModel npc, TrainingStage stage) {
-        return npc != null && npc.getWorldLocation() != null && stage != null && stage.area.contains(npc.getWorldLocation());
+        return npc != null
+                && stage != null
+                && this.isLocationInTargetArea(npc.getWorldLocation(), stage);
+    }
+
+    private boolean isLocationInTargetArea(WorldPoint location, TrainingStage stage) {
+        if (location == null || stage == null || !stage.area.contains(location)) {
+            return false;
+        }
+
+        return stage.area != CombatAreas.CHICKENS
+                || location.distanceTo(CHICKEN_WALK_TARGET) <= CHICKEN_COMBAT_RADIUS;
     }
 
     private boolean canAttackNpc(Rs2NpcModel npc, Player localPlayer) {
-        if (npc == null) {
+        if (npc == null || localPlayer == null) {
             return false;
         }
-        Actor interacting = npc.getInteracting();
-        return interacting == null || Objects.equals(interacting, localPlayer);
+
+        if (npc.isInteractingWithPlayer()) return true;
+        if (npc.isInteracting()) return false;
+        return npc.getHealthRatio() < 0;
+    }
+
+    private boolean isActivelyFighting() {
+        return isActivelyFighting(resolveTrainingStage());
+    }
+
+    private void updateWarriorCombatXp(TrainingStage stage) {
+        if (stage == null || stage.primaryNpc != NPC.AL_KHARID_WARRIOR) {
+            lastWarriorCombatXp = -1;
+            lastWarriorCombatXpAtMs = 0L;
+            return;
+        }
+        // These skills cover all melee attack styles and Constitution XP.
+        // Experience is an additional signal, never a replacement for NPC,
+        // animation, interaction or combat-state checks.
+        int totalXp = Microbot.getClient().getSkillExperience(Skill.ATTACK)
+                + Microbot.getClient().getSkillExperience(Skill.STRENGTH)
+                + Microbot.getClient().getSkillExperience(Skill.DEFENCE)
+                + Microbot.getClient().getSkillExperience(Skill.HITPOINTS);
+        if (lastWarriorCombatXp >= 0 && totalXp > lastWarriorCombatXp) {
+            lastWarriorCombatXpAtMs = System.currentTimeMillis();
+            KspTaskDebug.throttled(log, debugLogging, "Melee", "warrior-xp", 2_000L,
+                    "Al Kharid warrior combat XP confirmed | delta={} previous={} current={}",
+                    totalXp - lastWarriorCombatXp, lastWarriorCombatXp, totalXp);
+        }
+        lastWarriorCombatXp = totalXp;
+    }
+
+    private boolean hasRecentWarriorCombatXp(TrainingStage stage) {
+        return stage != null && stage.primaryNpc == NPC.AL_KHARID_WARRIOR
+                && lastWarriorCombatXpAtMs > 0L
+                && System.currentTimeMillis() - lastWarriorCombatXpAtMs < 3_000L
+                && isPlayerInsideCombatArea(Rs2Player.getWorldLocation(), stage.area);
+    }
+
+    private boolean isActivelyFighting(TrainingStage stage) {
+        if (hasRecentWarriorCombatXp(stage)) return true;
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        Actor interacting = Rs2Player.getInteracting();
+        if (interacting != null
+                && playerLocation != null
+                && isActiveCombatLocation(interacting.getWorldLocation(), stage)
+                && !this.isIgnoredCombatNpc(interacting.getName())
+                && interacting.getCombatLevel() > 0
+                && interacting.getHealthRatio() != 0) {
+            return true;
+        }
+
+        Player localPlayer = Microbot.getClient().getLocalPlayer();
+        if (localPlayer == null || playerLocation == null) {
+            return false;
+        }
+
+        return ((Rs2Player.isInteracting() || Rs2Player.isAnimating())
+                && findNpcAttackingPlayer(localPlayer, playerLocation, stage) != null)
+                || (Rs2Combat.inCombat()
+                    && stage.area.contains(playerLocation)
+                    && (Rs2Player.isAnimating() || Rs2Player.isInteracting()));
+    }
+
+    private boolean isActiveCombatLocation(WorldPoint location, TrainingStage stage) {
+        if (location == null || stage == null) {
+            return false;
+        }
+
+        return this.isLocationInTargetArea(location, stage);
+    }
+
+    private Rs2NpcModel findNpcAttackingPlayer(Player localPlayer, WorldPoint playerLocation) {
+        return findNpcAttackingPlayer(localPlayer, playerLocation, resolveTrainingStage());
+    }
+
+    private Rs2NpcModel findNpcAttackingPlayer(Player localPlayer, WorldPoint playerLocation, TrainingStage stage) {
+        if (localPlayer == null || playerLocation == null) {
+            return null;
+        }
+
+        return KspLiveScene.nearestNpcModel(playerLocation, 40,
+                npc -> npc != null
+                        && !npc.isDead()
+                        && npc.getCombatLevel() > 0
+                        && !this.isIgnoredCombatNpc(npc.getName())
+                        && this.isActiveCombatLocation(npc.getWorldLocation(), stage)
+                        && (Rs2Player.isInteracting()
+                            || npc.getWorldLocation().distanceTo(playerLocation) <= PASSIVE_ATTACKER_MAX_DISTANCE)
+                        && Objects.equals(npc.getInteracting(), localPlayer));
+    }
+
+    private boolean isIgnoredCombatNpc(String npcName) {
+        return npcName != null
+                && IGNORED_COMBAT_NPC_NAMES.contains(npcName.trim().toLowerCase(Locale.ENGLISH));
     }
 
     private boolean ensureBalancedAttackStyle() {
-        int attack = this.getSkillLevel(Skill.ATTACK);
-        int strength = this.getSkillLevel(Skill.STRENGTH);
-        int defence = this.getSkillLevel(Skill.DEFENCE);
+        int attack = getSkillLevel(Skill.ATTACK);
+        int strength = getSkillLevel(Skill.STRENGTH);
+        int defence = getSkillLevel(Skill.DEFENCE);
 
         Skill targetSkill;
-        WidgetInfo targetWidget;
-        int targetStyleIndex;
+        WidgetInfo widget;
+        int index;
 
         if (attack <= strength && attack <= defence) {
-            targetSkill = Skill.ATTACK;
-            targetWidget = WidgetInfo.COMBAT_STYLE_ONE;
-            targetStyleIndex = 0;
+            targetSkill = Skill.ATTACK; widget = WidgetInfo.COMBAT_STYLE_ONE; index = 0;
         } else if (strength <= attack && strength <= defence) {
-            targetSkill = Skill.STRENGTH;
-            targetWidget = WidgetInfo.COMBAT_STYLE_TWO;
-            targetStyleIndex = 1;
+            targetSkill = Skill.STRENGTH; widget = WidgetInfo.COMBAT_STYLE_TWO; index = 1;
         } else {
-            targetSkill = Skill.DEFENCE;
-            targetWidget = WidgetInfo.COMBAT_STYLE_FOUR;
-            targetStyleIndex = 3;
+            targetSkill = Skill.DEFENCE; widget = WidgetInfo.COMBAT_STYLE_FOUR; index = 3;
         }
 
-        int currentStyleIndex = Microbot.getVarbitPlayerValue(43);
-
-        if (currentStyleIndex == targetStyleIndex) {
-            this.setStatus("Training " + targetSkill.getName().toLowerCase(Locale.ENGLISH));
-            return false;
-        }
-
-        if (Rs2Player.isMoving()) {
-            this.setStatus("Waiting to switch combat style");
+        if (Microbot.getVarbitPlayerValue(43) == index) {
+            setStatus("Training " + targetSkill.getName().toLowerCase(Locale.ENGLISH));
             return false;
         }
 
         if (Rs2Tab.getCurrentTab() != InterfaceTab.COMBAT) {
             Rs2Tab.switchToCombatOptionsTab();
-            MeleeScript.sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.COMBAT, 1500);
+            return true;
         }
 
-        this.setStatus("Switching combat style to " + targetSkill.getName().toLowerCase(Locale.ENGLISH));
-
-        Rs2Combat.setAttackStyle(targetWidget);
-
-        boolean switched = MeleeScript.sleepUntil(
-                () -> Microbot.getVarbitPlayerValue(43) == targetStyleIndex,
-                2000
-        );
-
-        this.debug("Combat style switch | targetSkill={} targetIndex={} oldIndex={} newIndex={} switched={}",
-                targetSkill.getName(),
-                targetStyleIndex,
-                currentStyleIndex,
-                Microbot.getVarbitPlayerValue(43),
-                switched);
-
-        return switched;
+        setStatus("Switching combat style to " + targetSkill.getName().toLowerCase(Locale.ENGLISH));
+        Rs2Combat.setAttackStyle(widget);
+        return true;
     }
 
     private GearPlan buildGearPlan() {
         int attackLevel = this.getSkillLevel(Skill.ATTACK);
         int defenceLevel = this.getSkillLevel(Skill.DEFENCE);
-        if (attackLevel < CHICKEN_TARGET_COMBAT_STAT_LEVEL
-                || this.getSkillLevel(Skill.STRENGTH) < CHICKEN_TARGET_COMBAT_STAT_LEVEL
-                || defenceLevel < CHICKEN_TARGET_COMBAT_STAT_LEVEL) {
-            return new GearPlan(Arrays.asList("Bronze sword", "Wooden shield"));
-        }
 
         Buy.MeleeGearPlan buyPlan = Buy.buildMeleeGearPlan(
                 attackLevel,
@@ -553,40 +1148,88 @@ public class MeleeScript
 
     private String getBestOwnedWeaponUpToCurrentLevel() {
         int attackLevel = this.getSkillLevel(Skill.ATTACK);
-        return Arrays.stream(Weapons.values()).filter(weapon -> attackLevel >= weapon.getRequiredAttackLevel()).sorted(Comparator.comparingInt(Weapons::getRequiredAttackLevel).thenComparingInt(Enum::ordinal).reversed()).map(Weapons::getDisplayName).filter(this::hasWeaponEquippedOrInInventory).findFirst().orElse(null);
+        Weapons best = null;
+        for (Weapons weapon : Weapons.values()) {
+            if (attackLevel < weapon.getRequiredAttackLevel()
+                    || !this.hasWeaponEquippedOrInInventory(weapon.getDisplayName())) {
+                continue;
+            }
+            if (best == null
+                    || weapon.getRequiredAttackLevel() > best.getRequiredAttackLevel()
+                    || (weapon.getRequiredAttackLevel() == best.getRequiredAttackLevel()
+                        && weapon.ordinal() > best.ordinal())) {
+                best = weapon;
+            }
+        }
+        return best == null ? null : best.getDisplayName();
+    }
+
+    /**
+     * Check gear only when the player genuinely lacks a usable weapon AND
+     * the previously observed bank inventory contains a usable replacement.
+     * No bank visit is needed solely to inspect optional armour upgrades.
+     */
+    private boolean shouldVisitBankForMissingWeapon() {
+        boolean usableWeaponPresent = this.hasCurrentTaskWeaponEquippedOrInInventory();
+        if (usableWeaponPresent) return false;
+
+        int attackLevel = this.getSkillLevel(Skill.ATTACK);
+        boolean bankWeaponKnown = false;
+        for (Weapons weapon : Weapons.values()) {
+            if (attackLevel >= weapon.getRequiredAttackLevel()
+                    && Rs2Bank.count(weapon.getDisplayName()) > 0) {
+                bankWeaponKnown = true;
+                break;
+            }
+        }
+        return MeleeBankPolicy.needsOptionalGearBank(usableWeaponPresent, bankWeaponKnown);
     }
 
     private boolean hasCurrentTaskWeaponEquippedOrInInventory() {
-        TrainingStage stage = this.resolveTrainingStage();
-        if (stage.primaryNpc == NPC.CHICKEN) {
-        return this.hasWeaponEquippedOrInInventory("Bronze sword");
-    }
-
         return this.getBestOwnedWeaponUpToCurrentLevel() != null;
     }
 
     private boolean hasWeaponEquippedOrInInventory(String itemName) {
-        return itemName != null && (Rs2Equipment.isWearing((String[])new String[]{itemName}) || Rs2Inventory.hasItem((String[])new String[]{itemName}));
+        return itemName != null && (Rs2Equipment.isWearing(itemName) || Rs2Inventory.hasItem(itemName));
     }
 
     private boolean isDragonSlayerCompleted() {
-        return Rs2Player.getQuestState((Quest)Quest.DRAGON_SLAYER_I) == QuestState.FINISHED;
+        return Rs2Player.getQuestState(Quest.DRAGON_SLAYER_I) == QuestState.FINISHED;
     }
 
     private boolean hasInventoryEquipmentToEquip() {
-        return this.buildGearPlan().desiredItems.stream().anyMatch(item -> item != null && Rs2Inventory.hasItem((String[])new String[]{item}) && !Rs2Equipment.isWearing((String[])new String[]{item}));
+        return this.buildGearPlan().desiredItems.stream()
+                .anyMatch(item -> item != null && Rs2Inventory.hasItem(item) && !Rs2Equipment.isWearing(item));
     }
 
     private boolean hasMeleeSetupItemsInInventory(GearPlan gearPlan) {
-        if (gearPlan != null && gearPlan.desiredItems.stream().anyMatch(item -> item != null && Rs2Inventory.hasItem((String[]) new String[]{item}))) {
+        if (gearPlan != null && gearPlan.desiredItems.stream()
+                .anyMatch(item -> item != null && Rs2Inventory.hasItem(item))) {
             return true;
         }
 
         return this.getFoodCountInInventory() > 0;
     }
 
+    private boolean hasSellListItemInInventory() {
+        return Arrays.stream(SellList.values())
+                .anyMatch(item -> Rs2Inventory.hasItem(item.getDisplayName())
+                        || Rs2Inventory.hasItem(item.getDisplayName(), true));
+    }
+
+    public boolean hasPendingSellHandoff() {
+        return this.pendingSellHandoff;
+    }
+
+    public void clearPendingSellHandoff() {
+        this.pendingSellHandoff = false;
+    }
+
     private boolean hasItemAnywhere(String itemName) {
-        return itemName != null && (Rs2Equipment.isWearing((String[])new String[]{itemName}) || Rs2Inventory.hasItem((String[])new String[]{itemName}) || Rs2Inventory.hasItem((String)itemName, (boolean)true) || Rs2Bank.count((String)itemName) > 0);
+        return itemName != null && (Rs2Equipment.isWearing(itemName)
+                || Rs2Inventory.hasItem(itemName)
+                || Rs2Inventory.hasItem(itemName, true)
+                || Rs2Bank.count(itemName) > 0);
     }
 
     private Food getBestFoodInInventory() {
@@ -603,8 +1246,12 @@ public class MeleeScript
 
     private boolean shouldBankForNoFood(TrainingStage stage) {
         Food bankFood = this.getBestFoodAvailableInBank();
-        if (stage != null && stage.primaryNpc == NPC.CHICKEN && bankFood == null) {
+        if (!requiresCombatFood(stage) && bankFood == null) {
             return false;
+        }
+
+        if (requiresCombatFood(stage)) {
+            return true;
         }
 
         if (!Rs2Inventory.isEmpty()) {
@@ -618,8 +1265,16 @@ public class MeleeScript
         return bankFood != null && this.shouldHealNow(currentHp, maxHp);
     }
 
+    private boolean requiresCombatFood(TrainingStage stage) {
+        if (stage == null) {
+            return false;
+        }
+
+        return stage.primaryNpc != NPC.CHICKEN;
+    }
+
     private boolean shouldHealNow(int currentHp, int maxHp) {
-        int healThreshold = (int)Math.ceil((double)maxHp * 0.28);
+        int healThreshold = (maxHp * 2) / 3;
         return currentHp <= healThreshold;
     }
 
@@ -638,12 +1293,39 @@ public class MeleeScript
     }
 
     public void shutdown() {
+        ++this.runGeneration;
         this.lastWebWalkAtMs = 0L;
         this.lastWalkTarget = null;
-        KspWalkerGuard.clear("Melee:target-area");
+        this.pendingAttackAtMs = 0L;
+        this.pendingAttackNpcIndex = -1;
+        this.pendingWorldActionAtMs = 0L;
+        this.pendingWorldAction = null;
+        this.pendingBankActionAtMs = 0L;
+        this.pendingBankInventoryCount = -1;
+        this.pendingBankItem = null;
+        this.pendingBankItemBefore = -1;
+        this.pendingEquipItem = null;
+        this.pendingEquipAtMs = 0L;
+        this.pendingEquipAttempts = 0;
+        this.equipFailureItem = null;
+        this.gearCheckedAtBank = false;
+        this.bankingInventoryPrepared = false;
+        this.lastWarriorCombatXpAtMs = 0L;
+        this.lastWarriorCombatXp = -1;
+        this.clearPendingLoot();
+        this.clearPendingBury();
         this.state = CombatState.PREPARING;
         this.status = "Idle";
         super.shutdown();
+    }
+
+    private boolean isExpectedCancellation(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof InterruptedException) return true;
+            current = current.getCause();
+        }
+        return Thread.currentThread().isInterrupted();
     }
 
     private void debug(String message, Object ... args) {

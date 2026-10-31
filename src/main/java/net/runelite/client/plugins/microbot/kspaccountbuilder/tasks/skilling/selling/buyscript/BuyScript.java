@@ -1,4 +1,8 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.buyscript;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,9 +22,9 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspGrandExchangeHelper;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTaskDebug;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWalkerGuard;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.combat.melee.food.Food;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.gearea.GEArea;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
@@ -29,6 +33,8 @@ import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeRequ
 import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeSlots;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.grandexchange.models.GrandExchangeOfferDetails;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.GeOfferRepricePolicy;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.GeOfferPriceModifier;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -37,14 +43,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Singleton
-public class BuyScript extends Script {
+public class BuyScript extends KspManagedScript {
     private static final Logger log = LoggerFactory.getLogger(BuyScript.class);
 
-    private static final int LOOP_DELAY_MS = 600;
-    private static final int WEB_WALK_COOLDOWN_MS = 3000;
-    private static final int ACTION_COOLDOWN_MS = 1200;
-    private static final int BANK_WAIT_TIMEOUT_MS = 3000;
-    private static final int GE_OFFER_INPUT_DELAY_MS = 900;
+    private static final int LOOP_DELAY_MS = 50;
+    private static final int WEB_WALK_COOLDOWN_MS = 1_000;
+    private static final int ACTION_COOLDOWN_MS = 100;
+    private static final long BANK_DISPATCH_TIMEOUT_MS = 750L;
 
     private static final int TARGET_SMITHING_LEVEL = Buy.TARGET_SMITHING_LEVEL;
     private static final int TARGET_SMITHING_XP = Buy.TARGET_SMITHING_XP;
@@ -60,6 +65,7 @@ public class BuyScript extends Script {
 
     private static final String HAMMER_NAME = Buy.HAMMER_NAME;
     private static final int HAMMER_ITEM_ID = Buy.HAMMER_ITEM_ID;
+    private static final int HAMMER_BUY_PRICE = 300;
     private static final String TINDERBOX_NAME = Buy.TINDERBOX_NAME;
     private static final String FISHING_BAIT_NAME = Buy.FISHING_BAIT_NAME;
     private static final int FISHING_BAIT_BUY_QUANTITY = Buy.FISHING_BAIT_BUY_QUANTITY;
@@ -69,17 +75,21 @@ public class BuyScript extends Script {
     private static final String FISHING_ROD_NAME = Buy.FISHING_ROD_NAME;
     private static final String FLY_FISHING_ROD_NAME = Buy.FLY_FISHING_ROD_NAME;
     private static final String HARPOON_NAME = Buy.HARPOON_NAME;
+    private static final int HARPOON_BUY_PRICE = 600;
     private static final String LOBSTER_POT_NAME = Buy.LOBSTER_POT_NAME;
     private static final String LEATHER_NAME = Buy.LEATHER_NAME;
     private static final String THREAD_NAME = Buy.THREAD_NAME;
     private static final String NEEDLE_NAME = Buy.NEEDLE_NAME;
     private static final String GOLD_BAR_NAME = Buy.GOLD_BAR_NAME;
+    private static final String SILVER_BAR_NAME = Buy.SILVER_BAR_NAME;
     private static final String RING_MOULD_NAME = Buy.RING_MOULD_NAME;
     private static final String NECKLACE_MOULD_NAME = Buy.NECKLACE_MOULD_NAME;
+    private static final String CHISEL_NAME = Buy.CHISEL_NAME;
+    private static final String TIARA_MOULD_NAME = Buy.TIARA_MOULD_NAME;
     private static final String BRONZE_SWORD_NAME = "Bronze sword";
     private static final String WOODEN_SHIELD_NAME = "Wooden shield";
-    private static final String SHRIMP_NAME = "Shrimp";
-    private static final int MELEE_SHRIMP_BANK_QUANTITY = 5;
+    private static final String TROUT_NAME = Food.TROUT.getDisplayName();
+    private static final String SALMON_NAME = Food.SALMON.getDisplayName();
     private static final int MIN_GOLD_BAR_BUY_QUANTITY = 50;
     private static final int MAX_GOLD_BAR_BUY_QUANTITY = 100;
 
@@ -88,6 +98,10 @@ public class BuyScript extends Script {
 
     private long lastWebWalkAtMs;
     private long lastActionAtMs;
+    private long pendingBankActionAtMs;
+    private String pendingBankItem;
+    private int pendingBankItemBeforeCount = -1;
+    private int pendingBankEmptySlots = -1;
 
     private boolean bankToolsAudited;
     private boolean bankHasDesiredPickaxe;
@@ -106,12 +120,16 @@ public class BuyScript extends Script {
     private boolean bankHasNeedle;
     private int leatherNeeded;
     private int bankGoldBarCount;
+    private int bankSilverBarCount;
     private boolean bankHasRingMould;
     private boolean bankHasNecklaceMould;
+    private boolean bankHasChisel;
+    private boolean bankHasTiaraMould;
     private int goldBarsToBuy;
     private boolean bankHasBronzeSword;
     private boolean bankHasWoodenShield;
-    private int bankShrimpCount;
+    private int bankTroutCount;
+    private int bankSalmonCount;
 
     private String lastDesiredPickaxe;
     private String lastDesiredAxe;
@@ -121,6 +139,7 @@ public class BuyScript extends Script {
     private final List<String> pendingFishingSupplyBuys = new ArrayList<>();
     private final Map<String, Integer> pendingOreBuyQuantities = new HashMap<>();
     private final Map<String, Integer> pendingFishingSupplyBuyQuantities = new HashMap<>();
+    private final GeOfferRepricePolicy buyRepricing = new GeOfferRepricePolicy();
 
     private int requiredBronzeBars;
     private int copperOreNeeded;
@@ -130,6 +149,7 @@ public class BuyScript extends Script {
 
     private boolean complete;
     private boolean insufficientCoinsForMissingBuys;
+    private boolean exchangeInventoryReset;
 
     public void setDebugLogging(boolean debugLogging) {
         this.debugLogging = debugLogging;
@@ -140,11 +160,12 @@ public class BuyScript extends Script {
         this.targetArea = area;
         this.complete = false;
         this.insufficientCoinsForMissingBuys = false;
+        this.exchangeInventoryReset = false;
 
         Microbot.status = "Walking to GE";
 
         this.mainScheduledFuture = this.scheduledExecutorService.scheduleWithFixedDelay(() -> {
-            if (!super.run() || !Microbot.isLoggedIn()) {
+            if (KspAccountBuilderPauseGate.isPaused() || !super.run() || !Microbot.isLoggedIn()) {
                 return;
             }
 
@@ -233,6 +254,12 @@ public class BuyScript extends Script {
                 return;
             }
 
+            // Inspect owned live orders before the full-slot pending-buy
+            // branches. Otherwise a full set of stalled offers could prevent
+            // the repricer from ever executing.
+            if (Rs2GrandExchange.isOpen() && !Rs2GrandExchange.isOfferScreenOpen()
+                    && checkStalledBuyOffers()) return;
+
             if (this.handlePendingMissingToolBuys(desiredPickaxe, desiredAxe)) {
                 return;
             }
@@ -291,7 +318,7 @@ public class BuyScript extends Script {
 
     private boolean ensureInTargetArea() {
         if (this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation())) {
-            KspWalkerGuard.clear("GE Buy:target-area");
+            Rs2Walker.clearWalkingRoute("GE Buy:target-area");
             return true;
         }
 
@@ -301,12 +328,7 @@ public class BuyScript extends Script {
 
         Microbot.status = "Walking to GE";
 
-        if (KspWalkerGuard.walkToDestination(
-                "GE Buy:target-area",
-                this.targetArea::getRandomPoint,
-                this.targetArea.toWorldArea()::contains,
-                2,
-                WEB_WALK_COOLDOWN_MS)) {
+        if (Rs2Walker.walkUntil(this.targetArea.getRandomPoint(), 2, () -> this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation()))) {
             this.lastWebWalkAtMs = System.currentTimeMillis();
             this.debug(
                     "Requested GE buy area walk | player={} area={}",
@@ -361,6 +383,8 @@ public class BuyScript extends Script {
                 || !this.hasHammerAnywhere()
                 || !this.hasTinderboxAnywhere()
                 || this.hasFishingBuyRequirementMissing()
+                || this.hasFishingSupplyNeed()
+                || this.hasCraftingBuyRequirementMissing()
                 || this.hasSmithingOreNeed();
     }
 
@@ -384,14 +408,17 @@ public class BuyScript extends Script {
                 budget.getDetails()
         );
 
-        if (budget.estimatedCost <= 0L || budget.hasEnoughCoins()) {
+        // Essential Crafting inputs may be affordable even when unrelated
+        // tool upgrades, fishing supplies and smithing ores are not.
+        // The GE purchase executor must apply the same affordability policy
+        // as task selection to avoid an immediate insufficient-GP handoff.
+        if (budget.hasEnoughCoins() || this.canAffordEssentialCraftingResupply()) {
             return true;
         }
 
         Microbot.status = "Not enough GP for GE Buy";
         this.complete = true;
         this.insufficientCoinsForMissingBuys = true;
-        this.bankToolsAudited = true;
         return false;
     }
 
@@ -417,14 +444,68 @@ public class BuyScript extends Script {
         this.addFishingSupplyToBudgetIfMissing(budget, THREAD_NAME);
         this.addFishingSupplyToBudgetIfMissing(budget, NEEDLE_NAME);
         this.addFishingSupplyToBudgetIfMissing(budget, GOLD_BAR_NAME);
+        this.addFishingSupplyToBudgetIfMissing(budget, SILVER_BAR_NAME);
         this.addFishingSupplyToBudgetIfMissing(budget, RING_MOULD_NAME);
         this.addFishingSupplyToBudgetIfMissing(budget, NECKLACE_MOULD_NAME);
+        this.addFishingSupplyToBudgetIfMissing(budget, CHISEL_NAME);
+        // Budget the selected unlocked gem through the existing supply-price
+        // and pending-offer checks; never budget all gem varieties at once.
+        this.addFishingSupplyToBudgetIfMissing(budget, this.selectGemCuttingSupplyToBuy());
+        this.addFishingSupplyToBudgetIfMissing(budget, TIARA_MOULD_NAME);
         this.addFishingSupplyToBudgetIfMissing(budget, BRONZE_SWORD_NAME);
         this.addFishingSupplyToBudgetIfMissing(budget, WOODEN_SHIELD_NAME);
+        this.addFishingSupplyToBudgetIfMissing(budget, SALMON_NAME);
         this.addOreToBudgetIfMissing(budget, COPPER_ORE_NAME);
         this.addOreToBudgetIfMissing(budget, TIN_ORE_NAME);
 
         return budget;
+    }
+
+    /**
+     * Check whether essential Crafting supplies are affordable independently
+     * of unrelated tool upgrades, fishing supplies and smithing ores.
+     * The existing GE purchase executor will still limit each submitted
+     * quantity to the coins actually available in inventory.
+     */
+    private boolean canAffordEssentialCraftingResupply() {
+        if (Microbot.getClient() == null
+                || Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) < 20) return false;
+        boolean needChisel = !Buy.hasNamedItemAnywhere(CHISEL_NAME);
+        boolean needGem = Buy.isGemCuttingSupplyMissing();
+        String gem = needGem ? this.selectGemCuttingSupplyToBuy() : null;
+        int chiselPrice = needChisel && this.getGuidePrice(CHISEL_NAME) > 1
+                ? this.getAdjustedBuyPrice(CHISEL_NAME) : 0;
+        int gemPrice = gem != null && this.getGuidePrice(gem) > 1
+                ? this.getAdjustedBuyPrice(gem) : 0;
+        long coins = Math.max(0L, Rs2Bank.count(COINS_NAME))
+                + Math.max(0L, Rs2Inventory.itemQuantity(995));
+        return CraftingSupplyPriorityPolicy.chooseAffordable(
+                needChisel, this.isFishingSupplyBuyPending(CHISEL_NAME), chiselPrice,
+                gem, needGem, gem != null && this.isFishingSupplyBuyPending(gem),
+                gemPrice, coins) != null;
+    }
+
+
+    public boolean canAffordMissingBuys() {
+        if (!this.pendingMissingToolBuys.isEmpty()
+                || !this.pendingFishingSupplyBuys.isEmpty()
+                || !this.pendingOreBuys.isEmpty()
+                || Rs2GrandExchange.hasBoughtOffer()) {
+            return true;
+        }
+
+        String desiredPickaxe = this.resolveDesiredPickaxeName();
+        String desiredAxe = this.resolveDesiredAxeName();
+        if (Rs2Bank.isOpen()) {
+            this.refreshBankAuditSnapshot(desiredPickaxe, desiredAxe);
+        }
+        this.calculateSmithingOreNeeds();
+        this.calculateCraftingNeeds();
+        BuyBudget budget = this.calculateMissingBuyBudget(desiredPickaxe, desiredAxe);
+        // Keep scheduler eligibility consistent with GE Buy execution.
+        // Essential Crafting materials must remain purchasable even when
+        // the combined cost of unrelated upgrades exceeds available GP.
+        return budget.hasEnoughCoins() || this.canAffordEssentialCraftingResupply();
     }
 
     private void addToolToBudgetIfMissing(BuyBudget budget, String itemName) {
@@ -487,11 +568,15 @@ public class BuyScript extends Script {
         this.bankThreadCount = Math.max(0, Rs2Bank.count(THREAD_NAME));
         this.bankHasNeedle = Rs2Bank.count(NEEDLE_NAME) > 0;
         this.bankGoldBarCount = Math.max(0, Rs2Bank.count(GOLD_BAR_NAME));
+        this.bankSilverBarCount = Math.max(0, Rs2Bank.count(SILVER_BAR_NAME, true));
         this.bankHasRingMould = Rs2Bank.count(RING_MOULD_NAME) > 0;
         this.bankHasNecklaceMould = Rs2Bank.count(NECKLACE_MOULD_NAME) > 0;
+        this.bankHasChisel = Rs2Bank.count(CHISEL_NAME) > 0;
+        this.bankHasTiaraMould = Rs2Bank.count(TIARA_MOULD_NAME) > 0;
         this.bankHasBronzeSword = Rs2Bank.count(BRONZE_SWORD_NAME) > 0;
         this.bankHasWoodenShield = Rs2Bank.count(WOODEN_SHIELD_NAME) > 0;
-        this.bankShrimpCount = Math.max(0, Rs2Bank.count(SHRIMP_NAME));
+        this.bankTroutCount = Math.max(0, Rs2Bank.count(Food.TROUT.getItemId()));
+        this.bankSalmonCount = Math.max(0, Rs2Bank.count(Food.SALMON.getItemId()));
         this.refreshCachedBankOreCounts();
         this.bankToolsAudited = true;
     }
@@ -526,100 +611,57 @@ public class BuyScript extends Script {
     private void prepareExchangeInventory(String desiredPickaxe, String desiredAxe, boolean needCoinsForBuying) {
         if (!Rs2Bank.isOpen()) {
             if (Rs2GrandExchange.isOpen()) {
-                Microbot.status = "Closing GE";
                 Rs2GrandExchange.closeExchange();
-                BuyScript.sleepUntil(() -> !Rs2GrandExchange.isOpen(), 2000);
                 return;
             }
 
-            if (this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation())) {
-                Microbot.status = "Using GE Bank";
-
-                if (!Rs2Bank.openBank()) {
-                    Rs2Bank.walkToBankAndUseBank();
-                }
-
-                BuyScript.sleepUntil(Rs2Bank::isOpen, BANK_WAIT_TIMEOUT_MS);
-                return;
-            }
-
-            Microbot.status = "Opening Bank";
-
-            if (Rs2Bank.openBank()) {
-                BuyScript.sleepUntil(Rs2Bank::isOpen, BANK_WAIT_TIMEOUT_MS);
-            } else {
-                Microbot.status = "Walking to Bank";
-                Rs2Bank.walkToBankAndUseBank();
-            }
-
+            Microbot.status = "Opening GE Bank";
+            // Throttle both direct bank clicks and the walking fallback.
+            if (Rs2Player.isMoving() || System.currentTimeMillis() - this.lastActionAtMs < Math.max(ACTION_COOLDOWN_MS, 2_000L)) return;
+            if (!Rs2Bank.openBank()) Rs2Bank.walkToBankAndUseBank();
+            this.lastActionAtMs = System.currentTimeMillis();
             return;
         }
 
         Microbot.status = "Preparing GE Items";
+        if (isBankInventoryActionPending()) return;
+        refreshBankAuditSnapshot(desiredPickaxe, desiredAxe);
 
-        this.refreshBankAuditSnapshot(desiredPickaxe, desiredAxe);
+        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return;
 
-        this.debug(
-                "Preparing GE inventory | desiredPickaxe={} bankHasPickaxe={} desiredAxe={} bankHasAxe={} needCoins={} coinsInv={} coinsBank={}",
-                desiredPickaxe,
-                this.bankHasDesiredPickaxe,
-                desiredAxe,
-                this.bankHasDesiredAxe,
-                needCoinsForBuying,
-                Rs2Inventory.itemQuantity(995),
-                Rs2Bank.count(COINS_NAME)
-        );
-
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return;
+        if (!exchangeInventoryReset) {
+            if (!Rs2Inventory.isEmpty()) {
+                int before = Rs2Inventory.emptySlotCount();
+                // Even unsuccessful dispatches must wait for acknowledgement or timeout.
+                Rs2Bank.depositAll();
+                markBankInventoryAction(null, -1, before);
+                return;
+            }
+            exchangeInventoryReset = true;
         }
 
-        if (!Rs2Inventory.isEmpty()) {
-            Rs2Bank.depositAll();
-            BuyScript.sleepUntil(Rs2Inventory::isEmpty, BANK_WAIT_TIMEOUT_MS);
-            this.refreshBankAuditSnapshot(desiredPickaxe, desiredAxe);
-        }
+        calculateSmithingOreNeeds();
+        calculateCraftingNeeds();
 
-        this.calculateSmithingOreNeeds();
-        this.calculateCraftingNeeds();
-
-        this.debug(
-                "Tool/Ore/Fishing audit | hammerInBank={} tinderboxInBank={} baitBank={} feathersBank={} netInBank={} rodInBank={} flyRodInBank={} barsNeeded={} copperNeeded={} tinNeeded={} pendingTools={} pendingSupply={} pendingOres={}",
-                this.bankHasHammer,
-                this.bankHasTinderbox,
-                this.bankFishingBaitCount,
-                this.bankFeatherCount,
-                this.bankHasSmallFishingNet,
-                this.bankHasFishingRod,
-                this.bankHasFlyFishingRod,
-                this.requiredBronzeBars,
-                this.copperOreNeeded,
-                this.tinOreNeeded,
-                this.pendingMissingToolBuys,
-                this.pendingFishingSupplyBuys,
-                this.pendingOreBuys
-        );
-
-        if (needCoinsForBuying && !this.ensureEnoughCoinsForMissingBuys(desiredPickaxe, desiredAxe)) {
-            return;
-        }
+        if (needCoinsForBuying && !ensureEnoughCoinsForMissingBuys(desiredPickaxe, desiredAxe)) return;
 
         if (!Rs2Bank.hasWithdrawAsNote()) {
             Rs2Bank.setWithdrawAsNote();
-            BuyScript.sleepUntil(Rs2Bank::hasWithdrawAsNote, 2000);
+            return;
         }
 
-        this.withdrawOutdatedToolsAsNotes(desiredPickaxe, desiredAxe);
+        if (withdrawOutdatedToolsAsNotes(desiredPickaxe, desiredAxe)) return;
 
         if (needCoinsForBuying && Rs2Inventory.itemQuantity(995) <= 0 && Rs2Bank.count(COINS_NAME) > 0) {
+            int before = Rs2Inventory.count(COINS_NAME);
             Rs2Bank.withdrawAll(COINS_NAME);
-            BuyScript.sleepUntil(() -> Rs2Inventory.itemQuantity(995) > 0, BANK_WAIT_TIMEOUT_MS);
+            markBankInventoryAction(COINS_NAME, before, -1);
+            return;
         }
 
+        bankToolsAudited = true;
+        exchangeInventoryReset = false;
         Rs2Bank.closeBank();
-        BuyScript.sleepUntil(() -> !Rs2Bank.isOpen(), 2000);
-
-        this.bankToolsAudited = true;
         Microbot.status = "Opening GE";
     }
 
@@ -650,10 +692,13 @@ public class BuyScript extends Script {
         this.bankGoldBarCount = 0;
         this.bankHasRingMould = false;
         this.bankHasNecklaceMould = false;
+        this.bankHasChisel = false;
+        this.bankHasTiaraMould = false;
         this.goldBarsToBuy = 0;
         this.bankHasBronzeSword = false;
         this.bankHasWoodenShield = false;
-        this.bankShrimpCount = 0;
+        this.bankTroutCount = 0;
+        this.bankSalmonCount = 0;
         this.bankHasSmallFishingNet = false;
         this.bankHasFishingRod = false;
         this.bankHasFlyFishingRod = false;
@@ -674,7 +719,9 @@ public class BuyScript extends Script {
         this.pendingFishingSupplyBuys.clear();
         this.pendingOreBuys.clear();
         this.pendingFishingSupplyBuyQuantities.clear();
+        this.exchangeInventoryReset = false;
         this.pendingOreBuyQuantities.clear();
+        this.buyRepricing.reset();
     }
 
     private void calculateSmithingOreNeeds() {
@@ -779,7 +826,8 @@ public class BuyScript extends Script {
                 || !this.hasFishingToolInBank(LOBSTER_POT_NAME)
                 || this.hasCraftingBuyRequirementMissing()
                 || this.hasJewelleryBuyRequirementMissing()
-                || this.hasChickenMeleeBuyRequirementMissing();
+                || this.hasChickenMeleeBuyRequirementMissing()
+                || this.getFishingSupplyQuantityToBuy(SALMON_NAME) > 0;
     }
 
     private boolean needsFishingSupplies() {
@@ -808,15 +856,22 @@ public class BuyScript extends Script {
         if (this.hasCollectableFishingSupplyBuy()) {
             Microbot.status = "Collecting fishing supplies";
             this.markCompletedPendingFishingSupplyBuys();
+
+            // Completed GE offers do not guarantee that items are already
+            // available in the bank. Invalidate the previous bank snapshot
+            // before collecting so the next scheduler cycle performs a real
+            // bank audit instead of waiting indefinitely on stale stock.
+            // This is particularly important for pending chisels and gems,
+            // which must remain pending until their receipt is confirmed.
+            this.bankToolsAudited = false;
             Rs2GrandExchange.collectAllToBank();
-            BuyScript.sleepUntil(() -> !Rs2GrandExchange.hasBoughtOffer(), 5000);
             this.clearSatisfiedPendingFishingSupplyBuys();
             return true;
         }
 
         if (!this.pendingFishingSupplyBuys.isEmpty() && this.getNextFishingSupplyToBuy() == null) {
             Microbot.status = "Waiting for fishing supplies";
-            return true;
+            return Rs2GrandExchange.getAvailableSlotsCount() <= 0;
         }
 
         return false;
@@ -829,13 +884,32 @@ public class BuyScript extends Script {
                 || this.getFishingSupplyQuantityToBuy(THREAD_NAME) > 0
                 || this.getFishingSupplyQuantityToBuy(NEEDLE_NAME) > 0
                 || this.getFishingSupplyQuantityToBuy(GOLD_BAR_NAME) > 0
+                || this.getFishingSupplyQuantityToBuy(SILVER_BAR_NAME) > 0
                 || this.getFishingSupplyQuantityToBuy(RING_MOULD_NAME) > 0
                 || this.getFishingSupplyQuantityToBuy(NECKLACE_MOULD_NAME) > 0
+                || this.getFishingSupplyQuantityToBuy(CHISEL_NAME) > 0
+                || this.getFishingSupplyQuantityToBuy(this.selectGemCuttingSupplyToBuy()) > 0
+                || this.getFishingSupplyQuantityToBuy(TIARA_MOULD_NAME) > 0
                 || this.getFishingSupplyQuantityToBuy(BRONZE_SWORD_NAME) > 0
-                || this.getFishingSupplyQuantityToBuy(WOODEN_SHIELD_NAME) > 0;
+                || this.getFishingSupplyQuantityToBuy(WOODEN_SHIELD_NAME) > 0
+                || this.getFishingSupplyQuantityToBuy(SALMON_NAME) > 0;
     }
 
     private String getNextFishingSupplyToBuy() {
+        // Make a level-appropriate gem-cutting batch executable before
+        // spending the GE budget on unrelated supplies and jewellery moulds.
+        if (Microbot.getClient() != null
+                && Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) >= 20) {
+            String gem = this.selectGemCuttingSupplyToBuy();
+            String essential = CraftingSupplyPriorityPolicy.choose(
+                    this.getFishingSupplyQuantityToBuy(CHISEL_NAME) > 0,
+                    this.isFishingSupplyBuyPending(CHISEL_NAME),
+                    gem,
+                    gem != null && this.getFishingSupplyQuantityToBuy(gem) > 0,
+                    gem != null && this.isFishingSupplyBuyPending(gem));
+            if (essential != null) return essential;
+        }
+
         if (this.getFishingSupplyQuantityToBuy(FISHING_BAIT_NAME) > 0
                 && !this.isFishingSupplyBuyPending(FISHING_BAIT_NAME)) {
             return FISHING_BAIT_NAME;
@@ -847,8 +921,10 @@ public class BuyScript extends Script {
         }
 
         String[] supplies = {
-                LEATHER_NAME, THREAD_NAME, NEEDLE_NAME, GOLD_BAR_NAME, RING_MOULD_NAME, NECKLACE_MOULD_NAME,
-                BRONZE_SWORD_NAME, WOODEN_SHIELD_NAME
+                LEATHER_NAME, THREAD_NAME, NEEDLE_NAME, SILVER_BAR_NAME, GOLD_BAR_NAME, RING_MOULD_NAME, NECKLACE_MOULD_NAME,
+                CHISEL_NAME, TIARA_MOULD_NAME,
+                this.selectGemCuttingSupplyToBuy(),
+                BRONZE_SWORD_NAME, WOODEN_SHIELD_NAME, SALMON_NAME
         };
 
         for (String supply : supplies) {
@@ -863,6 +939,13 @@ public class BuyScript extends Script {
     private int getFishingSupplyQuantityToBuy(String itemName) {
         if (itemName == null) {
             return 0;
+        }
+
+        // Reuse the existing supply purchase, affordability and pending-offer
+        // machinery for the single level-appropriate uncut gem selected by
+        // selectGemCuttingSupplyToBuy(). Other gem types return zero demand.
+        if (this.isUncutGemSupply(itemName)) {
+            return this.getGemCuttingSupplyQuantityToBuy(itemName);
         }
 
         if (FISHING_BAIT_NAME.equalsIgnoreCase(itemName)) {
@@ -892,12 +975,31 @@ public class BuyScript extends Script {
             return this.bankGoldBarCount <= 0 ? this.getGoldBarsToBuy() : 0;
         }
 
+        if (SILVER_BAR_NAME.equalsIgnoreCase(itemName)) {
+            // Do not buy silver for a locked recipe or when this account has
+            // neither the mould nor a plan to craft tiaras. Replenish a
+            // single usable batch instead of an unlimited speculative order.
+            if (Microbot.getClient() == null
+                    || Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) < 23
+                    || !this.bankHasTiaraMould) return 0;
+            int owned = this.bankSilverBarCount + Rs2Inventory.count(SILVER_BAR_NAME, true);
+            return owned > 0 ? 0 : 27;
+        }
+
         if (RING_MOULD_NAME.equalsIgnoreCase(itemName)) {
             return !this.bankHasRingMould ? 1 : 0;
         }
 
         if (NECKLACE_MOULD_NAME.equalsIgnoreCase(itemName)) {
             return !this.bankHasNecklaceMould ? 1 : 0;
+        }
+
+        if (CHISEL_NAME.equalsIgnoreCase(itemName)) {
+            return !this.bankHasChisel ? 1 : 0;
+        }
+
+        if (TIARA_MOULD_NAME.equalsIgnoreCase(itemName)) {
+            return !this.bankHasTiaraMould ? 1 : 0;
         }
 
         if (BRONZE_SWORD_NAME.equalsIgnoreCase(itemName)) {
@@ -908,11 +1010,74 @@ public class BuyScript extends Script {
             return this.shouldUseChickenMeleeKit() && !this.bankHasWoodenShield ? 1 : 0;
         }
 
-        if (SHRIMP_NAME.equalsIgnoreCase(itemName)) {
-            return 0;
+        if (SALMON_NAME.equalsIgnoreCase(itemName)) {
+            if (this.shouldUseChickenMeleeKit()) {
+                return 0;
+            }
+            int validFoodCount = this.bankTroutCount + this.bankSalmonCount;
+            return validFoodCount < Buy.MELEE_TARGET_FOOD_COUNT
+                    ? Math.max(Buy.MELEE_FOOD_PURCHASE_QUANTITY,
+                            Buy.MELEE_TARGET_FOOD_COUNT - validFoodCount)
+                    : 0;
         }
 
         return 0;
+    }
+
+    /**
+     * Choose one unlocked uncut gem for Crafting rather than buying every
+     * gem type. Retain an outstanding gem offer as the selected supply so a
+     * price update cannot switch the requested item during fulfilment.
+     */
+    private String selectGemCuttingSupplyToBuy() {
+        if (!Buy.isGemCuttingSupplyMissing()) {
+            return null;
+        }
+
+        for (String pendingSupply : this.pendingFishingSupplyBuys) {
+            if (this.isUncutGemSupply(pendingSupply)) {
+                return pendingSupply;
+            }
+        }
+
+        int craftingLevel = Microbot.getClient().getRealSkillLevel(Skill.CRAFTING);
+        String[] gems = { "Uncut sapphire", "Uncut emerald", "Uncut ruby", "Uncut diamond" };
+        int[] requiredLevels = { 20, 27, 34, 43 };
+        String selected = null;
+        int lowestPrice = Integer.MAX_VALUE;
+
+        for (int i = 0; i < gems.length; i++) {
+            if (craftingLevel < requiredLevels[i]) {
+                continue;
+            }
+
+            // The existing GE price resolver uses 1 GP when an item cannot
+            // be priced. Never use that placeholder to purchase gems.
+            if (this.getGuidePrice(gems[i]) <= 1) {
+                continue;
+            }
+
+            int price = this.getAdjustedBuyPrice(gems[i]);
+            if (price > 1 && price < lowestPrice) {
+                lowestPrice = price;
+                selected = gems[i];
+            }
+        }
+
+        return selected;
+    }
+
+    private boolean isUncutGemSupply(String itemName) {
+        return itemName != null
+                && (itemName.equalsIgnoreCase("Uncut sapphire")
+                || itemName.equalsIgnoreCase("Uncut emerald")
+                || itemName.equalsIgnoreCase("Uncut ruby")
+                || itemName.equalsIgnoreCase("Uncut diamond"));
+    }
+
+    private int getGemCuttingSupplyQuantityToBuy(String itemName) {
+        String selected = this.selectGemCuttingSupplyToBuy();
+        return selected != null && selected.equalsIgnoreCase(itemName) ? 13 : 0;
     }
 
     private void calculateCraftingNeeds() {
@@ -928,7 +1093,13 @@ public class BuyScript extends Script {
     }
 
     private boolean hasJewelleryBuyRequirementMissing() {
-        return this.bankGoldBarCount <= 0 || !this.bankHasRingMould || !this.bankHasNecklaceMould;
+        return this.bankGoldBarCount <= 0
+                || (Microbot.getClient() != null && Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) >= 23
+                    && this.bankHasTiaraMould && this.bankSilverBarCount <= 0)
+                || !this.bankHasRingMould
+                || !this.bankHasNecklaceMould
+                || !this.bankHasChisel
+                || !this.bankHasTiaraMould;
     }
 
     private boolean hasChickenMeleeBuyRequirementMissing() {
@@ -978,8 +1149,15 @@ public class BuyScript extends Script {
         if (this.hasCollectableOreBuy()) {
             Microbot.status = "Collecting ore buys";
             this.markCompletedPendingOreBuys();
+
+            // Collect-all may also transfer completed chisels, uncut gems
+            // and other supplies alongside ores. Completed GE offers are
+            // not proof that their items have reached the bank.
+            // Invalidate the snapshot after marking completed offers so
+            // any cached quantities cannot restore the audited state.
+            // The next scheduler cycle must verify actual bank contents.
+            this.bankToolsAudited = false;
             Rs2GrandExchange.collectAllToBank();
-            BuyScript.sleepUntil(() -> !Rs2GrandExchange.hasBoughtOffer(), 5000);
             this.calculateSmithingOreNeeds();
             this.clearSatisfiedPendingOreBuys();
             return true;
@@ -987,7 +1165,7 @@ public class BuyScript extends Script {
 
         if (!this.pendingOreBuys.isEmpty() && this.getNextOreToBuy() == null) {
             Microbot.status = "Waiting for ore buys";
-            return true;
+            return Rs2GrandExchange.getAvailableSlotsCount() <= 0;
         }
 
         return false;
@@ -1065,29 +1243,114 @@ public class BuyScript extends Script {
                 continue;
             }
 
-            String missingTool = this.getNextMissingToolToBuy(desiredPickaxe, desiredAxe);
+            // Secure usable Crafting inputs before unrelated upgrades consume
+            // the limited GP that qualified this GE_BUY resupply handoff.
+            // Keep existing pending-offer protection and confirmed GE commits.
+            // Do not spend the remaining Crafting budget on unrelated tools,
+            // supplies or ores while an essential GE order is outstanding.
+            // handlePendingFishingSupplyBuys() remains responsible for offer
+            // synchronization and collection on subsequent scheduler ticks.
+            boolean awaitingEssentialCraftingSupply = this.isFishingSupplyBuyPending(CHISEL_NAME);
+            if (!awaitingEssentialCraftingSupply)
+            {
+                for (String pendingSupply : this.pendingFishingSupplyBuys)
+                {
+                    if (this.isUncutGemSupply(pendingSupply))
+                    {
+                        awaitingEssentialCraftingSupply = true;
+                        break;
+                    }
+                }
+            }
+            if (awaitingEssentialCraftingSupply)
+            {
+                Microbot.status = "Waiting for Crafting GE supplies";
+                break;
+            }
 
-            if (missingTool != null) {
-                if (!this.placeFallbackBuyOffer(missingTool)) {
+            String essentialCraftingSupply = null;
+            if (Microbot.getClient() != null
+                    && Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) >= 20) {
+                boolean needChisel = !Buy.hasNamedItemAnywhere(CHISEL_NAME);
+                boolean needGem = Buy.isGemCuttingSupplyMissing();
+                String gem = needGem ? this.selectGemCuttingSupplyToBuy() : null;
+                int chiselPrice = needChisel && this.getGuidePrice(CHISEL_NAME) > 1
+                        ? this.getAdjustedBuyPrice(CHISEL_NAME) : 0;
+                int gemPrice = gem != null && this.getGuidePrice(gem) > 1
+                        ? this.getAdjustedBuyPrice(gem) : 0;
+                essentialCraftingSupply = CraftingSupplyPriorityPolicy.chooseAffordable(
+                        needChisel, this.isFishingSupplyBuyPending(CHISEL_NAME), chiselPrice,
+                        gem, needGem, gem != null && this.isFishingSupplyBuyPending(gem),
+                        gemPrice, this.getCurrentSpendableCoins());
+                if (essentialCraftingSupply == null && (needChisel || needGem)) {
+                    Microbot.status = "No affordable Crafting essentials";
                     break;
                 }
+            }
 
+
+            if (essentialCraftingSupply != null)
+            {
+                int essentialQuantity = this.getFishingSupplyQuantityToBuy(essentialCraftingSupply);
+                int essentialPrice = this.getAdjustedBuyPrice(essentialCraftingSupply);
+                int affordableQuantity = this.getAffordableQuantity(essentialQuantity, essentialPrice);
+                if (affordableQuantity <= 0)
+                {
+                    Microbot.status = "Not enough GP for essential Crafting supplies";
+                    this.debug("Holding unrelated GE purchases; essential Crafting supply unaffordable | item={} requested={} price={} coins={}",
+                            essentialCraftingSupply, essentialQuantity, essentialPrice, this.getCurrentSpendableCoins());
+                    break;
+                }
+                if (!this.placeFishingSupplyBuyOffer(essentialCraftingSupply, affordableQuantity))
+                {
+                    break;
+                }
                 placedOffer = true;
                 availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
                 continue;
+            }
+
+            String missingTool = this.getNextMissingToolToBuy(desiredPickaxe, desiredAxe);
+
+            if (missingTool != null) {
+                int toolPrice = this.getAdjustedBuyPrice(missingTool);
+                if (this.canAffordQuantity(1, toolPrice)) {
+                    if (!this.placeFallbackBuyOffer(missingTool)) {
+                        break;
+                    }
+
+                    placedOffer = true;
+                    availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
+                    continue;
+                }
+
+                this.debug("Skipping unaffordable GE tool for current balance | item={} price={} coins={}",
+                        missingTool,
+                        toolPrice,
+                        this.getCurrentSpendableCoins());
             }
 
             String fishingSupply = this.getNextFishingSupplyToBuy();
             int fishingSupplyQuantity = this.getFishingSupplyQuantityToBuy(fishingSupply);
 
             if (fishingSupply != null && fishingSupplyQuantity > 0) {
-                if (!this.placeFishingSupplyBuyOffer(fishingSupply, fishingSupplyQuantity)) {
-                    break;
+                int unitPrice = this.getAdjustedBuyPrice(fishingSupply);
+                int affordableQuantity = this.getAffordableQuantity(fishingSupplyQuantity, unitPrice);
+                if (affordableQuantity > 0) {
+                    if (!this.placeFishingSupplyBuyOffer(fishingSupply, affordableQuantity)) {
+                        break;
+                    }
+
+                    placedOffer = true;
+                    availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
+                    continue;
                 }
 
-                placedOffer = true;
-                availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
-                continue;
+                this.debug("Skipping unaffordable GE supply for current balance | item={} requested={} unitPrice={} coins={}",
+                        fishingSupply,
+                        fishingSupplyQuantity,
+                        unitPrice,
+                        this.getCurrentSpendableCoins());
             }
 
             this.calculateSmithingOreNeeds();
@@ -1099,12 +1362,34 @@ public class BuyScript extends Script {
                 break;
             }
 
-            if (!this.placeOreBuyOffer(oreToBuy, oreQuantity)) {
+            int oreUnitPrice = this.getAdjustedBuyPrice(oreToBuy);
+            int affordableOreQuantity = this.getAffordableQuantity(oreQuantity, oreUnitPrice);
+            if (affordableOreQuantity <= 0) {
+                this.debug("Skipping unaffordable GE ore for current balance | item={} requested={} unitPrice={} coins={}",
+                        oreToBuy,
+                        oreQuantity,
+                        oreUnitPrice,
+                        this.getCurrentSpendableCoins());
+                break;
+            }
+
+            if (!this.placeOreBuyOffer(oreToBuy, affordableOreQuantity)) {
                 break;
             }
 
             placedOffer = true;
             availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
+        }
+
+        if (!placedOffer
+                && this.pendingMissingToolBuys.isEmpty()
+                && this.pendingFishingSupplyBuys.isEmpty()
+                && this.pendingOreBuys.isEmpty()
+                && this.hasMissingBuyRequirement(desiredPickaxe, desiredAxe)) {
+            Microbot.status = "No affordable GE buys remain";
+            this.insufficientCoinsForMissingBuys = true;
+            this.complete = true;
+            return;
         }
 
         if (!placedOffer
@@ -1148,36 +1433,32 @@ public class BuyScript extends Script {
             return false;
         }
 
-        this.waitForActionCooldown();
-
         Microbot.status = "Buying " + quantity + "x " + itemName;
 
-        GrandExchangeRequest request = GrandExchangeRequest.builder()
-                .action(GrandExchangeAction.BUY)
-                .itemName(itemName)
-                .exact(true)
-                .quantity(quantity)
-                .percent(10)
-                .closeAfterCompletion(false)
-                .build();
+        int buyPrice = this.getAdjustedBuyPrice(itemName);
+        quantity = this.getAffordableQuantity(quantity, buyPrice);
+        if (quantity <= 0) {
+            return false;
+        }
 
-        this.waitForGrandExchangeOfferInput();
-
-        boolean offered = Rs2GrandExchange.processOffer(request);
+        int slotsBefore = Rs2GrandExchange.getAvailableSlotsCount();
+        boolean offered = Rs2GrandExchange.buyItem(itemName, (int) Math.min(Integer.MAX_VALUE, (long) (buyPrice)), quantity);
+        if (offered && !waitForOfferCommit(slotsBefore)) offered = false;
 
         this.debug(
-                "GE ore buy offer | item={} qty={} percent=10 offered={} slots={}",
+                "GE ore buy offer | item={} qty={} price={} offered={} slots={}",
                 itemName,
                 quantity,
+                buyPrice,
                 offered,
                 Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1
         );
 
         if (offered) {
             this.lastActionAtMs = System.currentTimeMillis();
+            registerBuyOffer(itemName, buyPrice);
             this.pendingOreBuys.add(itemName);
             this.pendingOreBuyQuantities.merge(this.normalizeItemName(itemName), quantity, Integer::sum);
-            BuyScript.sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2000);
         }
 
         return offered;
@@ -1188,36 +1469,32 @@ public class BuyScript extends Script {
             return false;
         }
 
-        this.waitForActionCooldown();
-
         Microbot.status = "Buying " + quantity + "x " + itemName;
 
-        GrandExchangeRequest request = GrandExchangeRequest.builder()
-                .action(GrandExchangeAction.BUY)
-                .itemName(itemName)
-                .exact(true)
-                .quantity(quantity)
-                .percent(10)
-                .closeAfterCompletion(false)
-                .build();
+        int buyPrice = this.getAdjustedBuyPrice(itemName);
+        quantity = this.getAffordableQuantity(quantity, buyPrice);
+        if (quantity <= 0) {
+            return false;
+        }
 
-        this.waitForGrandExchangeOfferInput();
-
-        boolean offered = Rs2GrandExchange.processOffer(request);
+        int slotsBefore = Rs2GrandExchange.getAvailableSlotsCount();
+        boolean offered = Rs2GrandExchange.buyItem(itemName, (int) Math.min(Integer.MAX_VALUE, (long) (buyPrice)), quantity);
+        if (offered && !waitForOfferCommit(slotsBefore)) offered = false;
 
         this.debug(
-                "GE fishing-supply buy offer | item={} qty={} percent=10 offered={} slots={}",
+                "GE fishing-supply buy offer | item={} qty={} price={} offered={} slots={}",
                 itemName,
                 quantity,
+                buyPrice,
                 offered,
                 Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1
         );
 
         if (offered) {
             this.lastActionAtMs = System.currentTimeMillis();
+            registerBuyOffer(itemName, buyPrice);
             this.pendingFishingSupplyBuys.add(itemName);
             this.pendingFishingSupplyBuyQuantities.merge(this.normalizeItemName(itemName), quantity, Integer::sum);
-            BuyScript.sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2000);
         }
 
         return offered;
@@ -1313,6 +1590,23 @@ public class BuyScript extends Script {
     }
 
     private boolean markPendingFishingSupplyBought(String itemName, int collectedQuantity) {
+        // A completed chisel offer is not proof that the chisel has reached
+        // the bank. Retain its pending state until the bank inventory audit
+        // confirms receipt, just as we already do for uncut gems.
+        // This also prevents another chisel order during GE collection.
+        if (CHISEL_NAME.equalsIgnoreCase(itemName)) {
+            return false;
+        }
+
+        // A completed GE offer is not proof that its items have reached the
+        // bank. Keep gem orders pending until actual inventory or bank stock
+        // satisfies the requirement. clearSatisfiedPendingFishingSupplyBuys()
+        // will release the order after that confirmation, preventing a second
+        // gem purchase during the collection-to-bank transition.
+        if (this.isUncutGemSupply(itemName)) {
+            return false;
+        }
+
         Iterator<String> iterator = this.pendingFishingSupplyBuys.iterator();
 
         while (iterator.hasNext()) {
@@ -1351,20 +1645,27 @@ public class BuyScript extends Script {
             this.bankHasNeedle = true;
         } else if (GOLD_BAR_NAME.equalsIgnoreCase(itemName)) {
             this.bankGoldBarCount += quantity;
+        } else if (SILVER_BAR_NAME.equalsIgnoreCase(itemName)) {
+            this.bankSilverBarCount += quantity;
         } else if (RING_MOULD_NAME.equalsIgnoreCase(itemName)) {
             this.bankHasRingMould = true;
         } else if (NECKLACE_MOULD_NAME.equalsIgnoreCase(itemName)) {
             this.bankHasNecklaceMould = true;
+        } else if (CHISEL_NAME.equalsIgnoreCase(itemName)) {
+            this.bankHasChisel = true;
+        } else if (TIARA_MOULD_NAME.equalsIgnoreCase(itemName)) {
+            this.bankHasTiaraMould = true;
         } else if (BRONZE_SWORD_NAME.equalsIgnoreCase(itemName)) {
             this.bankHasBronzeSword = true;
         } else if (WOODEN_SHIELD_NAME.equalsIgnoreCase(itemName)) {
             this.bankHasWoodenShield = true;
-        } else if (SHRIMP_NAME.equalsIgnoreCase(itemName)) {
-            this.bankShrimpCount += quantity;
+        } else if (TROUT_NAME.equalsIgnoreCase(itemName)) {
+            this.bankTroutCount += quantity;
+        } else if (SALMON_NAME.equalsIgnoreCase(itemName)) {
+            this.bankSalmonCount += quantity;
         }
 
         this.pendingFishingSupplyBuyQuantities.remove(this.normalizeItemName(itemName));
-        this.bankToolsAudited = true;
     }
 
     private void clearSatisfiedPendingFishingSupplyBuys() {
@@ -1373,7 +1674,9 @@ public class BuyScript extends Script {
         while (iterator.hasNext()) {
             String pendingSupply = iterator.next();
 
-            if (this.isFishingSupplyStillNeeded(pendingSupply)) {
+            // An offer or collect click cannot satisfy supply until a fresh bank audit.
+            if (!GeSupplyReceiptPolicy.canClearPending(this.bankToolsAudited,
+                    this.isFishingSupplyStillNeeded(pendingSupply))) {
                 continue;
             }
 
@@ -1443,7 +1746,6 @@ public class BuyScript extends Script {
         }
 
         this.pendingOreBuyQuantities.remove(this.normalizeItemName(itemName));
-        this.bankToolsAudited = true;
     }
 
     private void clearSatisfiedPendingOreBuys() {
@@ -1531,81 +1833,88 @@ public class BuyScript extends Script {
                 || itemName.equalsIgnoreCase(THREAD_NAME)
                 || itemName.equalsIgnoreCase(NEEDLE_NAME)
                 || itemName.equalsIgnoreCase(GOLD_BAR_NAME)
+                || itemName.equalsIgnoreCase(SILVER_BAR_NAME)
                 || itemName.equalsIgnoreCase(RING_MOULD_NAME)
                 || itemName.equalsIgnoreCase(NECKLACE_MOULD_NAME)
+                || itemName.equalsIgnoreCase(CHISEL_NAME)
+                || this.isUncutGemSupply(itemName)
+                || itemName.equalsIgnoreCase(TIARA_MOULD_NAME)
                 || itemName.equalsIgnoreCase(BRONZE_SWORD_NAME)
                 || itemName.equalsIgnoreCase(WOODEN_SHIELD_NAME)
-                || itemName.equalsIgnoreCase(SHRIMP_NAME));
+                || itemName.equalsIgnoreCase(TROUT_NAME)
+                || itemName.equalsIgnoreCase(SALMON_NAME));
     }
 
     private String normalizeItemName(String itemName) {
         return itemName == null ? "" : itemName.trim().toLowerCase(Locale.ENGLISH);
     }
 
-    private void withdrawOutdatedToolsAsNotes(String desiredPickaxe, String desiredAxe) {
-        for (String pickaxeName : PICKAXE_NAMES) {
-            if (pickaxeName.equalsIgnoreCase(desiredPickaxe)
-                    || Rs2Bank.count(pickaxeName) <= 0
-                    || Rs2Inventory.isFull()) {
-                continue;
+    private boolean withdrawOutdatedToolsAsNotes(String desiredPickaxe, String desiredAxe) {
+        for (String pickaxe : PICKAXE_NAMES) {
+            if (!pickaxe.equalsIgnoreCase(desiredPickaxe)
+                    && Rs2Bank.count(pickaxe) > 0
+                    && !Rs2Inventory.isFull()) {
+                int before = Rs2Inventory.count(pickaxe);
+                boolean dispatched = Rs2Bank.withdrawAll(pickaxe, true);
+                if (dispatched) markBankInventoryAction(pickaxe, before, -1);
+                return dispatched;
             }
-
-            Rs2Bank.withdrawAll(pickaxeName, true);
-            BuyScript.sleepUntil(() -> Rs2Inventory.hasItem(pickaxeName, true), BANK_WAIT_TIMEOUT_MS);
         }
 
-        for (String axeName : AXE_NAMES) {
-            if (axeName.equalsIgnoreCase(desiredAxe)
-                    || Rs2Bank.count(axeName) <= 0
-                    || Rs2Inventory.isFull()) {
-                continue;
+        for (String axe : AXE_NAMES) {
+            if (!axe.equalsIgnoreCase(desiredAxe)
+                    && Rs2Bank.count(axe) > 0
+                    && !Rs2Inventory.isFull()) {
+                int before = Rs2Inventory.count(axe);
+                boolean dispatched = Rs2Bank.withdrawAll(axe, true);
+                if (dispatched) markBankInventoryAction(axe, before, -1);
+                return dispatched;
             }
-
-            Rs2Bank.withdrawAll(axeName, true);
-            BuyScript.sleepUntil(() -> Rs2Inventory.hasItem(axeName, true), BANK_WAIT_TIMEOUT_MS);
         }
+        return false;
+    }
+
+    private boolean isBankInventoryActionPending() {
+        if (pendingBankActionAtMs == 0L) return false;
+
+        boolean changed = pendingBankItem != null
+                ? Rs2Inventory.count(pendingBankItem) != pendingBankItemBeforeCount
+                : Rs2Inventory.emptySlotCount() != pendingBankEmptySlots;
+
+        if (changed || System.currentTimeMillis() - pendingBankActionAtMs >= BANK_DISPATCH_TIMEOUT_MS) {
+            clearBankInventoryAction();
+            return false;
+        }
+        return true;
+    }
+
+    private void markBankInventoryAction(String item, int beforeItemCount, int beforeEmptySlots) {
+        pendingBankItem = item;
+        pendingBankItemBeforeCount = beforeItemCount;
+        pendingBankEmptySlots = beforeEmptySlots;
+        pendingBankActionAtMs = System.currentTimeMillis();
+    }
+
+    private void clearBankInventoryAction() {
+        pendingBankActionAtMs = 0L;
+        pendingBankItem = null;
+        pendingBankItemBeforeCount = -1;
+        pendingBankEmptySlots = -1;
     }
 
     private boolean ensureGrandExchangeOpen() {
-        if (Rs2GrandExchange.isOpen()) {
-            return true;
-        }
+        if (Rs2GrandExchange.isOpen()) return true;
 
         if (Rs2Bank.isOpen()) {
-            Microbot.status = "Closing Bank";
-            KspGrandExchangeHelper.closeBankBeforeExchange();
-            BuyScript.sleepUntil(() -> !Rs2Bank.isOpen(), 2000);
+            Rs2Bank.closeBank();
             return false;
         }
 
+        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) return false;
+
         Microbot.status = "Opening GE";
-
-        this.debug(
-                "Opening GE | player={} bankOpen={} geOpen={}",
-                Rs2Player.getWorldLocation(),
-                Rs2Bank.isOpen(),
-                Rs2GrandExchange.isOpen()
-        );
-
-        if (KspGrandExchangeHelper.openExchangeDirectly()) {
-            BuyScript.sleepUntil(Rs2GrandExchange::isOpen, BANK_WAIT_TIMEOUT_MS);
-            return Rs2GrandExchange.isOpen();
-        }
-
-        if (this.targetArea.toWorldArea().contains(Rs2Player.getWorldLocation())
-                && KspGrandExchangeHelper.interactClerk()) {
-            BuyScript.sleepUntil(Rs2GrandExchange::isOpen, BANK_WAIT_TIMEOUT_MS);
-
-            if (Rs2GrandExchange.isOpen()) {
-                return true;
-            }
-        }
-
-        if (KspGrandExchangeHelper.interactClerk()) {
-            BuyScript.sleepUntil(Rs2GrandExchange::isOpen, BANK_WAIT_TIMEOUT_MS);
-            return Rs2GrandExchange.isOpen();
-        }
-
+        boolean dispatched = Rs2GrandExchange.openExchange();
+        if (dispatched) lastActionAtMs = System.currentTimeMillis();
         return false;
     }
 
@@ -1614,25 +1923,14 @@ public class BuyScript extends Script {
             return false;
         }
 
-        this.waitForActionCooldown();
-
         Microbot.status = "Selling " + item.getName();
 
-        GrandExchangeRequest request = GrandExchangeRequest.builder()
-                .action(GrandExchangeAction.SELL)
-                .itemName(item.getName())
-                .quantity(item.getQuantity())
-                .percent(-10)
-                .closeAfterCompletion(false)
-                .build();
-
-        this.waitForGrandExchangeOfferInput();
-
-        boolean offered = Rs2GrandExchange.processOffer(request);
+        int slotsBefore = Rs2GrandExchange.getAvailableSlotsCount();
+        boolean offered = Rs2GrandExchange.sellItem(item.getName(), item.getQuantity(), (int) Math.min(Integer.MAX_VALUE, (long) (this.getAdjustedSellPrice(item))));
+        if (offered && !waitForOfferCommit(slotsBefore)) offered = false;
 
         if (offered) {
             this.lastActionAtMs = System.currentTimeMillis();
-            BuyScript.sleepUntil(() -> !Rs2Inventory.hasItem(item.getName(), true), 5000);
         }
 
         this.debug(
@@ -1651,37 +1949,119 @@ public class BuyScript extends Script {
             return false;
         }
 
-        this.waitForActionCooldown();
-
         Microbot.status = "Buying " + itemName;
+        int buyPrice = this.getAdjustedBuyPrice(itemName);
+        if (!this.canAffordQuantity(1, buyPrice)) {
+            this.debug("Cannot afford GE tool offer | item={} price={} coins={}",
+                    itemName,
+                    buyPrice,
+                    this.getCurrentSpendableCoins());
+            return false;
+        }
 
-        GrandExchangeRequest request = GrandExchangeRequest.builder()
-                .action(GrandExchangeAction.BUY)
-                .itemName(itemName)
-                .exact(true)
-                .quantity(1)
-                .percent(10)
-                .closeAfterCompletion(false)
-                .build();
-
-        this.waitForGrandExchangeOfferInput();
-
-        boolean offered = Rs2GrandExchange.processOffer(request);
+        int slotsBefore = Rs2GrandExchange.getAvailableSlotsCount();
+        boolean offered = Rs2GrandExchange.buyItem(itemName, (int) Math.min(Integer.MAX_VALUE, (long) (buyPrice)), 1);
+        if (offered && !waitForOfferCommit(slotsBefore)) offered = false;
 
         this.debug(
-                "GE missing-tool buy offer | item={} qty=1 percent=10 offered={} slots={}",
+                "GE missing-tool buy offer | item={} qty=1 price={} offered={} slots={}",
                 itemName,
+                buyPrice,
                 offered,
                 Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1
         );
 
         if (offered) {
             this.lastActionAtMs = System.currentTimeMillis();
+            registerBuyOffer(itemName, buyPrice);
             this.pendingMissingToolBuys.add(itemName);
-            BuyScript.sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2000);
         }
 
         return offered;
+    }
+
+    /**
+     * Track only orders placed by this BuyScript session. An active user
+     * order is not registered and is therefore never automatically altered.
+     */
+    private void registerBuyOffer(String itemName, int price)
+    {
+        GrandExchangeSlots slot = Rs2GrandExchange.findSlotForItem(itemName, false);
+        GrandExchangeOfferDetails details = slot == null ? null : Rs2GrandExchange.getOfferDetails(slot);
+        if (details == null || details.isSelling() || !details.isInProgress()) return;
+        buyRepricing.placed(details.getItemId(), price, System.currentTimeMillis());
+    }
+
+    private boolean checkStalledBuyOffers()
+    {
+        for (GrandExchangeSlots slot : Rs2GrandExchange.getActiveOfferSlots())
+        {
+            GrandExchangeOfferDetails offer = Rs2GrandExchange.getOfferDetails(slot);
+            if (offer == null || offer.isSelling() || !offer.isInProgress()) continue;
+            int itemId = offer.getItemId();
+            int oldPrice = (int) Math.min(Integer.MAX_VALUE, offer.getPrice());
+            int newPrice = buyRepricing.candidate(itemId, oldPrice,
+                    offer.getQuantitySold(), System.currentTimeMillis(), true);
+            if (newPrice <= 0) continue;
+
+            String name = offer.getItemName();
+            if (name == null || name.isBlank()) continue;
+            Microbot.status = "Modifying GE buy " + name + " to " + newPrice + " gp";
+            // Keep the existing order and partial fills; only the unit price
+            // changes. On failure, keep the original live offer intact.
+            if (GeOfferPriceModifier.modify(slot, itemId, oldPrice, newPrice))
+            {
+                buyRepricing.modified(itemId, newPrice, System.currentTimeMillis());
+                debug("GE buy modified | item={} slot={} oldPrice={} newPrice={} bought={} retry={}",
+                        name, slot, oldPrice, newPrice, offer.getQuantitySold(), buyRepricing.retries(itemId));
+            }
+            else
+            {
+                buyRepricing.defer(itemId, System.currentTimeMillis());
+                debug("GE buy modification deferred | item={} slot={} oldPrice={} nextPrice={}",
+                        name, slot, oldPrice, newPrice);
+            }
+            this.lastActionAtMs = System.currentTimeMillis();
+            return true;
+        }
+        return false;
+    }
+
+    private boolean waitForOfferCommit(int slotsBefore) {
+        // Opening or closing the GE offer editor is not proof of an order.
+        // Only a consumed offer slot confirms that a buy/sell was committed.
+        if (slotsBefore <= 0 || !Rs2GrandExchange.isOpen()) return false;
+
+        if (Rs2GrandExchange.isOfferScreenOpen()) {
+            Rs2GrandExchange.backToOverview();
+            if (!sleepUntil(() -> !Rs2GrandExchange.isOpen()
+                    || !Rs2GrandExchange.isOfferScreenOpen(), 2_000)
+                    || !Rs2GrandExchange.isOpen()) return false;
+        }
+
+        return sleepUntil(() -> !Rs2GrandExchange.isOpen()
+                || GeOfferCommitPolicy.isCommitted(slotsBefore, Rs2GrandExchange.getAvailableSlotsCount(), Rs2GrandExchange.isOpen()), 2_000)
+                && Rs2GrandExchange.isOpen()
+                && GeOfferCommitPolicy.isCommitted(slotsBefore, Rs2GrandExchange.getAvailableSlotsCount(), Rs2GrandExchange.isOpen());
+    }
+
+    private long getCurrentSpendableCoins() {
+        return Math.max(0L, Rs2Inventory.itemQuantity(995));
+    }
+
+    private boolean canAffordQuantity(int quantity, int unitPrice) {
+        return quantity > 0
+                && unitPrice > 0
+                && getCurrentSpendableCoins() >= (long) quantity * unitPrice;
+    }
+
+    private int getAffordableQuantity(int requestedQuantity, int unitPrice) {
+        if (requestedQuantity <= 0 || unitPrice <= 0) {
+            return 0;
+        }
+
+        long affordableQuantity = getCurrentSpendableCoins() / unitPrice;
+        return (int) Math.min(requestedQuantity, Math.min(Integer.MAX_VALUE, affordableQuantity));
     }
 
     private boolean handlePendingMissingToolBuys(String desiredPickaxe, String desiredAxe) {
@@ -1721,11 +2101,12 @@ public class BuyScript extends Script {
 
             Rs2GrandExchange.collectAllToBank();
 
-            BuyScript.sleepUntil(
-                    () -> !Rs2GrandExchange.hasBoughtOffer() && !Rs2GrandExchange.hasSoldOffer(),
-                    5000
-            );
-
+            // This general GE collection path also collects Crafting inputs.
+            // As with handlePendingFishingSupplyBuys(), completed offers do
+            // not prove that chisels, gems or other supplies reached the bank.
+            // Force a fresh bank audit before purchase completion or another
+            // resupply decision can rely on the previous inventory snapshot.
+            this.bankToolsAudited = false;
             this.clearOwnedPendingMissingToolBuys();
             if (collectableFishingSupplyBuy) {
                 this.clearSatisfiedPendingFishingSupplyBuys();
@@ -1740,19 +2121,7 @@ public class BuyScript extends Script {
         return false;
     }
 
-    private void waitForActionCooldown() {
-        long remaining = ACTION_COOLDOWN_MS - (System.currentTimeMillis() - this.lastActionAtMs);
-
-        if (remaining > 0L) {
-            BuyScript.sleep((int) Math.min(remaining, ACTION_COOLDOWN_MS));
-        }
-    }
-
-    private void waitForGrandExchangeOfferInput() {
-        BuyScript.sleep(GE_OFFER_INPUT_DELAY_MS);
-    }
-
-    private void syncPendingMissingToolBuysFromActiveOffers(String desiredPickaxe, String desiredAxe) {
+            private void syncPendingMissingToolBuysFromActiveOffers(String desiredPickaxe, String desiredAxe) {
         for (GrandExchangeSlots slot : Rs2GrandExchange.getActiveOfferSlots()) {
             GrandExchangeOfferDetails details = Rs2GrandExchange.getOfferDetails(slot);
 
@@ -1907,18 +2276,12 @@ public class BuyScript extends Script {
             this.bankHasLobsterPot = true;
         }
 
-        this.bankToolsAudited = true;
     }
 
     private void returnToGrandExchangeOverview() {
-        if (System.currentTimeMillis() - this.lastActionAtMs < ACTION_COOLDOWN_MS) {
-            return;
-        }
-
+        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) return;
         Rs2GrandExchange.backToOverview();
-        this.lastActionAtMs = System.currentTimeMillis();
-
-        BuyScript.sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2000);
+        lastActionAtMs = System.currentTimeMillis();
     }
 
     private Rs2ItemModel getNextOutdatedInventoryTool(String desiredPickaxe, String desiredAxe) {
@@ -1974,21 +2337,21 @@ public class BuyScript extends Script {
     private boolean unequipOutdatedTools() {
         if (Rs2Tab.getCurrentTab() != InterfaceTab.EQUIPMENT) {
             Rs2Tab.switchTo(InterfaceTab.EQUIPMENT);
-            BuyScript.sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.EQUIPMENT, 1500);
+            return false;
         }
 
-        Rs2Equipment.unEquip(new EquipmentInventorySlot[]{EquipmentInventorySlot.WEAPON});
-        BuyScript.sleep(250);
+        if (Rs2Equipment.isWearing("pickaxe", false)
+                || Rs2Equipment.isWearing("axe", false)) {
+            Rs2Equipment.unEquip(new EquipmentInventorySlot[]{EquipmentInventorySlot.WEAPON});
+            return false;
+        }
 
         if (Rs2Tab.getCurrentTab() != InterfaceTab.INVENTORY) {
             Rs2Tab.switchTo(InterfaceTab.INVENTORY);
-            BuyScript.sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.INVENTORY, 1500);
+            return false;
         }
 
-        return !Rs2Equipment.isWearing("pickaxe", false)
-                && !Rs2Equipment.isWearing(new String[]{"pickaxe"})
-                && !Rs2Equipment.isWearing("axe", false)
-                && !Rs2Equipment.isWearing(new String[]{"axe"});
+        return true;
     }
 
     private String getNextMissingToolToBuy(String desiredPickaxe, String desiredAxe) {
@@ -2196,13 +2559,19 @@ public class BuyScript extends Script {
     }
 
     private int getAdjustedBuyPrice(String itemName) {
-        int guidePrice = this.getGuidePrice(itemName);
-
-        if (guidePrice <= 0) {
-            return 1;
+        int base;
+        if (HAMMER_NAME.equalsIgnoreCase(itemName)) {
+            base = HAMMER_BUY_PRICE;
+        } else if (HARPOON_NAME.equalsIgnoreCase(itemName)) {
+            base = HARPOON_BUY_PRICE;
+        } else {
+            int guidePrice = this.getGuidePrice(itemName);
+            base = guidePrice <= 0
+                    ? 1
+                    : Math.max(1, (int) (((long) guidePrice * 110L + 99L) / 100L));
         }
 
-        return Math.max(1, (int) (((long) guidePrice * 110L + 99L) / 100L));
+        return base;
     }
 
     private int getGuidePrice(String itemName) {
@@ -2241,7 +2610,8 @@ public class BuyScript extends Script {
             return gePrice;
         }
 
-        return itemPrice.getPrice();
+        long guidePrice = itemPrice.getPrice();
+        return guidePrice <= 0L ? 1 : (int) Math.min(Integer.MAX_VALUE, guidePrice);
     }
 
     private int getGuidePrice(Rs2ItemModel item) {
@@ -2269,10 +2639,10 @@ public class BuyScript extends Script {
             return gePrice;
         }
 
-        int itemModelPrice = item.getPrice();
+        long itemModelPrice = item.getPrice();
 
-        if (itemModelPrice > 0) {
-            return itemModelPrice;
+        if (itemModelPrice > 0L) {
+            return (int) Math.min(Integer.MAX_VALUE, itemModelPrice);
         }
 
         return this.getGuidePrice(item.getName());
@@ -2336,6 +2706,7 @@ public class BuyScript extends Script {
     public void shutdown() {
         this.lastWebWalkAtMs = 0L;
         this.lastActionAtMs = 0L;
+        clearBankInventoryAction();
 
         this.bankToolsAudited = false;
         this.bankHasDesiredPickaxe = false;
@@ -2356,10 +2727,13 @@ public class BuyScript extends Script {
         this.bankGoldBarCount = 0;
         this.bankHasRingMould = false;
         this.bankHasNecklaceMould = false;
+        this.bankHasChisel = false;
+        this.bankHasTiaraMould = false;
         this.goldBarsToBuy = 0;
         this.bankHasBronzeSword = false;
         this.bankHasWoodenShield = false;
-        this.bankShrimpCount = 0;
+        this.bankTroutCount = 0;
+        this.bankSalmonCount = 0;
 
         this.lastDesiredPickaxe = null;
         this.lastDesiredAxe = null;
@@ -2379,7 +2753,7 @@ public class BuyScript extends Script {
 
         this.complete = false;
         this.insufficientCoinsForMissingBuys = false;
-        KspWalkerGuard.clear("GE Buy:target-area");
+        Rs2Walker.clearWalkingRoute("GE Buy:target-area");
 
         super.shutdown();
     }

@@ -1,8 +1,5 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.mining.equiplevels;
 
-import lombok.Getter;
-
-@Getter
 public enum PickaxeEquip
 {
     BRONZE("Bronze pickaxe", 1),
@@ -21,6 +18,10 @@ public enum PickaxeEquip
         this.displayName = displayName;
         this.requiredAttackLevel = requiredAttackLevel;
     }
+
+    public String getDisplayName() { return displayName; }
+
+    public int getRequiredAttackLevel() { return requiredAttackLevel; }
 
     public static PickaxeEquip bestForAttackLevel(int attackLevel)
     {

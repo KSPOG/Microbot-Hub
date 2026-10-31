@@ -73,7 +73,11 @@ import java.util.stream.Stream;
         description = "Incrementally hot-loads changed KSP plugins from GitHub source",
         tags = {"ksp", "source", "loader", "hot reload"},
         authors = {"KSP"},
+<<<<<<< Updated upstream
         version = "2.2.6",
+=======
+        version = "2.3.0",
+>>>>>>> Stashed changes
         minClientVersion = "2.6.28",
         enabledByDefault = true,
         isExternal = true
@@ -84,7 +88,10 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private static final String OWNER = "KSPOG";
     private static final String REPO = "ksppluginsrelease";
+<<<<<<< Updated upstream
     // Branch is selected in KspSourceLoaderConfig (Main or Dev).
+=======
+>>>>>>> Stashed changes
     private static final String API = "https://api.github.com/repos/" + OWNER + "/" + REPO;
     private static final String RAW = "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/";
     private static final long REFRESH_MINUTES = 5L;
@@ -133,6 +140,10 @@ public class KspSourceLoaderPlugin extends Plugin
     @Inject private OkHttpClient http;
     @Inject private Gson gson;
     @Inject private ConfigManager configManager;
+<<<<<<< Updated upstream
+=======
+    @Inject private KspSourceLoaderConfig config;
+>>>>>>> Stashed changes
     @Inject private EventBus eventBus;
 
     /*
@@ -150,6 +161,13 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private ScheduledExecutorService timer;
     private volatile String lastCommit;
+<<<<<<< Updated upstream
+=======
+    /** Last branch successfully fetched and adopted by this loader instance. */
+    private String activeBranch;
+    /** Restore running plugins when moving between branches (also after failed initial loads). */
+    private final Set<String> resumeAfterSwitch = new LinkedHashSet<>();
+>>>>>>> Stashed changes
 
     @Provides
     KspSourceLoaderConfig provideConfig()
@@ -178,7 +196,12 @@ public class KspSourceLoaderPlugin extends Plugin
             return t;
         });
         timer.scheduleWithFixedDelay(this::refreshSafe, 0L, REFRESH_MINUTES, TimeUnit.MINUTES);
+<<<<<<< Updated upstream
         log.info("KSP Source Loader v2.2.6 started | ABI-safe stop + guarded unit refresh");
+=======
+        log.info("KSP Source Loader v2.3.0 started | branch={} | incremental refresh enabled",
+                requestedBranch());
+>>>>>>> Stashed changes
     }
 
     @Override
@@ -190,6 +213,7 @@ public class KspSourceLoaderPlugin extends Plugin
             timer = null;
         }
 
+<<<<<<< Updated upstream
         for (LoadedUnit unit : new ArrayList<>(loaded.values()))
         {
             try
@@ -206,22 +230,83 @@ public class KspSourceLoaderPlugin extends Plugin
             }
         }
         seen.clear();
+=======
+        new ArrayList<>(loaded.values()).forEach(this::unload);
+        loaded.clear();
+        seen.clear();
+        resumeAfterSwitch.clear();
+        activeBranch = null;
+        lastCommit = null;
+>>>>>>> Stashed changes
         pluginsChanged();
     }
 
     @Subscribe
     public void onConfigChanged(ConfigChanged event)
     {
+<<<<<<< Updated upstream
         if (event != null
                 && KspSourceLoaderConfig.GROUP.equals(event.getGroup())
                 && (KspSourceLoaderConfig.REFRESH_KEY.equals(event.getKey())
                     || KspSourceLoaderConfig.BRANCH_KEY.equals(event.getKey()))
                 && timer != null)
         {
+=======
+        if (event == null || !KspSourceLoaderConfig.GROUP.equals(event.getGroup())
+                || timer == null)
+        {
+            return;
+        }
+
+        if (KspSourceLoaderConfig.REFRESH_KEY.equals(event.getKey())
+                || KspSourceLoaderConfig.BRANCH_KEY.equals(event.getKey()))
+        {
+            // A single-thread executor serializes branch changes with any in-flight
+            // downloads and incremental refreshes; no two branches refresh concurrently.
+>>>>>>> Stashed changes
             timer.execute(this::refreshSafe);
         }
     }
 
+<<<<<<< Updated upstream
+=======
+    private String requestedBranch()
+    {
+        KspSourceLoaderConfig.SourceBranch choice = config.sourceBranch();
+        return (choice == null ? KspSourceLoaderConfig.SourceBranch.MAIN : choice).gitRef();
+    }
+
+    private void switchBranch(String branch)
+    {
+        String previous = activeBranch;
+        log.info("KSP loader switching source branch {} -> {}",
+                previous == null ? "(initial)" : previous, branch);
+
+        // Only carry active plugins from the currently selected branch, not
+        // abandoned restart requests from any earlier branch switch.
+        resumeAfterSwitch.clear();
+
+        // On the first startup, do not touch plugins managed by other loaders.
+        // On a branch change, unload every old source unit before resolving new
+        // dependencies so main and dev cannot share incompatible runtime classes.
+        if (previous != null)
+        {
+            List<LoadedUnit> previousUnits = new ArrayList<>(loaded.values());
+            Collections.reverse(previousUnits); // unload dependents before shared units
+            for (LoadedUnit unit : previousUnits)
+            {
+                resumeAfterSwitch.addAll(activeKeys(unit));
+                unload(unit);
+            }
+        }
+
+        loaded.clear();
+        seen.clear();
+        lastCommit = null;
+        activeBranch = branch;
+    }
+
+>>>>>>> Stashed changes
     private void refreshSafe()
     {
         if (!refreshing.compareAndSet(false, true))
@@ -246,7 +331,27 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private void refresh() throws Exception
     {
+<<<<<<< Updated upstream
         RemoteRepo remote = readRepo();
+=======
+        // Resolve and validate the destination branch before unloading any
+        // existing plugins. If the request fails (offline, missing branch), the
+        // previously loaded branch stays running and a later refresh can retry.
+        String branch = requestedBranch();
+        RemoteRepo remote = readRepo(branch);
+        if (!branch.equals(requestedBranch()))
+        {
+            log.info("Branch changed during GitHub lookup; skipping obsolete {} refresh", branch);
+            return;
+        }
+        if (remote.units.isEmpty())
+        {
+            throw new IOException("No KSP source units found on branch " + branch);
+        }
+
+        boolean branchChanged = !branch.equals(activeBranch);
+        if (branchChanged) switchBranch(branch);
+>>>>>>> Stashed changes
 
         Set<String> removed = new LinkedHashSet<>(seen.keySet());
         removed.removeAll(remote.units.keySet());
@@ -261,15 +366,26 @@ public class KspSourceLoaderPlugin extends Plugin
         if (changed.isEmpty() && removed.isEmpty())
         {
             lastCommit = remote.commit;
+<<<<<<< Updated upstream
             log.debug("KSP Java sources unchanged | commit={}", shortHash(remote.commit));
             return;
         }
 
         log.info("KSP incremental refresh | changed={} removed={} commit={}",
+=======
+            log.debug("KSP Java sources unchanged | branch={} commit={}",
+                    branch, shortHash(remote.commit));
+            return;
+        }
+
+        log.info("KSP incremental refresh | branch={} changed={} removed={} commit={}",
+                branch,
+>>>>>>> Stashed changes
                 changed.stream().map(u -> u.key).collect(Collectors.toList()),
                 removed,
                 shortHash(remote.commit));
 
+<<<<<<< Updated upstream
         boolean uiChanged = false;
 
         for (String key : removed)
@@ -290,6 +406,18 @@ public class KspSourceLoaderPlugin extends Plugin
                             key, t);
                     continue;
                 }
+=======
+        boolean uiChanged = branchChanged;
+
+        for (String key : removed)
+        {
+            LoadedUnit old = loaded.remove(key);
+            if (old != null)
+            {
+                log.info("Removing deleted KSP unit {}", key);
+                unload(old);
+                uiChanged = true;
+>>>>>>> Stashed changes
             }
             seen.remove(key);
         }
@@ -313,13 +441,20 @@ public class KspSourceLoaderPlugin extends Plugin
     private boolean refreshUnit(RemoteUnit remote)
     {
         LoadedUnit old = loaded.get(remote.key);
+<<<<<<< Updated upstream
         Set<String> active = old == null ? Collections.emptySet() : activeKeys(old);
+=======
+        Set<String> active = old == null
+                ? new LinkedHashSet<>(resumeAfterSwitch)
+                : activeKeys(old);
+>>>>>>> Stashed changes
         Path rollbackClasses = old == null ? null : old.classes;
         String rollbackFingerprint = old == null ? null : old.fingerprint;
 
         if (old != null)
         {
             log.info("Refreshing only KSP unit {} | active={}", remote.key, active);
+<<<<<<< Updated upstream
             try
             {
                 unload(old);
@@ -333,6 +468,9 @@ public class KspSourceLoaderPlugin extends Plugin
                 seen.remove(remote.key, remote.fingerprint);
                 return false;
             }
+=======
+            unload(old);
+>>>>>>> Stashed changes
             loaded.remove(remote.key);
         }
         else
@@ -345,6 +483,12 @@ public class KspSourceLoaderPlugin extends Plugin
             Path classes = build(remote);
             LoadedUnit next = load(remote.key, remote.fingerprint, classes, active, old == null);
             loaded.put(remote.key, next);
+<<<<<<< Updated upstream
+=======
+            // Keep restart intent for classes not yet available; failed initial
+            // loads are retried without losing which plugins were running.
+            resumeAfterSwitch.removeAll(next.plugins.keySet());
+>>>>>>> Stashed changes
 
             log.info("KSP unit refreshed | unit={} plugins={} restarted={}",
                     remote.key, next.plugins.size(), activeKeys(next).size());
@@ -383,6 +527,7 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private Path build(RemoteUnit remote) throws Exception
     {
+<<<<<<< Updated upstream
         String unitDir = cacheKey(remote.key);
         Path finalSource = SOURCES.resolve(unitDir).resolve(remote.fingerprint);
         Path classDir = CLASSES.resolve(unitDir).resolve(remote.fingerprint);
@@ -390,6 +535,18 @@ public class KspSourceLoaderPlugin extends Plugin
         if (Files.isDirectory(classDir)) return classDir;
 
         Path staging = SOURCES.resolve(unitDir).resolve(remote.fingerprint + ".tmp");
+=======
+        // Separate caches prevent one branch's cleanup from purging the other's
+        // compiled sources and ensure branch-specific dependencies are rebuilt.
+        String unitDir = cacheKey(remote.key);
+        Path finalSource = SOURCES.resolve(remote.branch).resolve(unitDir).resolve(remote.fingerprint);
+        Path classDir = CLASSES.resolve(remote.branch).resolve(unitDir).resolve(remote.fingerprint);
+
+        if (Files.isDirectory(classDir)) return classDir;
+
+        Path staging = SOURCES.resolve(remote.branch).resolve(unitDir)
+                .resolve(remote.fingerprint + ".tmp");
+>>>>>>> Stashed changes
         delete(staging);
         Files.createDirectories(staging);
 
@@ -626,17 +783,32 @@ public class KspSourceLoaderPlugin extends Plugin
 
             for (Map.Entry<String, Plugin> entry : plugins.entrySet())
             {
+<<<<<<< Updated upstream
                 boolean shouldStart = initial
                         ? Microbot.getPluginManager().isPluginEnabled(entry.getValue())
                         : restart.contains(entry.getKey());
+=======
+                boolean shouldStart = restart.contains(entry.getKey())
+                        || initial && Microbot.getPluginManager().isPluginEnabled(entry.getValue());
+>>>>>>> Stashed changes
 
                 if (shouldStart) start(entry.getValue());
             }
 
+<<<<<<< Updated upstream
             restart.stream()
                     .filter(key -> !plugins.containsKey(key))
                     .forEach(key -> log.warn(
                             "Previously active plugin disappeared from unit {}: {}", unitKey, key));
+=======
+            if (!initial)
+            {
+                restart.stream()
+                        .filter(key -> !plugins.containsKey(key))
+                        .forEach(key -> log.warn(
+                                "Previously active plugin disappeared from unit {}: {}", unitKey, key));
+            }
+>>>>>>> Stashed changes
 
             return new LoadedUnit(unitKey, fingerprint, classDir, dependencies, classLoader, plugins);
         }
@@ -736,13 +908,18 @@ public class KspSourceLoaderPlugin extends Plugin
         return plugin;
     }
 
+<<<<<<< Updated upstream
     private void unload(LoadedUnit unit) throws Exception
+=======
+    private void unload(LoadedUnit unit)
+>>>>>>> Stashed changes
     {
         List<Plugin> plugins = new ArrayList<>(unit.plugins.values());
         Collections.reverse(plugins);
 
         plugins.forEach(this::prepareUnload);
 
+<<<<<<< Updated upstream
         // Unload is a prerequisite for hot replacement, not a best-effort
         // operation. An active old plugin must never be removed from the
         // manager or have its classloader closed after a failed stop.
@@ -767,6 +944,21 @@ public class KspSourceLoaderPlugin extends Plugin
         {
             Microbot.getPluginManager().remove(plugin);
         }
+=======
+        for (Plugin plugin : plugins)
+        {
+            try
+            {
+                if (Microbot.getPluginManager().isActive(plugin)) stop(plugin);
+            }
+            catch (Throwable t)
+            {
+                log.warn("Failed stopping {}", name(plugin), t);
+            }
+        }
+
+        plugins.forEach(this::removeQuietly);
+>>>>>>> Stashed changes
         unit.plugins.clear();
         close(unit.loader);
         close(unit.dependencies);
@@ -813,6 +1005,7 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         edt(() ->
         {
+<<<<<<< Updated upstream
             PluginManager manager = Microbot.getPluginManager();
             if (!manager.isActive(plugin))
             {
@@ -856,6 +1049,17 @@ public class KspSourceLoaderPlugin extends Plugin
                 throw new IllegalStateException(
                         "Unable to resolve runtime PluginManager.stopPlugin(Plugin) for "
                                 + name(plugin), e);
+=======
+            try
+            {
+                PluginManager manager = Microbot.getPluginManager();
+                manager.setPluginEnabled(plugin, false);
+                manager.stopPlugin(plugin);
+            }
+            catch (Exception e)
+            {
+                throw new RuntimeException(e);
+>>>>>>> Stashed changes
             }
         });
     }
@@ -879,6 +1083,7 @@ public class KspSourceLoaderPlugin extends Plugin
         try
         {
             if (Microbot.getPluginManager().isActive(plugin)) stop(plugin);
+<<<<<<< Updated upstream
             if (Microbot.getPluginManager().isActive(plugin))
             {
                 log.error("Skipping removal of still-active plugin {}", name(plugin));
@@ -890,6 +1095,16 @@ public class KspSourceLoaderPlugin extends Plugin
         {
             log.error("Failed to clean up plugin {}; keeping runtime referenced", name(plugin), t);
         }
+=======
+        }
+        catch (Throwable ignored) { }
+
+        try
+        {
+            Microbot.getPluginManager().remove(plugin);
+        }
+        catch (Throwable ignored) { }
+>>>>>>> Stashed changes
     }
 
     private void edt(Runnable action) throws Exception
@@ -932,11 +1147,16 @@ public class KspSourceLoaderPlugin extends Plugin
         }
     }
 
+<<<<<<< Updated upstream
     private RemoteRepo readRepo() throws Exception
     {
         KspSourceLoaderConfig.SourceBranch selection =
                 configManager.getConfig(KspSourceLoaderConfig.class).sourceBranch();
         String branch = selection == KspSourceLoaderConfig.SourceBranch.DEV ? "dev" : "main";
+=======
+    private RemoteRepo readRepo(String branch) throws Exception
+    {
+>>>>>>> Stashed changes
         String commit = json(API + "/commits/" + branch).get("sha").getAsString();
         JsonObject tree = json(API + "/git/trees/" + commit + "?recursive=1");
 
@@ -966,9 +1186,13 @@ public class KspSourceLoaderPlugin extends Plugin
 
         List<RemoteFile> selected = all.stream()
                 .filter(file -> !mainProjects.contains(projectRoot(file.path))
+<<<<<<< Updated upstream
                         || underMainJava(file.path)
                         || file.path.startsWith("src/main/resources/")
                         || file.path.contains("/src/main/resources/"))
+=======
+                        || underMainJava(file.path))
+>>>>>>> Stashed changes
                 .collect(Collectors.toList());
 
         Map<String, List<RemoteFile>> grouped =
@@ -984,6 +1208,10 @@ public class KspSourceLoaderPlugin extends Plugin
             List<RemoteFile> files = entry.getValue();
             files.sort(Comparator.comparing(file -> file.path));
             units.put(entry.getKey(), new RemoteUnit(
+<<<<<<< Updated upstream
+=======
+                    branch,
+>>>>>>> Stashed changes
                     entry.getKey(),
                     commit,
                     fingerprint(files),
@@ -1207,8 +1435,13 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         for (String key : seen.keySet())
         {
+<<<<<<< Updated upstream
             keepNewest(SOURCES.resolve(cacheKey(key)), 2);
             keepNewest(CLASSES.resolve(cacheKey(key)), 2);
+=======
+            keepNewest(SOURCES.resolve(activeBranch).resolve(cacheKey(key)), 2);
+            keepNewest(CLASSES.resolve(activeBranch).resolve(cacheKey(key)), 2);
+>>>>>>> Stashed changes
         }
     }
 
@@ -1347,13 +1580,23 @@ public class KspSourceLoaderPlugin extends Plugin
 
     private static final class RemoteUnit
     {
+<<<<<<< Updated upstream
+=======
+        final String branch;
+>>>>>>> Stashed changes
         final String key;
         final String commit;
         final String fingerprint;
         final List<RemoteFile> files;
 
+<<<<<<< Updated upstream
         RemoteUnit(String key, String commit, String fingerprint, List<RemoteFile> files)
         {
+=======
+        RemoteUnit(String branch, String key, String commit, String fingerprint, List<RemoteFile> files)
+        {
+            this.branch = branch;
+>>>>>>> Stashed changes
             this.key = key;
             this.commit = commit;
             this.fingerprint = fingerprint;

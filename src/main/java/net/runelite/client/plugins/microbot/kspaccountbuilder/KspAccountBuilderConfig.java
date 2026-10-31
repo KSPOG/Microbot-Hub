@@ -18,52 +18,176 @@ public interface KspAccountBuilderConfig extends Config
 {
     String CONFIG_GROUP = "kspaccountbuilder";
 
-    @ConfigSection(
-            name = "Antiban",
-            description = "General antiban controls",
-            position = 0
-    )
-    String antibanSection = "antiban";
+    @ConfigItem(keyName = "orderedTaskQueue", name = "Ordered task queue",
+            description = "Optional comma-separated TASK:SECONDS work plan; empty uses original automatic task selection",
+            position = 87, hidden = true)
+    default String orderedTaskQueue() { return ""; }
 
-    @ConfigSection(
-            name = "Break Handler",
-            description = "Randomized logout break scheduling",
-            position = 1
-    )
-    String breakHandlerSection = "breakHandler";
+    @ConfigItem(keyName = "useOrderedTaskQueue", name = "Use ordered queue",
+            description = "Execute configured queue rather than random activity selection",
+            position = 88, hidden = true)
+    default boolean useOrderedTaskQueue() { return false; }
 
-    @ConfigSection(
-            name = "Activity Switch",
-            description = "Randomized activity switch timing",
-            position = 2
-    )
-    String activitySwitchSection = "activitySwitch";
+    @ConfigItem(keyName = "blockGameInput", name = "Block game input",
+            description = "Block gameplay input behind the cinematic overlay; overlay controls remain usable",
+            position = 90, hidden = true)
+    default boolean blockGameInput() { return false; }
 
-    @ConfigSection(
-            name = "Train Single Skill",
-            description = "Train one selected task instead of randomly switching activities",
-            position = 3
-    )
-    String trainSingleSkillSection = "trainSingleSkill";
+    @ConfigItem(keyName = "hudTooltips", name = "Show HUD tooltips",
+            description = "Show contextual gold-bordered HUD tooltips",
+            position = 91, hidden = true)
+    default boolean hudTooltips() { return true; }
+
+    @ConfigItem(keyName = "lockHudPosition", name = "Lock HUD position",
+            description = "Prevent moving the Account Builder overlay",
+            position = 92, hidden = true)
+    default boolean lockHudPosition() { return false; }
+
+    @ConfigItem(keyName = "showSkillAnimations", name = "Show skill animations",
+            description = "Enable lightweight scene accents in the cinematic interface",
+            position = 93, hidden = true)
+    default boolean showSkillAnimations() { return true; }
+
+    @ConfigItem(keyName = "hudAnimationIntensity", name = "Skill animation intensity",
+            description = "0: off, 1: subtle, 2: cinematic",
+            position = 89, hidden = true)
+    default int hudAnimationIntensity() { return 2; }
+
 
     @ConfigItem(
-            keyName = "useAntiban",
-            name = "Use Antiban",
-            description = "Enable antiban behavior during account builder actions",
-            position = 0,
-            section = antibanSection
+            keyName = "cinematicHud",
+            name = "Cinematic interface",
+            description = "Use the gold-framed skill-aware interface; turn off to use the legacy HUD",
+            position = 94,
+            hidden = true
     )
-    default boolean useAntiban()
+    default boolean cinematicHud() { return true; }
+
+    @ConfigItem(
+            keyName = "hudFitChatbox",
+            name = "Fit cinematic HUD to chatbox",
+            description = "Anchor the cinematic HUD to RuneLite's actual chatbox bounds. Use full-screen mode when disabled.",
+            position = 99,
+            hidden = true
+    )
+    default boolean hudFitChatbox()
+    {
+        return true;
+    }
+
+    @ConfigItem(
+            keyName = "hudDetailsVisible",
+            name = "Expanded HUD details",
+            description = "Show or hide the detailed skill statistics in the in-game HUD",
+            position = 95,
+            hidden = true
+    )
+    default boolean hudDetailsVisible()
     {
         return true;
     }
 
 
     @ConfigItem(
+            keyName = "hudScalePercent",
+            name = "HUD scale",
+            description = "Scaling of the in-game Account Builder HUD (75, 100, 125 or 150 percent)",
+            position = 96,
+            hidden = true
+    )
+    default int hudScalePercent()
+    {
+        return 100;
+    }
+
+
+    @ConfigItem(
+            keyName = "showHud",
+            name = "Show in-game HUD",
+            description = "Show or hide the Account Builder status overlay without stopping automation",
+            position = 97,
+            hidden = true
+    )
+    default boolean showHud()
+    {
+        return true;
+    }
+
+
+    @ConfigItem(
+            keyName = "compactHud",
+            name = "Compact in-game HUD",
+            description = "Show a narrower Account Builder HUD without changing execution state",
+            position = 98,
+            hidden = true
+    )
+    default boolean compactHud()
+    {
+        return false;
+    }
+
+
+
+
+
+    // Arcane Codex artwork is temporarily disabled for Source Loader refresh stability.
+    // Only advanced tuning remains in RuneLite's standard config screen.
+    @ConfigSection(name = "Antiban", description = "Advanced antiban settings", position = 0)
+    String antibanSection = "antiban";
+
+    @ConfigSection(name = "Break Handler", description = "Break duration and interval ranges", position = 1)
+    String breakHandlerSection = "breakHandler";
+
+    @ConfigSection(name = "Activity Switch", description = "Activity switch timing ranges", position = 2)
+    String activitySwitchSection = "activitySwitch";
+
+
+
+    @ConfigItem(
+            keyName = "runAccountBuilder",
+            name = "Start / Stop",
+            description = "Check to start Account Builder; uncheck to stop its tasks, walker and helpers. Disabled by default for safety.",
+            position = 0,
+            hidden = true
+    )
+    default boolean runAccountBuilder()
+    {
+        return false;
+    }
+
+
+
+
+    @ConfigItem(
+            keyName = "useAntiban",
+            name = "Use Antiban",
+            description = "Enable antiban behavior during account builder actions",
+            position = 0,
+            hidden = true
+    )
+    default boolean useAntiban()
+    {
+        return true;
+    }
+
+    @Range(min = 0, max = 100)
+    @ConfigItem(
+            keyName = "antibanChancePercent",
+            name = "Antiban Chance (%)",
+            description = "Chance that each eligible custom antiban action triggers. Antiban stays enabled while Use Antiban is checked.",
+            position = 1,
+            section = antibanSection
+    )
+    default int antibanChancePercent()
+    {
+        return 100;
+    }
+
+    @ConfigItem(
             keyName = "debugLogging",
             name = "Debug Logging",
             description = "Show debug messages in chat/logs",
-            position = 1,
+            position = 2,
             section = antibanSection
     )
     default boolean debugLogging()
@@ -76,7 +200,7 @@ public interface KspAccountBuilderConfig extends Config
             name = "Do Breaks",
             description = "If enabled, the script will perform randomized logout breaks",
             position = 0,
-            section = breakHandlerSection
+            hidden = true
     )
     default boolean doBreaks()
     {
@@ -138,9 +262,9 @@ public interface KspAccountBuilderConfig extends Config
     @ConfigItem(
             keyName = "enableActivitySwitchRandomization",
             name = "Randomize Activity Switch",
-            description = "Enable randomized timing before switching activities. Ignored while Train Single Skill is enabled.",
+            description = "Enable randomized timing before switching activities. Ignored while a single skill or quest is selected.",
             position = 0,
-            section = activitySwitchSection
+            hidden = true
     )
     default boolean enableActivitySwitchRandomization()
     {
@@ -174,11 +298,23 @@ public interface KspAccountBuilderConfig extends Config
     }
 
     @ConfigItem(
+            keyName = "skipQuests",
+            name = "Skip Quests",
+            description = "Exclude quests from automatic task selection and focus on skilling. Run Single Quest still overrides this setting.",
+            position = 0,
+            hidden = true
+    )
+    default boolean skipQuests()
+    {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "trainSingleSkill",
             name = "Train Single Skill",
             description = "Force the account builder to train only the selected task",
             position = 0,
-            section = trainSingleSkillSection
+            hidden = true
     )
     default boolean trainSingleSkill()
     {
@@ -187,10 +323,10 @@ public interface KspAccountBuilderConfig extends Config
 
     @ConfigItem(
             keyName = "singleSkillTask",
-            name = "Task",
-            description = "Task to train while Train Single Skill is enabled",
+            name = "Skill",
+            description = "Skill to train while Train Single Skill is enabled",
             position = 1,
-            section = trainSingleSkillSection
+            hidden = true
     )
     default KspTrainSingleSkillTask singleSkillTask()
     {
@@ -198,14 +334,122 @@ public interface KspAccountBuilderConfig extends Config
     }
 
     @ConfigItem(
-            keyName = "singleSkillProgressive",
-            name = "Progressive",
-            description = "When training Mining only, automatically move to the best ore available for the current Mining level",
+            keyName = "singleSkillMiningTarget",
+            name = "Mining",
+            description = "Ore and mining location",
             position = 2,
-            section = trainSingleSkillSection
+            hidden = true
     )
-    default boolean singleSkillProgressive()
+    default KspSingleSkillConfigTarget.Mining singleSkillMiningTarget()
     {
-        return true;
+        return KspSingleSkillConfigTarget.Mining.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillWoodcuttingTarget",
+            name = "Woodcutting",
+            description = "Tree type and woodcutting location",
+            position = 3,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Woodcutting singleSkillWoodcuttingTarget()
+    {
+        return KspSingleSkillConfigTarget.Woodcutting.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillFishingTarget",
+            name = "Fishing",
+            description = "Fish and fishing location",
+            position = 4,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Fishing singleSkillFishingTarget()
+    {
+        return KspSingleSkillConfigTarget.Fishing.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillCookingTarget",
+            name = "Cooking",
+            description = "Cooking location",
+            position = 5,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Cooking singleSkillCookingTarget()
+    {
+        return KspSingleSkillConfigTarget.Cooking.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillCraftingTarget",
+            name = "Crafting",
+            description = "Crafting recipe",
+            position = 6,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Crafting singleSkillCraftingTarget()
+    {
+        return KspSingleSkillConfigTarget.Crafting.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillMeleeTarget",
+            name = "Melee",
+            description = "NPC and combat location",
+            position = 7,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Melee singleSkillMeleeTarget()
+    {
+        return KspSingleSkillConfigTarget.Melee.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillSmithingTarget",
+            name = "Smithing",
+            description = "Product to smith",
+            position = 8,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Smithing singleSkillSmithingTarget()
+    {
+        return KspSingleSkillConfigTarget.Smithing.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "singleSkillSmeltingTarget",
+            name = "Smelting",
+            description = "Bar to smelt",
+            position = 9,
+            hidden = true
+    )
+    default KspSingleSkillConfigTarget.Smelting singleSkillSmeltingTarget()
+    {
+        return KspSingleSkillConfigTarget.Smelting.NONE;
+    }
+
+    @ConfigItem(
+            keyName = "runSingleQuest",
+            name = "Run Single Quest",
+            description = "Force the account builder to run only the selected quest. Takes priority over Train Single Skill.",
+            position = 0,
+            hidden = true
+    )
+    default boolean runSingleQuest()
+    {
+        return false;
+    }
+
+    @ConfigItem(
+            keyName = "singleQuestTask",
+            name = "Quest",
+            description = "Quest to run while Run Single Quest is enabled",
+            position = 1,
+            hidden = true
+    )
+    default KspQuestTask singleQuestTask()
+    {
+        return KspQuestTask.COOKS_ASSISTANT;
     }
 }

@@ -1,4 +1,8 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.questing.goblindip.goblindipscript;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
 
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
@@ -9,9 +13,9 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspBankMode;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTaskDebug;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWalkerGuard;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspGrandExchangeHelper;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspLiveScene;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.questing.goblindip.reqs.GobReqs;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.gearea.GEArea;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
@@ -35,12 +39,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 @Singleton
-public class GobScript extends Script {
+public class GobScript extends KspManagedScript {
     private static final Logger log = LoggerFactory.getLogger(GobScript.class);
-    private static final int LOOP_DELAY_MS = 600;
-    private static final int WALK_REFIRE_COOLDOWN_MS = 3_500;
-    private static final int GE_OFFER_INPUT_DELAY_MS = 900;
-    private static final int ACTION_COOLDOWN_MS = 1_200;
+    private static final int LOOP_DELAY_MS = 50;
+    private static final int WALK_REFIRE_COOLDOWN_MS = 1_000;
+    private static final int ACTION_COOLDOWN_MS = 100;
+    private static final long NPC_INTERACTION_TIMEOUT_MS = 1_500L;
     private static final int MIN_QUEST_BUY_PRICE = 1_000;
     private static final int MAX_QUEST_BUY_PRICE = 2_000;
     private static final int NPC_REACH_DISTANCE = 4;
@@ -77,6 +81,8 @@ public class GobScript extends Script {
     private boolean mailHandInInProgress;
     private boolean requirementBankAudited;
     private long lastActionAtMs;
+    private long pendingNpcInteractionAtMs;
+    private int pendingNpcIndex = -1;
     private int lastPlainMailCount;
     private int lastBlueMailCount;
     private int lastOrangeMailCount;
@@ -91,6 +97,8 @@ public class GobScript extends Script {
         requirementBankAudited = false;
         resetHandInTracking();
         lastActionAtMs = 0L;
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
         pendingRequirementBuys.clear();
         activeRequirementBuys.clear();
         state = GobState.PREPARING;
@@ -108,7 +116,7 @@ public class GobScript extends Script {
     }
 
     private void runLoop() {
-        if (!super.run() || !Microbot.isLoggedIn()) {
+        if (KspAccountBuilderPauseGate.isPaused() || !super.run() || !Microbot.isLoggedIn()) {
             return;
         }
 
@@ -150,7 +158,7 @@ public class GobScript extends Script {
 
         clearInactiveHandInTracking();
 
-        if (Rs2Player.isMoving() || Rs2Player.isAnimating()) {
+        if (Rs2Player.isAnimating()) {
             return;
         }
 
@@ -161,6 +169,11 @@ public class GobScript extends Script {
         if (!hasQuestMaterialsInInventory()) {
             state = GobState.BANKING;
             prepareQuestInventory();
+            return;
+        }
+
+        if (Rs2Bank.isOpen()) {
+            Rs2Bank.closeBank();
             return;
         }
 
@@ -185,51 +198,45 @@ public class GobScript extends Script {
     }
 
     private boolean handleDialogue() {
-        if (!Rs2Dialogue.isInDialogue()) {
-            return false;
-        }
+        if (!isQuestDialogueActive()) return false;
 
+        Rs2Walker.clearWalkingRoute("ksp_goblin_diplomacy_dialogue");
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
         updateAcceptedMailFromInventoryLoss();
         state = GobState.TALKING_TO_GENERALS;
         status = "Handling general dialogue";
 
         if (Rs2Dialogue.hasContinue()) {
             Rs2Dialogue.clickContinue();
-            sleep(150, 300);
             updateAcceptedMailFromInventoryLoss();
             return true;
         }
 
-        if (!Rs2Dialogue.hasSelectAnOption()) {
-            return false;
-        }
+        if (!Rs2Dialogue.hasSelectAnOption()) return true;
 
         for (String option : QUEST_DIALOGUE_OPTIONS) {
             if (Rs2Dialogue.clickOption(option, false)) {
-                sleep(150, 300);
                 updateAcceptedMailFromInventoryLoss();
                 return true;
             }
         }
 
-        if (Rs2Dialogue.acceptQuestStartDialogue()) {
-            sleep(150, 300);
-            updateAcceptedMailFromInventoryLoss();
-            return true;
-        }
-
-        if (Rs2Dialogue.handleQuestOptionDialogueSelection()) {
-            sleep(150, 300);
+        if (Rs2Dialogue.acceptQuestStartDialogue()
+                || Rs2Dialogue.handleQuestOptionDialogueSelection()) {
             updateAcceptedMailFromInventoryLoss();
             return true;
         }
 
         boolean handled = Rs2Dialogue.keyPressForDialogueOption(1);
-        if (handled) {
-            sleep(150, 300);
-            updateAcceptedMailFromInventoryLoss();
-        }
-        return handled;
+        if (handled) updateAcceptedMailFromInventoryLoss();
+        return true;
+    }
+
+    private boolean isQuestDialogueActive() {
+        return Rs2Dialogue.isInDialogue()
+                || Rs2Dialogue.hasContinue()
+                || Rs2Dialogue.hasSelectAnOption();
     }
 
     private boolean handleRequirementBuying() {
@@ -270,7 +277,6 @@ public class GobScript extends Script {
         if (hasCollectableRequirementBuy()) {
             status = "Collecting Goblin Diplomacy buys";
             Rs2GrandExchange.collectAllToBank();
-            sleepUntil(() -> !Rs2GrandExchange.hasBoughtOffer(), 5_000);
             clearSatisfiedRequirementBuys();
             requirementBankAudited = false;
             return true;
@@ -290,139 +296,67 @@ public class GobScript extends Script {
 
         if (Rs2GrandExchange.isOpen()) {
             Rs2GrandExchange.closeExchange();
-            sleepUntil(() -> !Rs2GrandExchange.isOpen(), 2_000);
             return true;
         }
 
         if (!Rs2Bank.isOpen()) {
-            if (!Rs2Bank.openBank() && !Rs2Bank.walkToBankAndUseBank()) {
-                status = "Walking to bank for Goblin Diplomacy items";
-                return true;
-            }
-            sleepUntil(Rs2Bank::isOpen, 3_000);
+            if (!Rs2Bank.openBank()) Rs2Bank.walkToBankAndUseBank();
             return true;
         }
 
         rebuildPendingRequirementBuys();
         requirementBankAudited = true;
 
-        debug("Requirement audit | pending={} active={} bankMail={} bankBlueDye={} bankOrangeDye={} bankBlueMail={} bankOrangeMail={} coinsInv={} coinsBank={}",
-                pendingRequirementBuys,
-                activeRequirementBuys,
-                Rs2Bank.count(GOBLIN_MAIL),
-                Rs2Bank.count(BLUE_DYE),
-                Rs2Bank.count(ORANGE_DYE),
-                Rs2Bank.count(BLUE_GOBLIN_MAIL),
-                Rs2Bank.count(ORANGE_GOBLIN_MAIL),
-                Rs2Inventory.itemQuantity(COINS_ID),
-                Rs2Bank.count(COINS));
-
-        if (pendingRequirementBuys.isEmpty() && activeRequirementBuys.isEmpty()) {
-            return false;
-        }
-
-        if (!ensureCoinsForRequirementBuying()) {
-            return true;
-        }
+        if (pendingRequirementBuys.isEmpty() && activeRequirementBuys.isEmpty()) return false;
+        if (!ensureCoinsForRequirementBuying()) return true;
 
         Rs2Bank.closeBank();
-        sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
         return true;
     }
 
     private boolean ensureCoinsForRequirementBuying() {
         QuestBuyBudget budget = calculateQuestBuyBudget();
-
-        debug("Quest buy budget | bankCoins={} inventoryCoins={} availableCoins={} estimatedCost={} enough={} pending={} active={}",
-                budget.bankCoins,
-                budget.inventoryCoins,
-                budget.getAvailableCoins(),
-                budget.estimatedCost,
-                budget.hasEnoughCoins(),
-                pendingRequirementBuys,
-                activeRequirementBuys);
-
-        if (budget.estimatedCost <= 0L) {
-            return true;
-        }
+        if (budget.estimatedCost <= 0L) return true;
 
         if (!budget.hasEnoughCoins()) {
             status = "Not enough GP for Goblin Diplomacy buys";
-            debug("Not enough GP for Goblin Diplomacy GE buys | bankCoins={} inventoryCoins={} availableCoins={} estimatedCost={} pending={} active={}",
-                    budget.bankCoins,
-                    budget.inventoryCoins,
-                    budget.getAvailableCoins(),
-                    budget.estimatedCost,
-                    pendingRequirementBuys,
-                    activeRequirementBuys);
             return false;
         }
 
-        if (budget.inventoryCoins >= budget.estimatedCost) {
-            return true;
-        }
+        if (budget.inventoryCoins >= budget.estimatedCost) return true;
 
         status = "Withdrawing coins for Goblin Diplomacy buys";
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return false;
-        }
+        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return false;
         Rs2Bank.withdrawAll(COINS);
-        sleepUntil(() -> Rs2Inventory.itemQuantity(COINS_ID) >= Math.min(Integer.MAX_VALUE, budget.estimatedCost), 3_000);
-
-        long coinsAfterWithdraw = Math.max(0L, Rs2Inventory.itemQuantity(COINS_ID));
-        if (coinsAfterWithdraw < budget.estimatedCost) {
-            debug("Coin withdraw did not cover Goblin Diplomacy budget | coinsInv={} estimatedCost={} bankCoinsAfter={}",
-                    coinsAfterWithdraw,
-                    budget.estimatedCost,
-                    Math.max(0, Rs2Bank.count(COINS)));
-        }
-
-        return coinsAfterWithdraw >= budget.estimatedCost;
+        return false;
     }
 
     private boolean ensureAtGrandExchange() {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
         WorldArea exchangeArea = GRAND_EXCHANGE.toWorldArea();
         if (playerLocation != null && exchangeArea.contains(playerLocation)) {
-            KspWalkerGuard.clear(WALK_KEY_GE);
+            Rs2Walker.clearWalkingRoute(WALK_KEY_GE);
             return true;
         }
 
-        KspWalkerGuard.walkToDestination(
-                WALK_KEY_GE,
-                GRAND_EXCHANGE::getRandomPoint,
-                exchangeArea::contains,
-                3,
-                WALK_REFIRE_COOLDOWN_MS);
+        Rs2Walker.walkUntil(GRAND_EXCHANGE.getRandomPoint(), 3, () -> exchangeArea.contains(Rs2Player.getWorldLocation()));
         return false;
     }
 
     private boolean ensureGrandExchangeOpen() {
-        if (Rs2GrandExchange.isOpen()) {
-            return true;
-        }
+        if (Rs2GrandExchange.isOpen()) return true;
 
         if (Rs2Bank.isOpen()) {
-            KspGrandExchangeHelper.closeBankBeforeExchange();
-            sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
+            Rs2Bank.closeBank();
             return false;
         }
 
+        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) return false;
+
         status = "Opening Grand Exchange";
-
-        if (KspGrandExchangeHelper.openExchangeDirectly()) {
-            sleepUntil(Rs2GrandExchange::isOpen, 3_000);
-            return Rs2GrandExchange.isOpen();
-        }
-
-        boolean clicked = KspGrandExchangeHelper.interactClerk();
-
-        if (clicked) {
-            sleepUntil(Rs2GrandExchange::isOpen, 3_000);
-        }
-
-        debug("Grand Exchange Clerk interaction | clicked={} player={} geOpen={}", clicked, Rs2Player.getWorldLocation(), Rs2GrandExchange.isOpen());
-        return Rs2GrandExchange.isOpen();
+        boolean clicked = Rs2GrandExchange.openExchange();
+        if (clicked) lastActionAtMs = System.currentTimeMillis();
+        return false;
     }
 
     private void processAvailableRequirementBuySlots() {
@@ -445,53 +379,36 @@ public class GobScript extends Script {
     }
 
     private boolean placeRequirementBuyOffer(QuestBuyRequest buyRequest) {
-        if (buyRequest == null || buyRequest.quantity <= 0) {
-            return false;
-        }
+        if (buyRequest == null || buyRequest.quantity <= 0) return false;
 
-        waitForActionCooldown();
         status = "Buying " + buyRequest.quantity + "x " + buyRequest.itemName;
-
         int offerPrice = getQuestBuyOfferPrice(buyRequest);
-        if (offerPrice <= 0) {
-            status = "Not enough GP for " + buyRequest.itemName;
-            debug("Skipping Goblin Diplomacy GE offer due to insufficient coins | item={} qty={} coinsInv={} reservedForOthers={}",
-                    buyRequest.itemName,
-                    buyRequest.quantity,
-                    Rs2Inventory.itemQuantity(COINS_ID),
-                    getMinimumPendingQuestBuyCostExcluding(buyRequest));
+        if (offerPrice <= 0) return false;
+
+        int slotsBefore = Rs2GrandExchange.getAvailableSlotsCount();
+        boolean offered = Rs2GrandExchange.buyItem(buyRequest.itemName, (int) Math.min(Integer.MAX_VALUE, (long) (offerPrice)), buyRequest.quantity);
+        if (!offered) return false;
+
+        if (!sleepUntil(() ->
+                !Rs2GrandExchange.isOpen()
+                        || Rs2GrandExchange.isOfferScreenOpen()
+                        || Rs2GrandExchange.getAvailableSlotsCount() < slotsBefore, 2_000)) {
             return false;
         }
 
-        var requestBuilder = GrandExchangeRequest.builder()
-                .action(GrandExchangeAction.BUY)
-                .itemName(buyRequest.itemName)
-                .exact(true)
-                .quantity(buyRequest.quantity)
-                .closeAfterCompletion(false);
-
-        GrandExchangeRequest request = requestBuilder.price(offerPrice).build();
-
-        waitForGrandExchangeOfferInput();
-
-        boolean offered = Rs2GrandExchange.processOffer(request);
-
-        debug("GE requirement buy offer | item={} qty={} price={} offered={} slots={} coinsInv={}",
-                buyRequest.itemName,
-                buyRequest.quantity,
-                offerPrice,
-                offered,
-                Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1,
-                Rs2Inventory.itemQuantity(COINS_ID));
-
-        if (!offered) {
-            return false;
+        if (!Rs2GrandExchange.isOpen()) return false;
+        if (Rs2GrandExchange.isOfferScreenOpen()) {
+            Rs2GrandExchange.backToOverview();
+            if (!sleepUntil(() ->
+                    Rs2GrandExchange.isOpen()
+                            && !Rs2GrandExchange.isOfferScreenOpen(), 2_000)) {
+                return false;
+            }
         }
 
         lastActionAtMs = System.currentTimeMillis();
         pendingRequirementBuys.remove(0);
         activeRequirementBuys.add(buyRequest);
-        sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2_000);
         return true;
     }
 
@@ -726,26 +643,17 @@ public class GobScript extends Script {
     }
 
     private void returnToGrandExchangeOverview() {
-        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) {
-            return;
-        }
-
+        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) return;
         Rs2GrandExchange.backToOverview();
         lastActionAtMs = System.currentTimeMillis();
-        sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2_000);
     }
 
     private void waitForActionCooldown() {
-        long elapsed = System.currentTimeMillis() - lastActionAtMs;
-        long remaining = ACTION_COOLDOWN_MS - elapsed;
-
-        if (remaining > 0) {
-            sleep((int) remaining, (int) remaining + 150);
-        }
+        // Non-blocking: offer methods gate on lastActionAtMs.
     }
 
     private void waitForGrandExchangeOfferInput() {
-        sleep(GE_OFFER_INPUT_DELAY_MS, GE_OFFER_INPUT_DELAY_MS + 250);
+        // processOffer owns the GE input sequence.
     }
 
     private void prepareQuestInventory() {
@@ -753,89 +661,57 @@ public class GobScript extends Script {
 
         if (Rs2GrandExchange.isOpen()) {
             Rs2GrandExchange.closeExchange();
-            sleepUntil(() -> !Rs2GrandExchange.isOpen(), 2_000);
             return;
         }
 
         if (!Rs2Bank.isOpen()) {
-            if (!Rs2Bank.openBank() && !Rs2Bank.walkToBankAndUseBank()) {
-                status = "Walking to bank";
-                return;
-            }
-            sleepUntil(Rs2Bank::isOpen, 3_000);
+            if (!Rs2Bank.openBank()) Rs2Bank.walkToBankAndUseBank();
             return;
         }
 
-        if (!KspBankMode.ensureWithdrawAsItem()) {
-            debug("Waiting for withdraw-as-item mode before Goblin Diplomacy withdrawals");
-            return;
-        }
-
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return;
-        }
+        if (!KspBankMode.ensureWithdrawAsItem()
+                || KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return;
 
         Rs2Bank.depositAllExcept(GOBLIN_MAIL, BLUE_DYE, ORANGE_DYE, BLUE_GOBLIN_MAIL, ORANGE_GOBLIN_MAIL);
-        sleep(250, 450);
 
-        withdrawExistingColouredMail();
-        withdrawDyesForMissingMail();
-        withdrawRequiredPlainMail();
+        if (withdrawExistingColouredMail()
+                || withdrawDyesForMissingMail()
+                || withdrawRequiredPlainMail()) return;
 
         if (hasQuestMaterialsInInventory()) {
             Rs2Bank.closeBank();
-            sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
             return;
         }
 
         status = "Missing Goblin Diplomacy requirements";
-        debug("Missing requirements | bankGoblinMail={} bankBlueDye={} bankOrangeDye={} bankBlueMail={} bankOrangeMail={}",
-                Rs2Bank.count(GOBLIN_MAIL),
-                Rs2Bank.count(BLUE_DYE),
-                Rs2Bank.count(ORANGE_DYE),
-                Rs2Bank.count(BLUE_GOBLIN_MAIL),
-                Rs2Bank.count(ORANGE_GOBLIN_MAIL));
     }
 
-    private void withdrawExistingColouredMail() {
+    private boolean withdrawExistingColouredMail() {
         if (!blueMailAccepted && !hasBlueGoblinMail() && Rs2Bank.count(BLUE_GOBLIN_MAIL) > 0) {
-            Rs2Bank.withdrawX(BLUE_GOBLIN_MAIL, 1);
-            sleepUntil(this::hasBlueGoblinMail, 2_000);
+            return Rs2Bank.withdrawX(BLUE_GOBLIN_MAIL, 1);
         }
-
         if (!orangeMailAccepted && !hasOrangeGoblinMail() && Rs2Bank.count(ORANGE_GOBLIN_MAIL) > 0) {
-            Rs2Bank.withdrawX(ORANGE_GOBLIN_MAIL, 1);
-            sleepUntil(this::hasOrangeGoblinMail, 2_000);
+            return Rs2Bank.withdrawX(ORANGE_GOBLIN_MAIL, 1);
         }
+        return false;
     }
 
-    private void withdrawDyesForMissingMail() {
+    private boolean withdrawDyesForMissingMail() {
         if (!blueMailAccepted && !hasBlueGoblinMail() && !hasBlueDye() && Rs2Bank.count(BLUE_DYE) > 0) {
-            Rs2Bank.withdrawX(BLUE_DYE, 1);
-            sleepUntil(this::hasBlueDye, 2_000);
+            return Rs2Bank.withdrawX(BLUE_DYE, 1);
         }
-
         if (!orangeMailAccepted && !hasOrangeGoblinMail() && !hasOrangeDye() && Rs2Bank.count(ORANGE_DYE) > 0) {
-            Rs2Bank.withdrawX(ORANGE_DYE, 1);
-            sleepUntil(this::hasOrangeDye, 2_000);
+            return Rs2Bank.withdrawX(ORANGE_DYE, 1);
         }
+        return false;
     }
 
-    private void withdrawRequiredPlainMail() {
-        int neededPlainMail = getRequiredPlainMailCount();
-        int inventoryPlainMail = Rs2Inventory.itemQuantity(GobReqs.GOBLIN_MAIL.getItemId());
-        int missingPlainMail = Math.max(0, neededPlainMail - inventoryPlainMail);
-
-        if (missingPlainMail <= 0) {
-            return;
-        }
-
-        if (Rs2Bank.count(GOBLIN_MAIL) <= 0) {
-            return;
-        }
-
-        Rs2Bank.withdrawX(GOBLIN_MAIL, missingPlainMail);
-        sleepUntil(() -> Rs2Inventory.itemQuantity(GobReqs.GOBLIN_MAIL.getItemId()) >= neededPlainMail, 2_000);
+    private boolean withdrawRequiredPlainMail() {
+        int needed = getRequiredPlainMailCount();
+        int current = Rs2Inventory.itemQuantity(GobReqs.GOBLIN_MAIL.getItemId());
+        int missing = Math.max(0, needed - current);
+        if (missing <= 0 || Rs2Bank.count(GOBLIN_MAIL) <= 0) return false;
+        return Rs2Bank.withdrawX(GOBLIN_MAIL, missing);
     }
 
     private boolean prepareDyedGoblinMail() {
@@ -853,33 +729,19 @@ public class GobScript extends Script {
     }
 
     private boolean useDyeOnGoblinMail(int dyeId, String expectedMailName) {
-        if (!Rs2Inventory.use(dyeId)) {
-            return false;
-        }
-
-        sleep(200, 350);
-
-        if (!Rs2Inventory.interact(GobReqs.GOBLIN_MAIL.getItemId(), "Use")) {
-            return false;
-        }
-
-        return sleepUntil(() -> Rs2Inventory.hasItem(expectedMailName), 2_500);
+        if (Rs2Inventory.hasItem(expectedMailName)) return true;
+        return Rs2Inventory.combine(dyeId, GobReqs.GOBLIN_MAIL.getItemId());
     }
 
     private boolean ensureAtGoblinVillage() {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
         if (playerLocation != null && GOBLIN_VILLAGE_AREA.contains(playerLocation)) {
-            KspWalkerGuard.clear(WALK_KEY_VILLAGE);
+            Rs2Walker.clearWalkingRoute(WALK_KEY_VILLAGE);
             return true;
         }
 
         status = "Walking to Goblin Village";
-        KspWalkerGuard.walkToDestination(
-                WALK_KEY_VILLAGE,
-                () -> GOBLIN_VILLAGE_POINT,
-                GOBLIN_VILLAGE_AREA::contains,
-                3,
-                WALK_REFIRE_COOLDOWN_MS);
+        Rs2Walker.walkUntil((GOBLIN_VILLAGE_POINT), 3, () -> GOBLIN_VILLAGE_AREA.contains(Rs2Player.getWorldLocation()));
         return false;
     }
 
@@ -887,42 +749,55 @@ public class GobScript extends Script {
         Rs2NpcModel general = findNearestGeneral();
         if (general == null) {
             status = "Searching for goblin generals";
-            KspWalkerGuard.walkFastCanvasToPoint(WALK_KEY_GENERAL, GOBLIN_VILLAGE_POINT, NPC_REACH_DISTANCE, WALK_REFIRE_COOLDOWN_MS);
+            Rs2Walker.walkTo(GOBLIN_VILLAGE_POINT, NPC_REACH_DISTANCE);
             return false;
         }
 
-        WorldPoint playerLocation = Rs2Player.getWorldLocation();
-        WorldPoint npcLocation = general.getWorldLocation();
-        if (playerLocation == null || npcLocation == null) {
-            return false;
-        }
+        WorldPoint player = Rs2Player.getWorldLocation();
+        WorldPoint npc = general.getWorldLocation();
+        if (player == null || npc == null) return false;
 
-        if (playerLocation.distanceTo(npcLocation) > NPC_REACH_DISTANCE) {
+        if (player.distanceTo(npc) > NPC_REACH_DISTANCE) {
             status = "Walking to " + general.getName();
-            KspWalkerGuard.walkFastCanvasToPoint(WALK_KEY_GENERAL, npcLocation, NPC_REACH_DISTANCE, WALK_REFIRE_COOLDOWN_MS);
+            Rs2Walker.walkTo(npc, NPC_REACH_DISTANCE);
             return false;
         }
 
         status = "Talking to " + general.getName();
+        if (isNpcInteractionPending(general)) return false;
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) return false;
+
         snapshotMailCounts();
         boolean clicked = general.click("Talk-to");
         if (clicked) {
+            pendingNpcInteractionAtMs = System.currentTimeMillis();
+            pendingNpcIndex = general.getIndex();
             mailHandInInProgress = true;
-            KspWalkerGuard.clear(WALK_KEY_GENERAL);
-            boolean dialogueOpened = sleepUntil(Rs2Dialogue::isInDialogue, 4_000);
-            updateAcceptedMailFromInventoryLoss();
-            if (!dialogueOpened) {
-                mailHandInInProgress = false;
-            }
+            Rs2Walker.clearWalkingRoute(WALK_KEY_GENERAL);
         }
         return clicked;
     }
 
+    private boolean isNpcInteractionPending(Rs2NpcModel npc) {
+        if (pendingNpcInteractionAtMs == 0L) return false;
+        if (isQuestDialogueActive()) {
+            pendingNpcInteractionAtMs = 0L;
+            pendingNpcIndex = -1;
+            return true;
+        }
+        if (npc != null && pendingNpcIndex != -1 && npc.getIndex() != pendingNpcIndex) return false;
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) return true;
+        if (System.currentTimeMillis() - pendingNpcInteractionAtMs < NPC_INTERACTION_TIMEOUT_MS) return true;
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
+        return false;
+    }
+
     private Rs2NpcModel findNearestGeneral() {
-        return Microbot.getRs2NpcCache().query()
-                .fromWorldView()
-                .withNames(GENERAL_NAMES)
-                .nearestOnClientThread();
+        return KspLiveScene.nearestNpcModel(Rs2Player.getWorldLocation(), 30,
+                npc -> npc.getName() != null
+                        && java.util.Arrays.stream(GENERAL_NAMES)
+                                .anyMatch(name -> name.equalsIgnoreCase(npc.getName())));
     }
 
     private boolean hasQuestMaterialsInInventory() {
@@ -1020,13 +895,13 @@ public class GobScript extends Script {
         lastBlueMailCount = blueMailCount;
         lastOrangeMailCount = orangeMailCount;
 
-        if (!Rs2Dialogue.isInDialogue() && allMailAccepted()) {
+        if (!isQuestDialogueActive() && allMailAccepted()) {
             mailHandInInProgress = false;
         }
     }
 
     private void clearInactiveHandInTracking() {
-        if (!mailHandInInProgress || Rs2Dialogue.isInDialogue()) {
+        if (!mailHandInInProgress || isQuestDialogueActive()) {
             return;
         }
 
@@ -1083,14 +958,16 @@ public class GobScript extends Script {
 
     @Override
     public void shutdown() {
-        KspWalkerGuard.clear(WALK_KEY_VILLAGE);
-        KspWalkerGuard.clear(WALK_KEY_GENERAL);
-        KspWalkerGuard.clear(WALK_KEY_GE);
+        Rs2Walker.clearWalkingRoute(WALK_KEY_VILLAGE);
+        Rs2Walker.clearWalkingRoute(WALK_KEY_GENERAL);
+        Rs2Walker.clearWalkingRoute(WALK_KEY_GE);
         pendingRequirementBuys.clear();
         activeRequirementBuys.clear();
         requirementBankAudited = false;
         resetHandInTracking();
         lastActionAtMs = 0L;
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
         state = GobState.PREPARING;
         status = "Idle";
         super.shutdown();

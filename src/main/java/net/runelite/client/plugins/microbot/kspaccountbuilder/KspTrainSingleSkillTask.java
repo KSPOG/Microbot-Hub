@@ -2,16 +2,14 @@ package net.runelite.client.plugins.microbot.kspaccountbuilder;
 
 public enum KspTrainSingleSkillTask
 {
-    TUTORIAL_ISLAND("Tutorial Island"),
-    COOKS_ASSISTANT("Cook's Assistant"),
-    GOBLIN_DIPLOMACY("Goblin Diplomacy"),
+    RUNE_ESSENCE("Rune Essence"),
     MINING("Mining"),
     WOODCUTTING("Woodcutting"),
     FIREMAKING("Firemaking"),
     FISHING("Fishing"),
+    COOKING("Cooking"),
+    CRAFTING("Crafting"),
     MELEE("Melee"),
-    GE_SELL("GE Sell"),
-    GE_BUY("GE Buy"),
     SMITHING("Smithing"),
     SMELTING("Smelting");
 
@@ -23,8 +21,5 @@ public enum KspTrainSingleSkillTask
     }
 
     @Override
-    public String toString()
-    {
-        return displayName;
-    }
+    public String toString() { return displayName; }
 }

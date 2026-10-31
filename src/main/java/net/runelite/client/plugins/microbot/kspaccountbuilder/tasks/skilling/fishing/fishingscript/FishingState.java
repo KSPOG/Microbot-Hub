@@ -6,5 +6,6 @@ public enum FishingState
     BANKING,
     WALKING_TO_AREA,
     FISHING,
+    COOKING,
     WAITING
 }

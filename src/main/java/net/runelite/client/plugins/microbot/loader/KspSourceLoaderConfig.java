@@ -12,16 +12,47 @@ public interface KspSourceLoaderConfig extends Config
     String REFRESH_KEY = "refreshFromRepo";
     String BRANCH_KEY = "sourceBranch";
 
+<<<<<<< Updated upstream
     enum SourceBranch
     {
         MAIN,
         DEV
+=======
+    /** Only allow known repository refs to be selected in the RuneLite dropdown. */
+    enum SourceBranch
+    {
+        MAIN("main"),
+        DEV("dev");
+
+        private final String gitRef;
+
+        SourceBranch(String gitRef)
+        {
+            this.gitRef = gitRef;
+        }
+
+        public String gitRef()
+        {
+            return gitRef;
+        }
+
+        @Override
+        public String toString()
+        {
+            return this == MAIN ? "Main" : "Dev";
+        }
+>>>>>>> Stashed changes
     }
 
     @ConfigItem(
             keyName = BRANCH_KEY,
+<<<<<<< Updated upstream
             name = "Repository Branch",
             description = "Select which KSPOG/ksppluginsrelease branch the source loader follows",
+=======
+            name = "Source Branch",
+            description = "Choose the GitHub branch used to load KSP plugins. Switching branches reloads the plugins.",
+>>>>>>> Stashed changes
             position = 0
     )
     default SourceBranch sourceBranch()

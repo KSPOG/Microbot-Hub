@@ -1,6 +1,10 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.mining.miningscript;
 
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
+
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
@@ -10,6 +14,7 @@ import javax.inject.Singleton;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.ObjectID;
 import net.runelite.api.Skill;
+import net.runelite.api.TileObject;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -17,15 +22,19 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspBankMode;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspEquipmentActionGuard;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTaskDebug;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWalkerGuard;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspLiveScene;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.mining.areas.Areas;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.mining.equiplevels.PickaxeEquip;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.mining.levelreqmining.MiningReq;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.mining.rocklevel.RockLevel;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.buyscript.Buy;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.depositbox.Rs2DepositBox;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
@@ -37,16 +46,28 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Singleton
-public class MiningScript extends Script
+public class MiningScript extends KspManagedScript
 {
     private static final Logger log = LoggerFactory.getLogger(MiningScript.class);
 
-    private static final int LOOP_DELAY_MS = 600;
-    private static final int WEB_WALK_COOLDOWN_MS = 3_000;
-    private static final int OBJECT_INTERACTION_COOLDOWN_MS = 2_500;
+    private static final int LOOP_DELAY_MS = 100;
+    private static final int WEB_WALK_COOLDOWN_MS = 1_000;
+    private static final int OBJECT_INTERACTION_COOLDOWN_MS = 100;
+    private static final int OBJECT_INTERACTION_START_TIMEOUT_MS = 1_500;
+    private static final long BANK_ACTION_COOLDOWN_MS = 500L;
+    private static final long BANK_INVENTORY_ACTION_TIMEOUT_MS = 1_500L;
     private static final int ROCK_SEARCH_PADDING_TILES = 8;
     private static final int OUT_OF_AREA_ROCK_FALLBACK_RADIUS = 4;
-    private static final int MID_TIER_RANDOM_MAX_LEVEL = 60;
+    private static final String BANK_WALK_KEY = "Mining:bank";
+    private static final String DEPOSIT_BOX_WALK_KEY = "Mining:port-sarim-deposit-box";
+    private static final WorldPoint PORT_SARIM_DEPOSIT_TILE = new WorldPoint(3045, 3234, 0);
+    private static final int PORT_SARIM_DEPOSIT_OBJECT_ID = 26254;
+    private static final long DEPOSIT_BOX_RETRY_MS = 2_000L;
+    private static final int DEPOSIT_BOX_MAX_ATTEMPTS = 5;
+    private static final int MUGGER_COMBAT_LEVEL = 6;
+    private static final int RAT_COMBAT_LEVEL = 6;
+    private static final int SILVER_SAFE_COMBAT_LEVEL = (MUGGER_COMBAT_LEVEL * 2) + 1;
+    private static final int IRON_SAFE_COMBAT_LEVEL = (RAT_COMBAT_LEVEL * 2) + 1;
     private static final String COPPER_ORE_NAME = Buy.COPPER_ORE_NAME;
     private static final String TIN_ORE_NAME = Buy.TIN_ORE_NAME;
     private static final int[] COPPER_ROCK_IDS = {
@@ -78,12 +99,24 @@ public class MiningScript extends Script
             ObjectID.COAL_ROCKS_11367,
             ObjectID.COAL_ROCKS_36204
     };
+    private static final int[] GOLD_ROCK_IDS = {
+            ObjectID.GOLD_ROCKS,
+            ObjectID.GOLD_ROCKS_11371,
+            ObjectID.GOLD_ROCKS_36206
+    };
 
     private static final List<String> PICKAXE_NAMES = Buy.PICKAXE_NAME_LIST;
 
     private Areas targetArea = Areas.TIN_COPPER_VARROCK_EAST;
+    private Areas selectedTinCopperArea = Areas.TIN_COPPER_VARROCK_EAST;
+    private Areas selectedIronArea = Areas.IRON_VARROCK_EAST;
+    private Areas selectedCoalArea = Areas.COAL_BARBARIAN_VILLAGE;
+    private Areas selectedGoldArea = Areas.GOLD_RIMMINGTON;
+    private Areas selectedMithrilArea = Areas.MITHRIL_DWARVEN_MINE;
+    private Areas selectedAdamantArea = Areas.ADAMANT_DWARVEN_MINE;
 
     private boolean startingTargetRockInitialized;
+    private int initializedSelectionBand = -1;
     private RockLevel randomMidTierRock;
     private boolean debugLogging;
     private boolean progressiveMining = true;
@@ -91,29 +124,48 @@ public class MiningScript extends Script
 
     private long lastWebWalkAtMs;
     private long lastObjectInteractionAtMs;
+    private long pendingObjectInteractionAtMs;
+    private long lastUnavailableRockAtMs;
+    private long lastUnavailableRockReportAtMs;
     private long lastUnderAttackAtMs;
+    private long lastBankActionAtMs;
+    private long lastDepositBoxAttemptAtMs;
+    private int failedDepositBoxOpenAttempts;
+    private boolean useBankInsteadOfDepositBox;
+    private long pendingBankInventoryActionAtMs;
+    private int pendingBankInventoryEmptySlots = -1;
+    private final KspEquipmentActionGuard equipmentGuard = new KspEquipmentActionGuard();
 
-    public void setDebugLogging(boolean debugLogging)
-    {
-        this.debugLogging = debugLogging;
-    }
+    public void setDebugLogging(boolean debugLogging) { this.debugLogging = debugLogging; }
 
-    public void setProgressiveMining(boolean progressiveMining)
-    {
-        this.progressiveMining = progressiveMining;
-    }
+    public void setProgressiveMining(boolean progressiveMining) { this.progressiveMining = progressiveMining; }
 
     public boolean run(Areas area)
     {
         shutdown();
 
-        this.targetArea = area;
+        this.selectedTinCopperArea = Areas.randomTinCopperArea();
+        this.selectedIronArea = Areas.randomIronArea();
+        this.selectedCoalArea = Areas.randomCoalArea();
+        this.selectedGoldArea = Areas.randomGoldArea();
+        this.selectedMithrilArea = Areas.randomMithrilArea();
+        this.selectedAdamantArea = Areas.randomAdamantArea();
+        this.targetArea = progressiveMining ? selectedTinCopperArea : area;
+        debug("Selected mining areas | tinCopper={} iron={} coal={} gold={} mithril={} adamant={}",
+                selectedTinCopperArea.getDisplayName(),
+                selectedIronArea.getDisplayName(),
+                selectedCoalArea.getDisplayName(),
+                selectedGoldArea.getDisplayName(),
+                selectedMithrilArea.getDisplayName(),
+                selectedAdamantArea.getDisplayName());
         this.startingTargetRockInitialized = false;
         this.randomMidTierRock = null;
 
+        lastUnavailableRockAtMs = 0L;
+        lastUnavailableRockReportAtMs = 0L;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() ->
         {
-            if (!super.run() || !Microbot.isLoggedIn())
+            if (KspAccountBuilderPauseGate.isPaused() || !super.run() || !Microbot.isLoggedIn())
             {
                 return;
             }
@@ -128,10 +180,12 @@ public class MiningScript extends Script
             if (desiredArea != targetArea)
             {
                 targetArea = desiredArea;
+                lastUnavailableRockAtMs = 0L;
+                lastUnavailableRockReportAtMs = 0L;
                 debug("Switching mining area to {} for mining level {}", targetArea.getDisplayName(), miningLevel);
             }
 
-            RockLevel targetRock = targetArea == Areas.TIN_COPPER_VARROCK_EAST
+            RockLevel targetRock = targetArea.isTinCopperArea()
                     ? getStarterRockToMine()
                     : resolveTargetRock(miningLevel);
             KspTaskDebug.throttled(log, debugLogging, "Mining", "loop", 5_000L,
@@ -147,13 +201,27 @@ public class MiningScript extends Script
                     Rs2Inventory.isFull(),
                     Rs2Bank.isOpen());
 
+            if (!Rs2Inventory.isFull())
+            {
+                failedDepositBoxOpenAttempts = 0;
+                lastDepositBoxAttemptAtMs = 0L;
+                useBankInsteadOfDepositBox = false;
+            }
+
             if (Rs2Inventory.isFull())
             {
                 debug("Inventory full; banking ores | player={} area={} pickaxeToKeep={}",
                         Rs2Player.getWorldLocation(),
                         targetArea.getDisplayName(),
                         resolveInventoryPickaxeToKeep(miningLevel));
-                bankOresOnly(miningLevel);
+                if (targetArea.isRimmingtonArea() && !useBankInsteadOfDepositBox)
+                {
+                    depositRimmingtonOresAtPortSarim(miningLevel);
+                }
+                else
+                {
+                    bankOresOnly(miningLevel);
+                }
                 return;
             }
 
@@ -177,12 +245,23 @@ public class MiningScript extends Script
                 return;
             }
 
-            if (!ensureInTargetArea())
+            if (targetArea == Areas.SILVER_VARROCK_WEST && !canMineSilverSafely())
             {
+                Rs2Walker.clearWalkingRoute("ksp_account_builder_silver_mugger_guard");
+                walkingToTargetArea = false;
+                Microbot.status = "Waiting for Mugger to become passive";
                 return;
             }
 
-            if (!isIdleInTargetArea())
+            if (targetArea == Areas.IRON_VARROCK_EAST && !canMineIronSafely())
+            {
+                Rs2Walker.clearWalkingRoute("ksp_account_builder_iron_rat_guard");
+                walkingToTargetArea = false;
+                Microbot.status = "Waiting for Rat to become passive";
+                return;
+            }
+
+            if (!ensureInTargetArea())
             {
                 return;
             }
@@ -196,122 +275,103 @@ public class MiningScript extends Script
 
     private boolean upgradePickaxe(int miningLevel, int attackLevel)
     {
-        MiningReq bestMiningReq = MiningReq.bestForMiningLevel(miningLevel);
-        String targetPickaxeName = resolveDesiredPickaxe(bestMiningReq);
+        String target = resolveDesiredPickaxe(MiningReq.bestForMiningLevel(miningLevel));
+        if (target == null) return true;
 
-        if (targetPickaxeName == null)
-        {
-            return true;
-        }
-
-        String activePickaxeName = resolveBestOwnedPickaxeName(targetPickaxeName);
-
-        if (activePickaxeName == null)
-        {
-            ensureInventoryTabOpen();
-
-            if (!Rs2Bank.walkToBankAndUseBank() && !Rs2Bank.openBank())
-            {
-                return false;
-            }
-
-            activePickaxeName = resolveBestOwnedPickaxeName(targetPickaxeName);
-
-            if (activePickaxeName == null)
-            {
-                debug("No eligible pickaxe available up to target {}", targetPickaxeName);
-                closeBankIfOpen();
-                return true;
-            }
-        }
-
-        MiningReq activePickaxeReq = resolveMiningReq(activePickaxeName);
-        boolean canEquipActivePickaxe = activePickaxeReq != null && canEquipDesiredPickaxe(activePickaxeReq, attackLevel);
-
-        if (!Rs2Equipment.isWearing(activePickaxeName) && !Rs2Inventory.hasItem(activePickaxeName))
+        String active = resolveBestOwnedPickaxeName(target);
+        if (active == null)
         {
             if (!Rs2Bank.isOpen())
             {
-                ensureInventoryTabOpen();
-
-                if (!Rs2Bank.walkToBankAndUseBank() && !Rs2Bank.openBank())
-                {
-                    return false;
-                }
-            }
-
-            if (Rs2Bank.isOpen() && Rs2Bank.count(activePickaxeName) > 0)
-            {
-                if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen())
-                {
-                    sleep(300);
-                    return false;
-                }
-
-                if (!KspBankMode.ensureWithdrawAsItem())
-                {
-                    debug("Waiting for withdraw-as-item mode before withdrawing {}", activePickaxeName);
-                    return false;
-                }
-
-                String pickaxeToWithdraw = activePickaxeName;
-
-                Rs2Bank.withdrawOne(activePickaxeName);
-                sleepUntil(() -> Rs2Inventory.hasItem(pickaxeToWithdraw), 3_000);
-            }
-        }
-
-        if (canEquipActivePickaxe
-                && Rs2Inventory.hasItem(activePickaxeName)
-                && !Rs2Equipment.isWearing(activePickaxeName))
-        {
-            if (Rs2Bank.isOpen())
-            {
-                closeBankIfOpen();
+                if (!ensureInventoryTabOpenFast() || !bankActionReady()) return false;
+                if (Rs2Bank.openBank() || Rs2Bank.walkToBankAndUseBank()) markBankAction();
                 return false;
             }
 
-            String pickaxeToWield = activePickaxeName;
-
-            Rs2Inventory.wield(activePickaxeName);
-            sleepUntil(() -> Rs2Equipment.isWearing(pickaxeToWield), 2_000);
+            active = resolveBestOwnedPickaxeName(target);
+            if (active == null)
+            {
+                Microbot.status = "No usable pickaxe available";
+                return false;
+            }
         }
 
-        if (Rs2Bank.isOpen())
+        MiningReq req = resolveMiningReq(active);
+        boolean canEquip = req != null && canEquipDesiredPickaxe(req, attackLevel);
+
+        if (!Rs2Equipment.isWearing(active) && !Rs2Inventory.hasItem(active))
         {
-            if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen())
+            if (!Rs2Bank.isOpen())
             {
-                sleep(300);
+                if (!ensureInventoryTabOpenFast() || !bankActionReady()) return false;
+                if (Rs2Bank.openBank() || Rs2Bank.walkToBankAndUseBank()) markBankAction();
                 return false;
             }
 
-            depositOutdatedPickaxes(activePickaxeName);
+            if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return false;
+            if (!KspBankMode.ensureWithdrawAsItem() || !bankActionReady()) return false;
 
-            if (!hasOutdatedPickaxeInInventory(activePickaxeName))
-            {
-                closeBankIfOpen();
-            }
-
+            if (bankInventoryActionPending()) return false;
+            int before = Rs2Inventory.emptySlotCount();
+            if (Rs2Bank.withdrawOne(active)) markBankInventoryAction(before);
+            markBankAction();
             return false;
         }
 
-        return Rs2Equipment.isWearing(activePickaxeName) || Rs2Inventory.hasItem(activePickaxeName);
+        if (canEquip && Rs2Inventory.hasItem(active, true) && !Rs2Equipment.isWearing(active))
+        {
+            if (Rs2Bank.isOpen())
+            {
+                if (!bankActionReady()) return false;
+                Rs2Bank.closeBank();
+                markBankAction();
+                return false;
+            }
+            KspEquipmentActionGuard.Decision decision = equipmentGuard.inspect(
+                    active, false, System.currentTimeMillis());
+            if (decision == KspEquipmentActionGuard.Decision.COOLDOWN)
+            {
+                Microbot.status = "Unable to equip pickaxe: " + active
+                        + " (retrying after cooldown)";
+                return false;
+            }
+            if (decision == KspEquipmentActionGuard.Decision.WAIT) return false;
+            equipmentGuard.dispatched(active, System.currentTimeMillis());
+            Rs2Inventory.wield(active);
+            return false;
+        }
+        if (Rs2Equipment.isWearing(active)) equipmentGuard.inspect(active, true, System.currentTimeMillis());
+
+        if (Rs2Bank.isOpen())
+        {
+            if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return false;
+            if (!bankActionReady()) return false;
+
+            if (bankInventoryActionPending()) return false;
+            if (depositOneOutdatedPickaxe(active)) {
+                markBankAction();
+                return false;
+            }
+            if (!hasOutdatedPickaxeInInventory(active)) Rs2Bank.closeBank();
+            markBankAction();
+            return false;
+        }
+
+        return Rs2Equipment.isWearing(active) || Rs2Inventory.hasItem(active);
     }
 
-    private void depositOutdatedPickaxes(String desiredPickaxeName)
+    private boolean depositOneOutdatedPickaxe(String desiredPickaxeName)
     {
         for (String pickaxeName : PICKAXE_NAMES)
         {
-            if (pickaxeName.equalsIgnoreCase(desiredPickaxeName))
-            {
-                continue;
-            }
-
-            if (Rs2Inventory.hasItem(pickaxeName))
-            {
-                Rs2Bank.depositAll(pickaxeName);
+            if (pickaxeName.equalsIgnoreCase(desiredPickaxeName) || !Rs2Inventory.hasItem(pickaxeName)) continue;
+            int before = Rs2Inventory.emptySlotCount();
+            if (Rs2Bank.depositAll(pickaxeName)) {
+                markBankInventoryAction(before);
+                return true;
             }
         }
+        return false;
     }
 
     private boolean hasOutdatedPickaxeInInventory(String desiredPickaxeName)
@@ -327,10 +387,7 @@ public class MiningScript extends Script
         return false;
     }
 
-    private String resolveDesiredPickaxe(MiningReq miningReq)
-    {
-        return miningReq != null ? miningReq.getDisplayName() : null;
-    }
+    private String resolveDesiredPickaxe(MiningReq miningReq) { return miningReq != null ? miningReq.getDisplayName() : null; }
 
     private String resolveBestOwnedPickaxeName(String targetPickaxeName)
     {
@@ -387,30 +444,27 @@ public class MiningScript extends Script
 
         WorldArea area = targetArea.toWorldArea();
 
-        if (area.contains(playerLocation))
+        if (area.contains(playerLocation)
+                || (targetArea == Areas.SILVER_VARROCK_WEST
+                    && isAdjacentToMiningArea(playerLocation, targetArea)))
         {
+            // At Varrock West Silver, rock collision can occupy the chosen
+            // exact in-area destination. Mining from the adjacent reachable
+            // tile is valid; insisting on exact arrival creates an endless
+            // target-not-walkable loop after banking.
             clearTargetAreaWalkIfNeeded(area);
             return true;
         }
 
-        if (Rs2Player.isMoving())
+        if (isMiningInteractionPending())
         {
-            KspTaskDebug.throttled(log, debugLogging, "Mining", "walk-moving", 3_000L,
-                    "waiting for walker | player={} targetArea={} walkerTarget={}",
-                    playerLocation,
-                    targetArea.getDisplayName(),
-                    Rs2Walker.getCurrentTarget());
-            return false;
+            Microbot.status = Rs2Player.isAnimating() ? "Mining" : "Moving to mining rock";
+            return true;
         }
 
         Microbot.status = "Walking to " + targetArea.getDisplayName();
 
-        if (KspWalkerGuard.walkToDestination(
-                "Mining:target-area",
-                targetArea::getRandomPoint,
-                area::contains,
-                3,
-                WEB_WALK_COOLDOWN_MS))
+        if (Rs2Walker.walkUntil((targetArea == Areas.IRON_VARROCK_WEST ? new WorldPoint(3177, 3369, 0) : targetArea.getRandomPoint()), 3, () -> area.contains(Rs2Player.getWorldLocation())))
         {
             lastWebWalkAtMs = System.currentTimeMillis();
             walkingToTargetArea = true;
@@ -423,6 +477,16 @@ public class MiningScript extends Script
         return false;
     }
 
+    private boolean isAdjacentToMiningArea(WorldPoint player, Areas miningArea)
+    {
+        WorldPoint sw = miningArea.getSouthWest();
+        WorldPoint ne = miningArea.getNorthEast();
+        if (player.getPlane() != sw.getPlane()) return false;
+        int dx = Math.max(0, Math.max(sw.getX() - player.getX(), player.getX() - ne.getX()));
+        int dy = Math.max(0, Math.max(sw.getY() - player.getY(), player.getY() - ne.getY()));
+        return Math.max(dx, dy) <= 1;
+    }
+
     private void clearTargetAreaWalkIfNeeded(WorldArea area)
     {
         WorldPoint walkerTarget = Rs2Walker.getCurrentTarget();
@@ -432,8 +496,7 @@ public class MiningScript extends Script
             return;
         }
 
-        KspWalkerGuard.clearActiveWalker("ksp_account_builder_mining_reached_area");
-        KspWalkerGuard.clear("Mining:target-area");
+        Rs2Walker.clearWalkingRoute("ksp_account_builder_mining_reached_area");
         walkingToTargetArea = false;
     }
 
@@ -448,57 +511,129 @@ public class MiningScript extends Script
 
     private void ensureInventoryTabOpen()
     {
-        if (Rs2Tab.getCurrentTab() != InterfaceTab.INVENTORY)
-        {
-            Rs2Tab.switchTo(InterfaceTab.INVENTORY);
-            sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.INVENTORY, 1_200);
-        }
+        ensureInventoryTabOpenFast();
+    }
+
+    private boolean ensureInventoryTabOpenFast()
+    {
+        if (Rs2Tab.getCurrentTab() == InterfaceTab.INVENTORY) return true;
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
+        return false;
     }
 
     private void bankOresOnly(int miningLevel)
     {
-        ensureInventoryTabOpen();
+        if (!ensureInventoryTabOpenFast()) return;
 
-        if (!Rs2Bank.walkToBankAndUseBank() && !Rs2Bank.openBank())
+        if (!Rs2Bank.isOpen())
         {
+            Microbot.status = "Walking to nearest bank";
+            if (bankActionReady() && (Rs2Bank.openBank() || Rs2Bank.walkToBankAndUseBank())) markBankAction();
             return;
         }
 
-        if (Rs2Bank.isOpen())
+        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return;
+        if (!bankActionReady() || bankInventoryActionPending()) return;
+
+        String keep = resolveInventoryPickaxeToKeep(miningLevel);
+        int before = Rs2Inventory.emptySlotCount();
+        boolean deposited = keep != null ? Rs2Bank.depositAllExcept(keep) : Rs2Bank.depositAll();
+        if (deposited) markBankInventoryAction(before);
+        markBankAction();
+    }
+
+    private void depositRimmingtonOresAtPortSarim(int miningLevel)
+    {
+        WorldPoint player = Rs2Player.getWorldLocation();
+        if (player == null) return;
+
+        // Finish the walk at the real deposit-box object, rather than a
+        // random tile inside the relatively large Port Sarim area.
+        if (!Rs2DepositBox.isOpen() && player.distanceTo(PORT_SARIM_DEPOSIT_TILE) > 5)
         {
-            if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen())
-            {
-                sleep(300);
-                return;
-            }
-
-            String pickaxeToKeep = resolveInventoryPickaxeToKeep(miningLevel);
-
-            if (pickaxeToKeep != null)
-            {
-                Rs2Bank.depositAllExcept(pickaxeToKeep);
-                sleepUntil(() -> !Rs2Inventory.isFull(), 2_000);
-            }
-            else
-            {
-                Rs2Bank.depositAll();
-                sleepUntil(() -> Rs2Inventory.isEmpty(), 2_000);
-            }
-
-            sleep(300);
-            closeBankIfOpen();
+            Microbot.status = "Walking to Port Sarim deposit box";
+            Rs2Walker.walkUntil((PORT_SARIM_DEPOSIT_TILE), 2, () -> { WorldPoint point = Rs2Player.getWorldLocation(); return point != null && point.distanceTo(PORT_SARIM_DEPOSIT_TILE) <= 5; });
+            return;
         }
+
+
+        if (!Rs2DepositBox.isOpen())
+        {
+            long now = System.currentTimeMillis();
+            if (now - lastDepositBoxAttemptAtMs < DEPOSIT_BOX_RETRY_MS) return;
+            lastDepositBoxAttemptAtMs = now;
+
+            // TileObject comes from the live rendered scene (including wall,
+            // decorative and game-object layers), NOT Rs2DepositBox's cache
+            // search. Never spam the same failed interaction every tick.
+            TileObject box = KspLiveScene.nearestTileObject(
+                    new int[] {PORT_SARIM_DEPOSIT_OBJECT_ID}, player, 12);
+            if (box == null)
+            {
+                box = KspLiveScene.nearestTileObject("Bank deposit box", player, 12);
+            }
+            if (box == null)
+            {
+                box = KspLiveScene.nearestTileObject("Deposit box", player, 12);
+            }
+
+            boolean clicked = false;
+            if (box != null)
+            {
+                try
+                {
+                    clicked = Rs2GameObject.interact(box, "Deposit");
+                }
+                catch (RuntimeException exception)
+                {
+                    debug("Live deposit-box interaction failed | id={} position={} reason={}",
+                            box.getId(), box.getWorldLocation(), exception.toString());
+                }
+            }
+            failedDepositBoxOpenAttempts++;
+            debug("Port Sarim live-scene deposit attempt | attempt={} object={} clicked={} player={}",
+                    failedDepositBoxOpenAttempts,
+                    box == null ? "not loaded" : box.getId(),
+                    clicked, player);
+            Microbot.status = clicked ? "Opening Port Sarim deposit box"
+                    : "Retrying Port Sarim live deposit box";
+
+            if (failedDepositBoxOpenAttempts >= DEPOSIT_BOX_MAX_ATTEMPTS)
+            {
+                // Do not trap the entire Account Builder at Port Sarim when
+                // the deposit-box object/widget cannot be opened this trip.
+                useBankInsteadOfDepositBox = true;
+                lastBankActionAtMs = 0L;
+                KspTaskDebug.info(log, true, "Mining",
+                        "Port Sarim deposit box unavailable after {} attempts; recovering via standard bank",
+                        failedDepositBoxOpenAttempts);
+                bankOresOnly(miningLevel);
+            }
+            return;
+        }
+
+        failedDepositBoxOpenAttempts = 0;
+        lastDepositBoxAttemptAtMs = 0L;
+        if (!ensureInventoryTabOpenFast()) return;
+        if (bankInventoryActionPending()) return;
+        String keep = resolveInventoryPickaxeToKeep(miningLevel);
+        List<String> itemsToKeep = keep == null ? Collections.emptyList() : Collections.singletonList(keep);
+        int before = Rs2Inventory.emptySlotCount();
+        if (Rs2DepositBox.depositAllExcept(itemsToKeep, false))
+        {
+            markBankInventoryAction(before);
+            return;
+        }
+        if (!Rs2Inventory.isFull()) Rs2DepositBox.closeDepositBox();
     }
 
     private boolean closeBankIfOpen()
     {
-        if (!Rs2Bank.isOpen())
-        {
-            return true;
-        }
-
+        if (!Rs2Bank.isOpen()) return true;
+        if (!bankActionReady()) return false;
         Rs2Bank.closeBank();
-        return sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
+        markBankAction();
+        return false;
     }
 
     private String resolveInventoryPickaxeToKeep(int miningLevel)
@@ -549,114 +684,121 @@ public class MiningScript extends Script
 
     private void mineForCurrentLevel(int miningLevel)
     {
-        // Check if player is under attack and handle combat state
         if (isPlayerUnderAttack())
         {
             lastUnderAttackAtMs = System.currentTimeMillis();
-            KspTaskDebug.throttled(log, debugLogging, "Mining", "under-attack", 2_000L,
-                    "player is under attack, waiting for combat to end | player={} interacting={}",
-                    Rs2Player.getWorldLocation(),
-                    Rs2Player.isInteracting());
             return;
         }
 
-        // Reset combat timer if player is no longer under attack
-        if (System.currentTimeMillis() - lastUnderAttackAtMs < 5_000)
+        long now = System.currentTimeMillis();
+        if (now - lastUnderAttackAtMs < 1_000L) return;
+        if (!canStartMiningInTargetArea(now)) return;
+        if (now - lastObjectInteractionAtMs < OBJECT_INTERACTION_COOLDOWN_MS) return;
+
+        if (!MiningRockRetryPolicy.shouldSearch(now, lastUnavailableRockAtMs)) return;
+        RockLevel type = targetArea.isTinCopperArea() ? getStarterRockToMine() : resolveTargetRock(miningLevel);
+        if (type == null) return;
+        TileObject liveRock = KspLiveScene.nearestMineableRock(
+                getTargetRockIds(type), type.getDisplayName(), targetArea.toWorldArea(),
+                Rs2Player.getWorldLocation(), Math.max(15, getAreaSearchRadius() + ROCK_SEARCH_PADDING_TILES));
+        if (liveRock != null)
         {
-            debug("Waiting for player to recover from combat");
+            if (!canStartMiningInTargetArea(now)) return;
+            lastObjectInteractionAtMs = now;
+            Microbot.status = "Mining " + type.getDisplayName() + " (live scene)";
+            boolean clicked = Rs2GameObject.interact(liveRock, "Mine");
+            pendingObjectInteractionAtMs = clicked ? now : 0L;
+            debug("Live rock interaction | type={} id={} pos={} dispatched={}",
+                    type, liveRock.getId(), liveRock.getWorldLocation(), clicked);
             return;
         }
 
-        if (!isIdleInTargetArea())
+        // A cache query remains as a fallback when a scene update is pending
+        // or a special rock's currently displayed ID is not in our known list.
+        Rs2TileObjectModel rock = findNearestRockInTargetArea(miningLevel);
+        if (rock == null || !canStartMiningInTargetArea(now)) return;
+        lastObjectInteractionAtMs = now;
+        Microbot.status = "Mining " + rock.getName() + " (fallback)";
+        if (rock.click("Mine"))
         {
-            KspTaskDebug.throttled(log, debugLogging, "Mining", "not-idle", 2_000L,
-                    "waiting for idle before mining | player={} moving={} animating={} interacting={} area={}",
-                    Rs2Player.getWorldLocation(),
-                    Rs2Player.isMoving(),
-                    Rs2Player.isAnimating(),
-                    Rs2Player.isInteracting(),
-                    targetArea.getDisplayName());
-            return;
-        }
-
-        if (System.currentTimeMillis() - lastObjectInteractionAtMs < OBJECT_INTERACTION_COOLDOWN_MS)
-        {
-            KspTaskDebug.throttled(log, debugLogging, "Mining", "interaction-cooldown", 2_000L,
-                    "interaction cooldown active | elapsed={}ms cooldown={}ms",
-                    System.currentTimeMillis() - lastObjectInteractionAtMs,
-                    OBJECT_INTERACTION_COOLDOWN_MS);
-            return;
-        }
-
-        Rs2TileObjectModel targetRock = findNearestRockInTargetArea(miningLevel);
-
-        if (targetRock == null)
-        {
-            return;
-        }
-
-        if (!isIdleInTargetArea())
-        {
-            debug("Rock candidate found but player stopped being idle | rock={} id={} loc={} moving={} animating={} interacting={}",
-                    targetRock.getName(),
-                    targetRock.getId(),
-                    targetRock.getWorldLocation(),
-                    Rs2Player.isMoving(),
-                    Rs2Player.isAnimating(),
-                    Rs2Player.isInteracting());
-            return;
-        }
-
-        lastObjectInteractionAtMs = System.currentTimeMillis();
-
-        Microbot.status = "Mining " + targetRock.getName();
-        debug("Attempting rock interaction | objectName={} id={} loc={} reachable={} player={} distance={} hasMineAction={} insideArea={}",
-                targetRock.getName(),
-                targetRock.getId(),
-                targetRock.getWorldLocation(),
-                targetRock.isReachable(),
-                Rs2Player.getWorldLocation(),
-                Rs2Player.getWorldLocation() != null ? Rs2Player.getWorldLocation().distanceTo(targetRock.getWorldLocation()) : -1,
-                hasObjectAction(targetRock, "Mine"),
-                targetArea.toWorldArea().contains(targetRock.getWorldLocation()));
-        boolean interactionStarted = targetRock.click("Mine");
-        debug("Rock interaction result | clicked={} objectName={} id={} loc={} player={} moving={} animating={} interacting={}",
-                interactionStarted,
-                targetRock.getName(),
-                targetRock.getId(),
-                targetRock.getWorldLocation(),
-                Rs2Player.getWorldLocation(),
-                Rs2Player.isMoving(),
-                Rs2Player.isAnimating(),
-                Rs2Player.isInteracting());
-
-        if (interactionStarted)
-        {
-            boolean activityStarted = sleepUntil(() -> Rs2Player.isAnimating() || Rs2Player.isInteracting(), 1_200);
-            debug("Rock post-click wait | activityStarted={} moving={} animating={} interacting={} player={}",
-                    activityStarted,
-                    Rs2Player.isMoving(),
-                    Rs2Player.isAnimating(),
-                    Rs2Player.isInteracting(),
-                    Rs2Player.getWorldLocation());
+            pendingObjectInteractionAtMs = now;
+            debug("Fallback rock interaction dispatched | rock={} id={} loc={}",
+                    rock.getName(), rock.getId(), rock.getWorldLocation());
         }
         else
         {
-            debug("Rock interaction was not accepted by tile object API | objectName={} id={} loc={}",
-                    targetRock.getName(),
-                    targetRock.getId(),
-                    targetRock.getWorldLocation());
+            pendingObjectInteractionAtMs = 0L;
+            debug("Fallback rock interaction rejected | rock={} id={} loc={}",
+                    rock.getName(), rock.getId(), rock.getWorldLocation());
         }
     }
 
-    private boolean isIdleInTargetArea()
+    private boolean bankInventoryActionPending()
+    {
+        if (pendingBankInventoryActionAtMs == 0L) return false;
+        if (Rs2Inventory.emptySlotCount() != pendingBankInventoryEmptySlots) {
+            pendingBankInventoryActionAtMs = 0L;
+            pendingBankInventoryEmptySlots = -1;
+            return false;
+        }
+        if (System.currentTimeMillis() - pendingBankInventoryActionAtMs < BANK_INVENTORY_ACTION_TIMEOUT_MS) return true;
+        pendingBankInventoryActionAtMs = 0L;
+        pendingBankInventoryEmptySlots = -1;
+        return false;
+    }
+
+    private void markBankInventoryAction(int beforeEmptySlots)
+    {
+        pendingBankInventoryEmptySlots = beforeEmptySlots;
+        pendingBankInventoryActionAtMs = System.currentTimeMillis();
+    }
+
+    private boolean bankActionReady()
+    {
+        return System.currentTimeMillis() - lastBankActionAtMs >= BANK_ACTION_COOLDOWN_MS;
+    }
+
+    private void markBankAction()
+    {
+        lastBankActionAtMs = System.currentTimeMillis();
+    }
+
+    private boolean isMiningInteractionPending()
+    {
+        if (pendingObjectInteractionAtMs <= 0L) return false;
+        long age = System.currentTimeMillis() - pendingObjectInteractionAtMs;
+        if (age >= OBJECT_INTERACTION_START_TIMEOUT_MS)
+        {
+            pendingObjectInteractionAtMs = 0L;
+            return false;
+        }
+        return Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting();
+    }
+
+    private boolean canStartMiningInTargetArea(long now)
     {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
-        return playerLocation != null
-                && targetArea.toWorldArea().contains(playerLocation)
-                && !Rs2Player.isMoving()
-                && !Rs2Player.isAnimating()
-                && !Rs2Player.isInteracting();
+        if (playerLocation == null || !targetArea.toWorldArea().contains(playerLocation))
+        {
+            return false;
+        }
+
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting())
+        {
+            pendingObjectInteractionAtMs = 0L;
+            return false;
+        }
+
+        if (pendingObjectInteractionAtMs > 0L)
+        {
+            if (now - pendingObjectInteractionAtMs < OBJECT_INTERACTION_START_TIMEOUT_MS)
+            {
+                return false;
+            }
+            pendingObjectInteractionAtMs = 0L;
+        }
+
+        return true;
     }
 
     private boolean isPlayerUnderAttack()
@@ -676,15 +818,25 @@ public class MiningScript extends Script
             return null;
         }
 
-        RockLevel targetRock = targetArea == Areas.TIN_COPPER_VARROCK_EAST
+        RockLevel targetRock = targetArea.isTinCopperArea()
                 ? getStarterRockToMine()
                 : resolveTargetRock(miningLevel);
 
         Rs2TileObjectModel rock = findNearestMatchingRock(searchCenter, targetRock);
         if (rock == null)
         {
-            Microbot.status = "No reachable " + (targetRock != null ? targetRock.getDisplayName() : "target") + " rock found";
-            debug("No reachable {} rock found inside {}", targetRock != null ? targetRock.getDisplayName() : "target", targetArea.getDisplayName());
+            lastUnavailableRockAtMs = System.currentTimeMillis();
+            Microbot.status = "Waiting for " + (targetRock != null ? targetRock.getDisplayName() : "target") + " rocks to respawn";
+            if (MiningRockRetryPolicy.shouldReportUnavailable(lastUnavailableRockAtMs, lastUnavailableRockReportAtMs))
+            {
+                lastUnavailableRockReportAtMs = lastUnavailableRockAtMs;
+                debug("No reachable {} rock found inside {}; waiting for respawn",
+                        targetRock != null ? targetRock.getDisplayName() : "target", targetArea.getDisplayName());
+            }
+        }
+        else
+        {
+            lastUnavailableRockAtMs = 0L;
         }
 
         return rock;
@@ -839,6 +991,14 @@ public class MiningScript extends Script
             return COAL_ROCK_IDS;
         }
 
+        if (targetRock == RockLevel.GOLD)
+        {
+            return GOLD_ROCK_IDS;
+        }
+
+        // Mithril and Adamantite fall back to the object-name matcher below. This
+        // keeps the task compatible with cache revisions that expose different
+        // rock object IDs at the requested locations.
         return new int[0];
     }
 
@@ -872,9 +1032,24 @@ public class MiningScript extends Script
     {
         RockLevel targetRock = resolveTargetRock(miningLevel);
 
+        if (targetRock == RockLevel.ADAMANT)
+        {
+            return selectedAdamantArea;
+        }
+
+        if (targetRock == RockLevel.MITHRIL)
+        {
+            return selectedMithrilArea;
+        }
+
+        if (targetRock == RockLevel.GOLD)
+        {
+            return selectedGoldArea;
+        }
+
         if (targetRock == RockLevel.COAL)
         {
-            return Areas.COAL_BARBARIAN_VILLAGE;
+            return selectedCoalArea;
         }
 
         if (targetRock == RockLevel.SILVER)
@@ -884,10 +1059,10 @@ public class MiningScript extends Script
 
         if (targetRock == RockLevel.IRON)
         {
-            return Areas.IRON_VARROCK_EAST;
+            return selectedIronArea;
         }
 
-        return Areas.TIN_COPPER_VARROCK_EAST;
+        return selectedTinCopperArea;
     }
 
     private RockLevel resolveTargetRock(int miningLevel)
@@ -897,6 +1072,16 @@ public class MiningScript extends Script
             return randomMidTierRock;
         }
 
+        if (miningLevel >= RockLevel.ADAMANT.getRequiredMiningLevel())
+        {
+            return RockLevel.ADAMANT;
+        }
+
+        if (miningLevel >= RockLevel.MITHRIL.getRequiredMiningLevel())
+        {
+            return RockLevel.MITHRIL;
+        }
+
         if (miningLevel >= RockLevel.COAL.getRequiredMiningLevel())
         {
             return RockLevel.COAL;
@@ -904,12 +1089,17 @@ public class MiningScript extends Script
 
         if (miningLevel >= RockLevel.SILVER.getRequiredMiningLevel())
         {
-            return RockLevel.SILVER;
+            if (canMineSilverSafely())
+            {
+                return RockLevel.SILVER;
+            }
+
+            return canMineSelectedIronSafely() ? RockLevel.IRON : null;
         }
 
         if (miningLevel >= RockLevel.IRON.getRequiredMiningLevel())
         {
-            return RockLevel.IRON;
+            return canMineSelectedIronSafely() ? RockLevel.IRON : null;
         }
 
         return null;
@@ -917,28 +1107,22 @@ public class MiningScript extends Script
 
     private boolean shouldRandomizeMidTierRock(int miningLevel)
     {
-        return miningLevel >= RockLevel.COAL.getRequiredMiningLevel()
-                && miningLevel < MID_TIER_RANDOM_MAX_LEVEL;
+        return miningLevel >= RockLevel.COAL.getRequiredMiningLevel();
     }
 
     private void initializeStartingTargetRock(int miningLevel)
     {
-        if (startingTargetRockInitialized)
+        int selectionBand = getSelectionBand(miningLevel);
+        if (startingTargetRockInitialized && initializedSelectionBand == selectionBand)
         {
             return;
         }
 
         if (shouldRandomizeMidTierRock(miningLevel))
         {
-            List<RockLevel> randomOptions = Arrays.asList(
-                    RockLevel.IRON,
-                    RockLevel.SILVER,
-                    RockLevel.COAL
-            );
-
+            List<RockLevel> randomOptions = getRandomRockOptions(miningLevel);
             randomMidTierRock = randomOptions.get(ThreadLocalRandom.current().nextInt(randomOptions.size()));
-
-            debug("Selected starting mining ore {} for mining level {}", randomMidTierRock.getDisplayName(), miningLevel);
+            debug("Selected mining ore {} from level {} band options {}", randomMidTierRock.getDisplayName(), miningLevel, randomOptions);
         }
         else
         {
@@ -946,6 +1130,85 @@ public class MiningScript extends Script
         }
 
         startingTargetRockInitialized = true;
+        initializedSelectionBand = selectionBand;
+    }
+
+    private List<RockLevel> getRandomRockOptions(int miningLevel)
+    {
+        if (miningLevel >= RockLevel.ADAMANT.getRequiredMiningLevel())
+        {
+            return Arrays.asList(RockLevel.IRON, RockLevel.SILVER, RockLevel.COAL, RockLevel.GOLD, RockLevel.MITHRIL, RockLevel.ADAMANT);
+        }
+
+        if (miningLevel >= RockLevel.MITHRIL.getRequiredMiningLevel())
+        {
+            return Arrays.asList(RockLevel.IRON, RockLevel.SILVER, RockLevel.COAL, RockLevel.GOLD, RockLevel.MITHRIL);
+        }
+
+        if (miningLevel >= RockLevel.GOLD.getRequiredMiningLevel())
+        {
+            return Arrays.asList(RockLevel.IRON, RockLevel.SILVER, RockLevel.COAL, RockLevel.GOLD);
+        }
+
+        return Arrays.asList(RockLevel.IRON, RockLevel.SILVER, RockLevel.COAL);
+    }
+
+    private int getSelectionBand(int miningLevel)
+    {
+        if (miningLevel >= RockLevel.ADAMANT.getRequiredMiningLevel()) return 4;
+        if (miningLevel >= RockLevel.MITHRIL.getRequiredMiningLevel()) return 3;
+        if (miningLevel >= RockLevel.GOLD.getRequiredMiningLevel()) return 2;
+        if (miningLevel >= RockLevel.COAL.getRequiredMiningLevel()) return 1;
+        return 0;
+    }
+
+    private boolean canMineSilverSafely()
+    {
+        int combatLevel = getCombatLevel();
+        boolean safe = combatLevel >= SILVER_SAFE_COMBAT_LEVEL;
+
+        if (!safe)
+        {
+            KspTaskDebug.throttled(log, debugLogging, "Mining", "silver-mugger-guard", 10_000L,
+                    "skipping silver until Mugger becomes passive | requiredCombat={} currentCombat={} muggerCombat={}",
+                    SILVER_SAFE_COMBAT_LEVEL,
+                    combatLevel,
+                    MUGGER_COMBAT_LEVEL);
+        }
+
+        return safe;
+    }
+
+    private boolean canMineSelectedIronSafely()
+    {
+        return selectedIronArea != Areas.IRON_VARROCK_EAST || canMineIronSafely();
+    }
+
+    private boolean canMineIronSafely()
+    {
+        int combatLevel = getCombatLevel();
+        boolean safe = combatLevel >= IRON_SAFE_COMBAT_LEVEL;
+
+        if (!safe)
+        {
+            KspTaskDebug.throttled(log, debugLogging, "Mining", "iron-rat-guard", 10_000L,
+                    "skipping iron until Rat becomes passive | requiredCombat={} currentCombat={} ratCombat={}",
+                    IRON_SAFE_COMBAT_LEVEL,
+                    combatLevel,
+                    RAT_COMBAT_LEVEL);
+        }
+
+        return safe;
+    }
+
+    private int getCombatLevel()
+    {
+        if (Microbot.getClient() == null || Microbot.getClient().getLocalPlayer() == null)
+        {
+            return 0;
+        }
+
+        return Microbot.getClient().getLocalPlayer().getCombatLevel();
     }
 
     private RockLevel getStarterRockToMine()
@@ -961,10 +1224,7 @@ public class MiningScript extends Script
         return RockLevel.TIN;
     }
 
-    private int getOwnedOreCount(String oreName)
-    {
-        return Rs2Inventory.count(oreName) + Math.max(0, Rs2Bank.count(oreName));
-    }
+    private int getOwnedOreCount(String oreName) { return Rs2Inventory.count(oreName) + Math.max(0, Rs2Bank.count(oreName)); }
 
     private void debug(String message, Object... args)
     {
@@ -977,19 +1237,24 @@ public class MiningScript extends Script
     @Override
     public void shutdown()
     {
+        lastBankActionAtMs = 0L;
+        lastDepositBoxAttemptAtMs = 0L;
+        failedDepositBoxOpenAttempts = 0;
+        useBankInsteadOfDepositBox = false;
+        pendingBankInventoryActionAtMs = 0L;
+        pendingBankInventoryEmptySlots = -1;
+        equipmentGuard.reset();
         startingTargetRockInitialized = false;
+        initializedSelectionBand = -1;
         randomMidTierRock = null;
         walkingToTargetArea = false;
-        KspWalkerGuard.clear("Mining:target-area");
         lastWebWalkAtMs = 0L;
         lastObjectInteractionAtMs = 0L;
+        pendingObjectInteractionAtMs = 0L;
         lastUnderAttackAtMs = 0L;
 
         super.shutdown();
     }
 
-    public Areas getTargetArea()
-    {
-        return targetArea;
-    }
+    public Areas getTargetArea() { return targetArea; }
 }

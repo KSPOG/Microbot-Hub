@@ -1,4 +1,8 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.questing.cooksassistant.cookscript;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
 
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
@@ -9,9 +13,9 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspBankMode;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.KspTaskDebug;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.KspWalkerGuard;
+
 import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspBankWidgetHelper;
-import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspGrandExchangeHelper;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.ksputil.KspLiveScene;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.questing.cooksassistant.reqs.Items;
 import net.runelite.client.plugins.microbot.kspaccountbuilder.tasks.skilling.selling.gearea.GEArea;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
@@ -35,12 +39,12 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 @Singleton
-public class CooksScript extends Script {
+public class CooksScript extends KspManagedScript {
     private static final Logger log = LoggerFactory.getLogger(CooksScript.class);
-    private static final int LOOP_DELAY_MS = 600;
-    private static final int WALK_REFIRE_COOLDOWN_MS = 3_500;
-    private static final int GE_OFFER_INPUT_DELAY_MS = 900;
-    private static final int ACTION_COOLDOWN_MS = 1_200;
+    private static final int LOOP_DELAY_MS = 50;
+    private static final int WALK_REFIRE_COOLDOWN_MS = 1_000;
+    private static final int ACTION_COOLDOWN_MS = 100;
+    private static final long NPC_INTERACTION_TIMEOUT_MS = 1_500L;
     private static final int MIN_QUEST_BUY_PRICE = 1_000;
     private static final int MAX_QUEST_BUY_PRICE = 2_000;
     private static final int NPC_REACH_DISTANCE = 5;
@@ -67,6 +71,8 @@ public class CooksScript extends Script {
     private boolean complete;
     private boolean requirementBankAudited;
     private long lastActionAtMs;
+    private long pendingNpcInteractionAtMs;
+    private int pendingNpcIndex = -1;
     private final List<QuestBuyRequest> pendingRequirementBuys = new ArrayList<>();
     private final List<QuestBuyRequest> activeRequirementBuys = new ArrayList<>();
     private CooksState state = CooksState.PREPARING;
@@ -77,6 +83,8 @@ public class CooksScript extends Script {
         complete = false;
         requirementBankAudited = false;
         lastActionAtMs = 0L;
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
         pendingRequirementBuys.clear();
         activeRequirementBuys.clear();
         state = CooksState.PREPARING;
@@ -94,7 +102,7 @@ public class CooksScript extends Script {
     }
 
     private void runLoop() {
-        if (!super.run() || !Microbot.isLoggedIn()) {
+        if (KspAccountBuilderPauseGate.isPaused() || !super.run() || !Microbot.isLoggedIn()) {
             return;
         }
 
@@ -126,7 +134,7 @@ public class CooksScript extends Script {
             return;
         }
 
-        if (Rs2Player.isMoving() || Rs2Player.isAnimating()) {
+        if (Rs2Player.isAnimating()) {
             return;
         }
 
@@ -140,6 +148,11 @@ public class CooksScript extends Script {
             return;
         }
 
+        if (Rs2Bank.isOpen()) {
+            Rs2Bank.closeBank();
+            return;
+        }
+
         if (!ensureAtCook()) {
             state = CooksState.WALKING_TO_COOK;
             return;
@@ -150,10 +163,13 @@ public class CooksScript extends Script {
     }
 
     private boolean handleDialogue() {
-        if (!Rs2Dialogue.isInDialogue()) {
+        if (!isQuestDialogueActive()) {
             return false;
         }
 
+        Rs2Walker.clearWalkingRoute("ksp_cooks_assistant_dialogue");
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
         state = CooksState.TALKING_TO_COOK;
         status = "Handling cook dialogue";
 
@@ -163,7 +179,7 @@ public class CooksScript extends Script {
         }
 
         if (!Rs2Dialogue.hasSelectAnOption()) {
-            return false;
+            return true;
         }
 
         for (String option : COOK_DIALOGUE_OPTIONS) {
@@ -180,7 +196,14 @@ public class CooksScript extends Script {
             return true;
         }
 
-        return Rs2Dialogue.keyPressForDialogueOption(1);
+        Rs2Dialogue.keyPressForDialogueOption(1);
+        return true;
+    }
+
+    private boolean isQuestDialogueActive() {
+        return Rs2Dialogue.isInDialogue()
+                || Rs2Dialogue.hasContinue()
+                || Rs2Dialogue.hasSelectAnOption();
     }
 
     private boolean handleRequirementBuying() {
@@ -217,7 +240,6 @@ public class CooksScript extends Script {
         if (hasCollectableRequirementBuy()) {
             status = "Collecting Cook's Assistant buys";
             Rs2GrandExchange.collectAllToBank();
-            sleepUntil(() -> !Rs2GrandExchange.hasBoughtOffer(), 5_000);
             clearSatisfiedRequirementBuys();
             requirementBankAudited = false;
             return true;
@@ -237,137 +259,67 @@ public class CooksScript extends Script {
 
         if (Rs2GrandExchange.isOpen()) {
             Rs2GrandExchange.closeExchange();
-            sleepUntil(() -> !Rs2GrandExchange.isOpen(), 2_000);
             return true;
         }
 
         if (!Rs2Bank.isOpen()) {
-            if (!Rs2Bank.openBank() && !Rs2Bank.walkToBankAndUseBank()) {
-                status = "Walking to bank for Cook's Assistant items";
-                return true;
-            }
-            sleepUntil(Rs2Bank::isOpen, 3_000);
+            if (!Rs2Bank.openBank()) Rs2Bank.walkToBankAndUseBank();
             return true;
         }
 
         rebuildPendingRequirementBuys();
         requirementBankAudited = true;
 
-        debug("Requirement audit | pending={} active={} bankEgg={} bankMilk={} bankFlour={} coinsInv={} coinsBank={}",
-                pendingRequirementBuys,
-                activeRequirementBuys,
-                Rs2Bank.count(EGG),
-                Rs2Bank.count(BUCKET_OF_MILK),
-                Rs2Bank.count(POT_OF_FLOUR),
-                Rs2Inventory.itemQuantity(COINS_ID),
-                Rs2Bank.count(COINS));
-
-        if (pendingRequirementBuys.isEmpty() && activeRequirementBuys.isEmpty()) {
-            return false;
-        }
-
-        if (!ensureCoinsForRequirementBuying()) {
-            return true;
-        }
+        if (pendingRequirementBuys.isEmpty() && activeRequirementBuys.isEmpty()) return false;
+        if (!ensureCoinsForRequirementBuying()) return true;
 
         Rs2Bank.closeBank();
-        sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
         return true;
     }
 
     private boolean ensureCoinsForRequirementBuying() {
         QuestBuyBudget budget = calculateQuestBuyBudget();
-
-        debug("Quest buy budget | bankCoins={} inventoryCoins={} availableCoins={} estimatedCost={} enough={} pending={} active={}",
-                budget.bankCoins,
-                budget.inventoryCoins,
-                budget.getAvailableCoins(),
-                budget.estimatedCost,
-                budget.hasEnoughCoins(),
-                pendingRequirementBuys,
-                activeRequirementBuys);
-
-        if (budget.estimatedCost <= 0L) {
-            return true;
-        }
+        if (budget.estimatedCost <= 0L) return true;
 
         if (!budget.hasEnoughCoins()) {
             status = "Not enough GP for Cook's Assistant buys";
-            debug("Not enough GP for Cook's Assistant GE buys | bankCoins={} inventoryCoins={} availableCoins={} estimatedCost={} pending={} active={}",
-                    budget.bankCoins,
-                    budget.inventoryCoins,
-                    budget.getAvailableCoins(),
-                    budget.estimatedCost,
-                    pendingRequirementBuys,
-                    activeRequirementBuys);
             return false;
         }
 
-        if (budget.inventoryCoins >= budget.estimatedCost) {
-            return true;
-        }
+        if (budget.inventoryCoins >= budget.estimatedCost) return true;
 
         status = "Withdrawing coins for Cook's Assistant buys";
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return false;
-        }
+        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return false;
         Rs2Bank.withdrawAll(COINS);
-        sleepUntil(() -> Rs2Inventory.itemQuantity(COINS_ID) >= Math.min(Integer.MAX_VALUE, budget.estimatedCost), 3_000);
-
-        long coinsAfterWithdraw = Math.max(0L, Rs2Inventory.itemQuantity(COINS_ID));
-        if (coinsAfterWithdraw < budget.estimatedCost) {
-            debug("Coin withdraw did not cover Cook's Assistant budget | coinsInv={} estimatedCost={} bankCoinsAfter={}",
-                    coinsAfterWithdraw,
-                    budget.estimatedCost,
-                    Math.max(0, Rs2Bank.count(COINS)));
-        }
-
-        return coinsAfterWithdraw >= budget.estimatedCost;
+        return false;
     }
 
     private boolean ensureAtGrandExchange() {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
         WorldArea exchangeArea = GRAND_EXCHANGE.toWorldArea();
         if (playerLocation != null && exchangeArea.contains(playerLocation)) {
-            KspWalkerGuard.clear(WALK_KEY_GE);
+            Rs2Walker.clearWalkingRoute(WALK_KEY_GE);
             return true;
         }
 
-        KspWalkerGuard.walkToDestination(
-                WALK_KEY_GE,
-                GRAND_EXCHANGE::getRandomPoint,
-                exchangeArea::contains,
-                3,
-                WALK_REFIRE_COOLDOWN_MS);
+        Rs2Walker.walkUntil(GRAND_EXCHANGE.getRandomPoint(), 3, () -> exchangeArea.contains(Rs2Player.getWorldLocation()));
         return false;
     }
 
     private boolean ensureGrandExchangeOpen() {
-        if (Rs2GrandExchange.isOpen()) {
-            return true;
-        }
+        if (Rs2GrandExchange.isOpen()) return true;
 
         if (Rs2Bank.isOpen()) {
-            KspGrandExchangeHelper.closeBankBeforeExchange();
-            sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
+            Rs2Bank.closeBank();
             return false;
         }
 
+        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) return false;
+
         status = "Opening Grand Exchange";
-
-        if (KspGrandExchangeHelper.openExchangeDirectly()) {
-            sleepUntil(Rs2GrandExchange::isOpen, 3_000);
-            return Rs2GrandExchange.isOpen();
-        }
-
-        boolean clicked = KspGrandExchangeHelper.interactClerk();
-
-        if (clicked) {
-            sleepUntil(Rs2GrandExchange::isOpen, 3_000);
-        }
-
-        debug("Grand Exchange Clerk interaction | clicked={} player={} geOpen={}", clicked, Rs2Player.getWorldLocation(), Rs2GrandExchange.isOpen());
-        return Rs2GrandExchange.isOpen();
+        boolean clicked = Rs2GrandExchange.openExchange();
+        if (clicked) lastActionAtMs = System.currentTimeMillis();
+        return false;
     }
 
     private void processAvailableRequirementBuySlots() {
@@ -390,53 +342,36 @@ public class CooksScript extends Script {
     }
 
     private boolean placeRequirementBuyOffer(QuestBuyRequest buyRequest) {
-        if (buyRequest == null || buyRequest.quantity <= 0) {
-            return false;
-        }
+        if (buyRequest == null || buyRequest.quantity <= 0) return false;
 
-        waitForActionCooldown();
         status = "Buying " + buyRequest.quantity + "x " + buyRequest.itemName;
-
         int offerPrice = getQuestBuyOfferPrice(buyRequest);
-        if (offerPrice <= 0) {
-            status = "Not enough GP for " + buyRequest.itemName;
-            debug("Skipping Cook's Assistant GE offer due to insufficient coins | item={} qty={} coinsInv={} reservedForOthers={}",
-                    buyRequest.itemName,
-                    buyRequest.quantity,
-                    Rs2Inventory.itemQuantity(COINS_ID),
-                    getMinimumPendingQuestBuyCostExcluding(buyRequest));
+        if (offerPrice <= 0) return false;
+
+        int slotsBefore = Rs2GrandExchange.getAvailableSlotsCount();
+        boolean offered = Rs2GrandExchange.buyItem(buyRequest.itemName, (int) Math.min(Integer.MAX_VALUE, (long) (offerPrice)), buyRequest.quantity);
+        if (!offered) return false;
+
+        if (!sleepUntil(() ->
+                !Rs2GrandExchange.isOpen()
+                        || Rs2GrandExchange.isOfferScreenOpen()
+                        || Rs2GrandExchange.getAvailableSlotsCount() < slotsBefore, 2_000)) {
             return false;
         }
 
-        var requestBuilder = GrandExchangeRequest.builder()
-                .action(GrandExchangeAction.BUY)
-                .itemName(buyRequest.itemName)
-                .exact(true)
-                .quantity(buyRequest.quantity)
-                .closeAfterCompletion(false);
-
-        GrandExchangeRequest request = requestBuilder.price(offerPrice).build();
-
-        waitForGrandExchangeOfferInput();
-
-        boolean offered = Rs2GrandExchange.processOffer(request);
-
-        debug("GE requirement buy offer | item={} qty={} price={} offered={} slots={} coinsInv={}",
-                buyRequest.itemName,
-                buyRequest.quantity,
-                offerPrice,
-                offered,
-                Rs2GrandExchange.isOpen() ? Rs2GrandExchange.getAvailableSlotsCount() : -1,
-                Rs2Inventory.itemQuantity(COINS_ID));
-
-        if (!offered) {
-            return false;
+        if (!Rs2GrandExchange.isOpen()) return false;
+        if (Rs2GrandExchange.isOfferScreenOpen()) {
+            Rs2GrandExchange.backToOverview();
+            if (!sleepUntil(() ->
+                    Rs2GrandExchange.isOpen()
+                            && !Rs2GrandExchange.isOfferScreenOpen(), 2_000)) {
+                return false;
+            }
         }
 
         lastActionAtMs = System.currentTimeMillis();
         pendingRequirementBuys.remove(0);
         activeRequirementBuys.add(buyRequest);
-        sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2_000);
         return true;
     }
 
@@ -642,71 +577,49 @@ public class CooksScript extends Script {
 
         if (Rs2GrandExchange.isOpen()) {
             Rs2GrandExchange.closeExchange();
-            sleepUntil(() -> !Rs2GrandExchange.isOpen(), 2_000);
             return;
         }
 
         if (!Rs2Bank.isOpen()) {
-            if (!Rs2Bank.openBank() && !Rs2Bank.walkToBankAndUseBank()) {
-                status = "Walking to bank";
-                return;
-            }
-            sleepUntil(Rs2Bank::isOpen, 3_000);
+            if (!Rs2Bank.openBank()) Rs2Bank.walkToBankAndUseBank();
             return;
         }
 
-        if (!KspBankMode.ensureWithdrawAsItem()) {
-            debug("Waiting for withdraw-as-item mode before Cook's Assistant withdrawals");
-            return;
-        }
-
-        if (KspBankWidgetHelper.closeBankTutorialOverlayIfOpenAndWait()) {
-            return;
-        }
+        if (!KspBankMode.ensureWithdrawAsItem()
+                || KspBankWidgetHelper.closeBankTutorialOverlayIfOpen()) return;
 
         Rs2Bank.depositAllExcept(EGG, BUCKET_OF_MILK, POT_OF_FLOUR);
-        sleep(250, 450);
 
-        withdrawRequiredItem(Items.EGG);
-        withdrawRequiredItem(Items.BUCKET_OF_MILK);
-        withdrawRequiredItem(Items.POT_OF_FLOUR);
+        if (withdrawRequiredItem(Items.EGG)
+                || withdrawRequiredItem(Items.BUCKET_OF_MILK)
+                || withdrawRequiredItem(Items.POT_OF_FLOUR)) {
+            return;
+        }
 
         if (hasRequirementsInInventory()) {
             Rs2Bank.closeBank();
-            sleepUntil(() -> !Rs2Bank.isOpen(), 2_000);
             return;
         }
 
         status = "Missing Cook's Assistant requirements";
-        debug("Missing requirements | bankEgg={} bankMilk={} bankFlour={}",
-                Rs2Bank.count(EGG),
-                Rs2Bank.count(BUCKET_OF_MILK),
-                Rs2Bank.count(POT_OF_FLOUR));
     }
 
-    private void withdrawRequiredItem(Items item) {
-        if (Rs2Inventory.itemQuantity(item.getItemId()) > 0 || Rs2Bank.count(item.getDisplayName()) <= 0) {
-            return;
-        }
+    private boolean withdrawRequiredItem(Items item) {
+        if (Rs2Inventory.itemQuantity(item.getItemId()) > 0
+                || Rs2Bank.count(item.getDisplayName()) <= 0) return false;
 
-        Rs2Bank.withdrawX(item.getDisplayName(), 1);
-        sleepUntil(() -> Rs2Inventory.itemQuantity(item.getItemId()) > 0, 2_000);
+        return Rs2Bank.withdrawX(item.getDisplayName(), 1);
     }
 
     private boolean ensureAtCook() {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
         if (playerLocation != null && LUMBRIDGE_KITCHEN_AREA.contains(playerLocation)) {
-            KspWalkerGuard.clear(WALK_KEY_COOK);
+            Rs2Walker.clearWalkingRoute(WALK_KEY_COOK);
             return true;
         }
 
         status = "Walking to Lumbridge cook";
-        KspWalkerGuard.walkToDestination(
-                WALK_KEY_COOK,
-                () -> LUMBRIDGE_COOK_POINT,
-                LUMBRIDGE_KITCHEN_AREA::contains,
-                3,
-                WALK_REFIRE_COOLDOWN_MS);
+        Rs2Walker.walkUntil((LUMBRIDGE_COOK_POINT), 3, () -> LUMBRIDGE_KITCHEN_AREA.contains(Rs2Player.getWorldLocation()));
         return false;
     }
 
@@ -714,36 +627,52 @@ public class CooksScript extends Script {
         Rs2NpcModel cook = findNearestCook();
         if (cook == null) {
             status = "Searching for Cook";
-            KspWalkerGuard.walkFastCanvasToPoint(WALK_KEY_COOK, LUMBRIDGE_COOK_POINT, NPC_REACH_DISTANCE, WALK_REFIRE_COOLDOWN_MS);
+            Rs2Walker.walkTo(LUMBRIDGE_COOK_POINT, NPC_REACH_DISTANCE);
             return false;
         }
 
-        WorldPoint playerLocation = Rs2Player.getWorldLocation();
-        WorldPoint npcLocation = cook.getWorldLocation();
-        if (playerLocation == null || npcLocation == null) {
-            return false;
-        }
+        WorldPoint player = Rs2Player.getWorldLocation();
+        WorldPoint npc = cook.getWorldLocation();
+        if (player == null || npc == null) return false;
 
-        if (playerLocation.distanceTo(npcLocation) > NPC_REACH_DISTANCE) {
+        if (player.distanceTo(npc) > NPC_REACH_DISTANCE) {
             status = "Walking to Cook";
-            KspWalkerGuard.walkFastCanvasToPoint(WALK_KEY_COOK, npcLocation, NPC_REACH_DISTANCE, WALK_REFIRE_COOLDOWN_MS);
+            Rs2Walker.walkTo(npc, NPC_REACH_DISTANCE);
             return false;
         }
 
         status = "Talking to Cook";
+        if (isNpcInteractionPending(cook)) return false;
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) return false;
+
         boolean clicked = cook.click("Talk-to");
         if (clicked) {
-            KspWalkerGuard.clear(WALK_KEY_COOK);
-            sleepUntil(Rs2Dialogue::isInDialogue, 4_000);
+            pendingNpcInteractionAtMs = System.currentTimeMillis();
+            pendingNpcIndex = cook.getIndex();
+            Rs2Walker.clearWalkingRoute(WALK_KEY_COOK);
         }
         return clicked;
     }
 
+    private boolean isNpcInteractionPending(Rs2NpcModel npc) {
+        if (pendingNpcInteractionAtMs == 0L) return false;
+        if (isQuestDialogueActive()) {
+            pendingNpcInteractionAtMs = 0L;
+            pendingNpcIndex = -1;
+            return true;
+        }
+        if (npc != null && pendingNpcIndex != -1 && npc.getIndex() != pendingNpcIndex) return false;
+        if (Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting()) return true;
+        if (System.currentTimeMillis() - pendingNpcInteractionAtMs < NPC_INTERACTION_TIMEOUT_MS) return true;
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
+        return false;
+    }
+
     private Rs2NpcModel findNearestCook() {
-        return Microbot.getRs2NpcCache().query()
-                .fromWorldView()
-                .withName("Cook")
-                .nearestOnClientThread();
+        return KspLiveScene.nearestNpcModel(
+                Rs2Player.getWorldLocation(), 30,
+                npc -> "Cook".equalsIgnoreCase(npc.getName()));
     }
 
     private boolean hasRequirementsInInventory() {
@@ -774,38 +703,31 @@ public class CooksScript extends Script {
 
     @Override
     public void shutdown() {
-        KspWalkerGuard.clear(WALK_KEY_COOK);
-        KspWalkerGuard.clear(WALK_KEY_GE);
+        Rs2Walker.clearWalkingRoute(WALK_KEY_COOK);
+        Rs2Walker.clearWalkingRoute(WALK_KEY_GE);
         pendingRequirementBuys.clear();
         activeRequirementBuys.clear();
         requirementBankAudited = false;
         lastActionAtMs = 0L;
+        pendingNpcInteractionAtMs = 0L;
+        pendingNpcIndex = -1;
         state = CooksState.PREPARING;
         status = "Idle";
         super.shutdown();
     }
 
     private void returnToGrandExchangeOverview() {
-        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) {
-            return;
-        }
-
+        if (System.currentTimeMillis() - lastActionAtMs < ACTION_COOLDOWN_MS) return;
         Rs2GrandExchange.backToOverview();
         lastActionAtMs = System.currentTimeMillis();
-        sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 2_000);
     }
 
     private void waitForActionCooldown() {
-        long elapsed = System.currentTimeMillis() - lastActionAtMs;
-        long remaining = ACTION_COOLDOWN_MS - elapsed;
-
-        if (remaining > 0) {
-            sleep((int) remaining, (int) remaining + 150);
-        }
+        // Non-blocking: callers gate on lastActionAtMs.
     }
 
     private void waitForGrandExchangeOfferInput() {
-        sleep(GE_OFFER_INPUT_DELAY_MS, GE_OFFER_INPUT_DELAY_MS + 250);
+        // processOffer owns the GE input flow; observe state on the next tick.
     }
 
     private void debug(String message, Object... args) {

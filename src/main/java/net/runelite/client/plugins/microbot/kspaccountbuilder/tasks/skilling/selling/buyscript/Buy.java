@@ -49,8 +49,11 @@ public final class Buy
     public static final String THREAD_NAME = "Thread";
     public static final String NEEDLE_NAME = "Needle";
     public static final String GOLD_BAR_NAME = "Gold bar";
+    public static final String SILVER_BAR_NAME = "Silver bar";
     public static final String RING_MOULD_NAME = "Ring mould";
     public static final String NECKLACE_MOULD_NAME = "Necklace mould";
+    public static final String CHISEL_NAME = "Chisel";
+    public static final String TIARA_MOULD_NAME = "Tiara mould";
     public static final int TARGET_CRAFTING_LEVEL = 5;
     public static final int TARGET_CRAFTING_XP = 388;
     public static final double LEATHER_GLOVES_CRAFTING_XP = 13.75D;
@@ -72,9 +75,7 @@ public final class Buy
     public static final List<String> PICKAXE_NAME_LIST = Collections.unmodifiableList(Arrays.asList(PICKAXE_NAMES));
     public static final List<String> AXE_NAME_LIST = Collections.unmodifiableList(Arrays.asList(AXE_NAMES));
 
-    private Buy()
-    {
-    }
+    private Buy() {}
 
     public static String resolveDesiredPickaxeNameForBuy()
     {
@@ -90,22 +91,15 @@ public final class Buy
 
     public static String resolveDesiredPickaxeNameForGear()
     {
-        int miningLevel = Microbot.getClient().getRealSkillLevel(Skill.MINING);
-        int attackLevel = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
-        return PICKAXE_NAMES[Math.min(
-                MiningReq.bestForMiningLevel(miningLevel).ordinal(),
-                PickaxeEquip.bestForAttackLevel(attackLevel).ordinal()
-        )];
+        // Attack only governs whether a tool can be wielded, not its use
+        // from inventory. The selling/cleanup path must protect the same
+        // skilling-level tool that buying and the active task select.
+        return resolveDesiredPickaxeNameForBuy();
     }
 
     public static String resolveDesiredAxeNameForGear()
     {
-        int woodcuttingLevel = Microbot.getClient().getRealSkillLevel(Skill.WOODCUTTING);
-        int attackLevel = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
-        return AXE_NAMES[Math.min(
-                WoodCuttingReq.bestForWoodcuttingLevel(woodcuttingLevel).ordinal(),
-                AxeEquip.bestForAttackLevel(attackLevel).ordinal()
-        )];
+        return resolveDesiredAxeNameForBuy();
     }
 
     public static boolean hasAnyGeBuyRequirementMissing()
@@ -117,7 +111,19 @@ public final class Buy
                 || hasFishingBuyRequirementMissingInBank()
                 || isCraftingBuyMissingInBank()
                 || isJewelleryBuyMissingInBank()
+                || isGemCuttingSupplyMissing()
+                || isMeleeFoodBuyMissing()
                 || isSmithingOreBuyMissingAnywhere();
+    }
+
+    public static boolean isMeleeFoodBuyMissing()
+    {
+        int attackLevel = Microbot.getClient().getRealSkillLevel(Skill.ATTACK);
+        int strengthLevel = Microbot.getClient().getRealSkillLevel(Skill.STRENGTH);
+        int defenceLevel = Microbot.getClient().getRealSkillLevel(Skill.DEFENCE);
+        boolean trainingOnChickens = attackLevel < 15 || strengthLevel < 15 || defenceLevel < 15;
+
+        return !trainingOnChickens && getMeleeFoodCountAvailable() < MELEE_TARGET_FOOD_COUNT;
     }
 
     public static boolean hasFishingBuyRequirementMissingInBank()
@@ -146,11 +152,40 @@ public final class Buy
                 || Rs2Bank.count(NEEDLE_NAME) <= 0);
     }
 
+    /**
+     * Gem cutting becomes available at Crafting level 20. Replenishment is
+     * unnecessary while any supported uncut gem remains in inventory or bank.
+     * The GE buyer determines which unlocked gem is affordable and accounts
+     * for outstanding offers before submitting a purchase.
+     */
+    public static boolean isGemCuttingSupplyMissing()
+    {
+        if (Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) < 20)
+        {
+            return false;
+        }
+
+        int craftingLevel = Microbot.getClient().getRealSkillLevel(Skill.CRAFTING);
+
+        // Only gems for unlocked recipes can satisfy the Crafting supply
+        // requirement. For example, an uncut ruby at level 20 must not
+        // prevent purchasing sapphires that the account can actually cut.
+        return countItemAnywhere("Uncut sapphire") <= 0
+                && (craftingLevel < 27 || countItemAnywhere("Uncut emerald") <= 0)
+                && (craftingLevel < 34 || countItemAnywhere("Uncut ruby") <= 0)
+                && (craftingLevel < 43 || countItemAnywhere("Uncut diamond") <= 0);
+    }
+
     public static boolean isJewelleryBuyMissingInBank()
     {
         return Rs2Bank.count(GOLD_BAR_NAME) <= 0
+                || (Microbot.getClient() != null
+                    && Microbot.getClient().getRealSkillLevel(Skill.CRAFTING) >= 23
+                    && !hasNamedItemAnywhere(SILVER_BAR_NAME))
                 || Rs2Bank.count(RING_MOULD_NAME) <= 0
-                || Rs2Bank.count(NECKLACE_MOULD_NAME) <= 0;
+                || Rs2Bank.count(NECKLACE_MOULD_NAME) <= 0
+                || Rs2Bank.count(CHISEL_NAME) <= 0
+                || Rs2Bank.count(TIARA_MOULD_NAME) <= 0;
     }
 
     public static int getRequiredLeatherGlovesForCraftingTarget(int craftingLevel, int craftingXp)
@@ -202,15 +237,9 @@ public final class Buy
                 || Rs2Bank.count(itemName) > 0);
     }
 
-    public static boolean hasHammerAnywhere()
-    {
-        return hasItemIdInInventory(HAMMER_ITEM_ID) || hasItemIdInBank(HAMMER_ITEM_ID);
-    }
+    public static boolean hasHammerAnywhere() { return hasItemIdInInventory(HAMMER_ITEM_ID) || hasItemIdInBank(HAMMER_ITEM_ID); }
 
-    public static boolean hasTinderboxAnywhere()
-    {
-        return hasNamedItemAnywhere(TINDERBOX_NAME);
-    }
+    public static boolean hasTinderboxAnywhere() { return hasNamedItemAnywhere(TINDERBOX_NAME); }
 
     public static boolean hasItemIdInInventory(int itemId)
     {
@@ -224,20 +253,11 @@ public final class Buy
                 .anyMatch(item -> item != null && item.getId() == itemId);
     }
 
-    public static boolean isPickaxeName(String itemName)
-    {
-        return matchesAny(itemName, PICKAXE_NAMES);
-    }
+    public static boolean isPickaxeName(String itemName) { return matchesAny(itemName, PICKAXE_NAMES); }
 
-    public static boolean isAxeName(String itemName)
-    {
-        return matchesAny(itemName, AXE_NAMES);
-    }
+    public static boolean isAxeName(String itemName) { return matchesAny(itemName, AXE_NAMES); }
 
-    public static boolean isToolName(String itemName)
-    {
-        return isPickaxeName(itemName) || isAxeName(itemName);
-    }
+    public static boolean isToolName(String itemName) { return isPickaxeName(itemName) || isAxeName(itemName); }
 
     public static boolean isOutdatedToolName(String itemName, String desiredPickaxe, String desiredAxe)
     {
@@ -273,24 +293,126 @@ public final class Buy
     )
     {
         List<String> desired = new ArrayList<>();
-        addIfPresent(desired, getBestMeleeWeapon(attackLevel));
-        addIfPresent(desired, getBestMeleeArmour(defenceLevel, "full helm"));
-        addIfPresent(desired, getBestMeleeArmour(defenceLevel, "kiteshield"));
-        addIfPresent(desired, getBestMeleeArmour(defenceLevel, "platelegs"));
-        addIfPresent(desired, getBestMeleeBodyArmour(defenceLevel, dragonSlayerCompleted));
-        addIfPresent(desired, Amulet.AMULET_OF_POWER.getDisplayName());
-        addIfPresent(desired, Capes.TEAM_1_CAPE.getDisplayName());
-
         List<String> missing = new ArrayList<>();
-        for (String item : desired)
+
+        String availableWeapon = getBestAvailableMeleeWeapon(attackLevel, itemAvailable);
+        if (availableWeapon != null)
         {
-            if (itemAvailable == null || !itemAvailable.test(item))
-            {
-                missing.add(item);
-            }
+            desired.add(availableWeapon);
+        }
+        else
+        {
+            String requiredWeapon = getBestMeleeWeapon(attackLevel);
+            addIfPresent(desired, requiredWeapon);
+            addIfPresent(missing, requiredWeapon);
         }
 
+        addIfPresent(desired, getBestAvailableMeleeArmour(defenceLevel, "full helm", itemAvailable));
+
+        String shield = getBestAvailableMeleeArmour(defenceLevel, "kiteshield", itemAvailable);
+        if (shield == null && itemAvailable != null && itemAvailable.test("Wooden shield"))
+        {
+            shield = "Wooden shield";
+        }
+        addIfPresent(desired, shield);
+
+        addIfPresent(desired, getBestAvailableMeleeArmour(defenceLevel, "platelegs", itemAvailable));
+        addIfPresent(desired, getBestAvailableMeleeBodyArmour(
+                defenceLevel,
+                dragonSlayerCompleted,
+                itemAvailable));
+
+        String amulet = Amulet.AMULET_OF_POWER.getDisplayName();
+        if (itemAvailable == null || itemAvailable.test(amulet))
+        {
+            desired.add(amulet);
+        }
+
+        String cape = getBestAvailableCape(itemAvailable);
+        addIfPresent(desired, cape);
+
         return new MeleeGearPlan(desired, missing);
+    }
+
+    private static String getBestAvailableMeleeWeapon(int attackLevel, Predicate<String> itemAvailable)
+    {
+        if (itemAvailable == null)
+        {
+            return getBestMeleeWeapon(attackLevel);
+        }
+
+        return Arrays.stream(Weapons.values())
+                .filter(weapon -> attackLevel >= weapon.getRequiredAttackLevel())
+                .sorted(Comparator.comparingInt(Weapons::getRequiredAttackLevel)
+                        .thenComparingInt(Enum::ordinal)
+                        .reversed())
+                .map(Weapons::getDisplayName)
+                .filter(itemAvailable)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String getBestAvailableMeleeArmour(
+            int defenceLevel,
+            String marker,
+            Predicate<String> itemAvailable)
+    {
+        if (itemAvailable == null)
+        {
+            return getBestMeleeArmour(defenceLevel, marker);
+        }
+
+        return Arrays.stream(Armour.values())
+                .filter(armour -> defenceLevel >= armour.getRequiredDefenceLevel())
+                .filter(armour -> armour.getDisplayName().toLowerCase(Locale.ENGLISH).contains(marker))
+                .sorted(Comparator.comparingInt(Armour::getRequiredDefenceLevel)
+                        .thenComparingInt(Enum::ordinal)
+                        .reversed())
+                .map(Armour::getDisplayName)
+                .filter(itemAvailable)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String getBestAvailableMeleeBodyArmour(
+            int defenceLevel,
+            boolean dragonSlayerCompleted,
+            Predicate<String> itemAvailable)
+    {
+        if (itemAvailable == null)
+        {
+            return getBestMeleeBodyArmour(defenceLevel, dragonSlayerCompleted);
+        }
+
+        return Arrays.stream(Armour.values())
+                .filter(armour -> defenceLevel >= armour.getRequiredDefenceLevel())
+                .filter(armour -> {
+                    String name = armour.getDisplayName().toLowerCase(Locale.ENGLISH);
+                    return name.contains("platebody") || name.contains("chainbody");
+                })
+                .filter(armour -> dragonSlayerCompleted
+                        || armour != Armour.RUNE_PLATEBODY)
+                .sorted(Comparator.comparingInt(Armour::getRequiredDefenceLevel)
+                        .thenComparingInt(Enum::ordinal)
+                        .reversed())
+                .map(Armour::getDisplayName)
+                .filter(itemAvailable)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static String getBestAvailableCape(Predicate<String> itemAvailable)
+    {
+        if (itemAvailable == null)
+        {
+            return Capes.TEAM_1_CAPE.getDisplayName();
+        }
+
+        return Arrays.stream(Capes.values())
+                .map(Capes::getDisplayName)
+                .filter(itemAvailable)
+                .findFirst()
+                .orElse(null);
     }
 
     public static String getBestMeleeWeapon(int attackLevel)
@@ -330,7 +452,7 @@ public final class Buy
 
     public static Food getBestMeleeFoodInInventory()
     {
-        return Arrays.stream(Food.values())
+        return Arrays.stream(new Food[]{Food.TROUT, Food.SALMON})
                 .filter(food -> Rs2Inventory.itemQuantity(food.getItemId()) > 0)
                 .max(Comparator.comparingInt(Food::getHealAmount))
                 .orElse(null);
@@ -338,7 +460,7 @@ public final class Buy
 
     public static Food getBestMeleeFoodAvailableInBank()
     {
-        return Arrays.stream(Food.values())
+        return Arrays.stream(new Food[]{Food.TROUT, Food.SALMON})
                 .filter(food -> Rs2Bank.count(food.getItemId()) > 0)
                 .max(Comparator.comparingInt(Food::getHealAmount))
                 .orElse(null);
@@ -353,9 +475,16 @@ public final class Buy
 
     public static int getMeleeFoodCountInInventory()
     {
-        return Arrays.stream(Food.values())
+        return Arrays.stream(new Food[]{Food.TROUT, Food.SALMON})
                 .mapToInt(food -> Rs2Inventory.itemQuantity(food.getItemId()))
                 .sum();
+    }
+
+    public static int getMeleeFoodCountAvailable()
+    {
+        return getMeleeFoodCountInInventory()
+                + Math.max(0, Rs2Bank.count(Food.TROUT.getItemId()))
+                + Math.max(0, Rs2Bank.count(Food.SALMON.getItemId()));
     }
 
     private static void addIfPresent(List<String> items, String itemName)
@@ -395,14 +524,8 @@ public final class Buy
             this.missingItems = Collections.unmodifiableList(new ArrayList<>(missingItems));
         }
 
-        public List<String> getDesiredItems()
-        {
-            return desiredItems;
-        }
+        public List<String> getDesiredItems() { return desiredItems; }
 
-        public List<String> getMissingItems()
-        {
-            return missingItems;
-        }
+        public List<String> getMissingItems() { return missingItems; }
     }
 }

@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.kspaccountbuilder.util.autologin;
 
-import lombok.Getter;
+import net.runelite.client.plugins.microbot.kspaccountbuilder.KspManagedScript;
+
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
@@ -21,15 +22,13 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
 @Singleton
 @Slf4j
-public class AutoLoginScript extends Script
+public class AutoLoginScript extends KspManagedScript
 {
-    private static final int LOOP_DELAY_MS = 600;
+    private static final int LOOP_DELAY_MS = 250;
     private static final int WELCOME_PLAY_CLICK_COOLDOWN_MS = 2_500;
     private static final int LOGIN_ATTEMPT_COOLDOWN_MS = 10_000;
-    private static final int POST_LOGIN_SETTLE_MS = 4_000;
     private static final BooleanSupplier ALWAYS_ALLOWED = () -> true;
 
-    @Getter
     private LoginState state = LoginState.IDLE;
 
     private volatile boolean active;
@@ -37,17 +36,12 @@ public class AutoLoginScript extends Script
     private long lastWelcomePlayClickAtMillis;
     private long lastLoginAttemptAtMillis;
     private long lastLoginScreenDebugAtMillis;
-    private long loggedInAtMillis;
 
-    public void setDebugLogging(boolean debugLogging)
-    {
-        this.debugLogging = debugLogging;
-    }
+    public LoginState getState() { return state; }
 
-    public boolean run()
-    {
-        return run(ALWAYS_ALLOWED);
-    }
+    public void setDebugLogging(boolean debugLogging) { this.debugLogging = debugLogging; }
+
+    public boolean run() { return run(ALWAYS_ALLOWED); }
 
     public boolean run(BooleanSupplier kspLoginAllowed)
     {
@@ -57,14 +51,13 @@ public class AutoLoginScript extends Script
         lastWelcomePlayClickAtMillis = 0L;
         lastLoginAttemptAtMillis = 0L;
         lastLoginScreenDebugAtMillis = 0L;
-        loggedInAtMillis = 0L;
 
         BooleanSupplier loginAllowed = kspLoginAllowed == null ? ALWAYS_ALLOWED : kspLoginAllowed;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() ->
         {
             try
             {
-                if (!active || Thread.currentThread().isInterrupted())
+                if (!active || net.runelite.client.plugins.microbot.kspaccountbuilder.KspAccountBuilderPauseGate.isPaused() || Thread.currentThread().isInterrupted())
                 {
                     return;
                 }
@@ -93,6 +86,12 @@ public class AutoLoginScript extends Script
         if (client == null)
         {
             transitionTo(LoginState.NO_CLIENT);
+            return;
+        }
+
+        if (Microbot.isLoggedIn())
+        {
+            handleLoggedInState();
             return;
         }
 
@@ -132,12 +131,6 @@ public class AutoLoginScript extends Script
             return;
         }
 
-        if (Microbot.isLoggedIn())
-        {
-            handleLoggedInState();
-            return;
-        }
-
         GameState gameState = client.getGameState();
         if (gameState == GameState.LOGIN_SCREEN || gameState == GameState.LOGIN_SCREEN_AUTHENTICATOR || gameState == GameState.LOGGING_IN)
         {
@@ -151,23 +144,45 @@ public class AutoLoginScript extends Script
 
     private void handleLoggedInState()
     {
-        if (loggedInAtMillis == 0L)
+        transitionTo(LoginState.LOGGED_IN);
+
+        if (isPlayButtonVisible())
         {
-            loggedInAtMillis = System.currentTimeMillis();
-            transitionTo(LoginState.LOGGED_IN);
-            debug("logged in detected; waiting for welcome screen to settle before stopping helper");
             return;
         }
 
-        if (System.currentTimeMillis() - loggedInAtMillis < POST_LOGIN_SETTLE_MS)
+        if (!isLoggedInSceneReady())
         {
-            transitionTo(LoginState.LOGGED_IN);
+            debug("logged in detected; waiting for local player/world location before handoff");
             return;
         }
 
-        if (!isPlayButtonVisible())
+        stopAfterLoginComplete();
+    }
+
+    private boolean isLoggedInSceneReady()
+    {
+        if (!Microbot.isLoggedIn() || Microbot.getClientThread() == null)
         {
-            stopAfterLoginComplete();
+            return false;
+        }
+
+        try
+        {
+            return Microbot.getClientThread()
+                    .runOnClientThreadOptional(() ->
+                    {
+                        Client client = Microbot.getClient();
+                        return client != null
+                                && client.getLocalPlayer() != null
+                                && client.getLocalPlayer().getWorldLocation() != null;
+                    })
+                    .orElse(false);
+        }
+        catch (Exception ex)
+        {
+            debug("logged-in scene readiness check failed: {}", ex.getMessage());
+            return false;
         }
     }
 
@@ -179,7 +194,6 @@ public class AutoLoginScript extends Script
         lastWelcomePlayClickAtMillis = 0L;
         lastLoginAttemptAtMillis = 0L;
         lastLoginScreenDebugAtMillis = 0L;
-        loggedInAtMillis = 0L;
 
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone())
         {
@@ -199,7 +213,18 @@ public class AutoLoginScript extends Script
 
     public boolean isActive()
     {
-        return active || isRunning();
+        if (!active)
+        {
+            return false;
+        }
+
+        if (isLoggedInSceneReady())
+        {
+            stopAfterLoginComplete();
+            return false;
+        }
+
+        return true;
     }
 
     private void handleLoginScreenWithLoginManager(Client client)
@@ -396,7 +421,6 @@ public class AutoLoginScript extends Script
         lastWelcomePlayClickAtMillis = 0L;
         lastLoginAttemptAtMillis = 0L;
         lastLoginScreenDebugAtMillis = 0L;
-        loggedInAtMillis = 0L;
         super.shutdown();
         if (wasActive)
         {
