@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.qualityoflife;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Player;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.Rs2InventorySetup;
@@ -15,7 +16,6 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
 import java.awt.*;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -194,10 +194,13 @@ public class QoLScript extends Script {
             return;
         }
 
-        for (NewMenuEntry menuEntry : QoLPlugin.bankMenuEntries) {
-            processBankMenuEntry(menuEntry);
+        try {
+            for (NewMenuEntry menuEntry : QoLPlugin.bankMenuEntries) {
+                processBankMenuEntry(menuEntry);
+            }
+        } finally {
+            QoLPlugin.executeBankActions = false;
         }
-        QoLPlugin.executeBankActions = false;
     }
 
     private boolean openBank() {
@@ -225,7 +228,7 @@ public class QoLScript extends Script {
                 }
             }
         }
-        Microbot.doInvoke(menuEntry, Objects.requireNonNull(menuEntry.getWidget()).getBounds());
+        Microbot.doInvoke(menuEntry, invokeBounds(menuEntry));
         //Rs2Random.wait(200, 500);
     }
 
@@ -248,10 +251,13 @@ public class QoLScript extends Script {
             return;
         }
 
-        for (NewMenuEntry menuEntry : QoLPlugin.furnaceMenuEntries) {
-            processFurnaceMenuEntry(menuEntry);
+        try {
+            for (NewMenuEntry menuEntry : QoLPlugin.furnaceMenuEntries) {
+                processFurnaceMenuEntry(menuEntry);
+            }
+        } finally {
+            QoLPlugin.executeFurnaceActions = false;
         }
-        QoLPlugin.executeFurnaceActions = false;
     }
 
     private boolean openFurnace() {
@@ -267,7 +273,7 @@ public class QoLScript extends Script {
 
     private void processFurnaceMenuEntry(NewMenuEntry menuEntry) {
         log.info("Executing action: {} {}", menuEntry.getOption(), menuEntry.getTarget());
-        Microbot.doInvoke(menuEntry, Objects.requireNonNull(menuEntry.getWidget()).getBounds());
+        Microbot.doInvoke(menuEntry, invokeBounds(menuEntry));
         Rs2Random.wait(200, 500);
     }
 
@@ -278,16 +284,24 @@ public class QoLScript extends Script {
             return;
         }
 
-        for (NewMenuEntry menuEntry : QoLPlugin.anvilMenuEntries) {
-            processAnvilMenuEntry(menuEntry);
+        try {
+            for (NewMenuEntry menuEntry : QoLPlugin.anvilMenuEntries) {
+                processAnvilMenuEntry(menuEntry);
+            }
+        } finally {
+            QoLPlugin.executeAnvilActions = false;
         }
-        QoLPlugin.executeAnvilActions = false;
     }
 
     private void processAnvilMenuEntry(NewMenuEntry menuEntry) {
         log.info("Executing action: {} {}", menuEntry.getOption(), menuEntry.getTarget());
-        Microbot.doInvoke(menuEntry, Objects.requireNonNull(menuEntry.getWidget()).getBounds());
+        Microbot.doInvoke(menuEntry, invokeBounds(menuEntry));
         Rs2Random.wait(200, 500);
+    }
+
+    static Rectangle invokeBounds(NewMenuEntry menuEntry) {
+        Widget widget = menuEntry.getWidget();
+        return widget != null ? widget.getBounds() : new Rectangle(1, 1);
     }
 
     // reset all stored menu entries

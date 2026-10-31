@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.microbot.api.tileobject.models.TileObjectType;
 import net.runelite.client.plugins.microbot.Rs2Leprechaun;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.farmtreerun.enums.CompostType;
@@ -17,7 +19,6 @@ import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
@@ -42,7 +43,6 @@ public class FarmTreeRunScript extends Script {
     public static net.runelite.client.plugins.microbot.farmtreerun.enums.FarmTreeRunState botStatus;
     public static boolean test = false;
     public static Integer compostItemId = null;
-    private List<FarmingItem> items = new ArrayList<>();
     private final FarmTreeRunPlugin plugin;
     private final FarmTreeRunConfig config;
 
@@ -558,7 +558,7 @@ public class FarmTreeRunScript extends Script {
     }
 
     private void bank(FarmTreeRunConfig config) {
-        items.clear();
+        List<FarmingItem> items = new ArrayList<>();
         if (Rs2Bank.openBank() || Rs2Bank.walkToBank()) {
             sleepUntil(Rs2Bank::isOpen, 5000);
             if (!Rs2Bank.isOpen())
@@ -704,11 +704,11 @@ public class FarmTreeRunScript extends Script {
             }
 
             if (config.travelTablets()) {
-                addAvailableTravelItem(net.runelite.api.ItemID.VARROCK_TELEPORT, 2);
-                addAvailableTravelItem(net.runelite.api.ItemID.LUMBRIDGE_TELEPORT, 1);
-                addAvailableTravelItem(net.runelite.api.ItemID.FALADOR_TELEPORT, 2);
-                addAvailableTravelItem(net.runelite.api.ItemID.CAMELOT_TELEPORT, 1);
-                if (!config.preferHouseTravel()) addAvailableTravelItem(net.runelite.api.ItemID.TELEPORT_TO_HOUSE, 3);
+                addAvailableTravelItem(items, net.runelite.api.ItemID.VARROCK_TELEPORT, 2);
+                addAvailableTravelItem(items, net.runelite.api.ItemID.LUMBRIDGE_TELEPORT, 1);
+                addAvailableTravelItem(items, net.runelite.api.ItemID.FALADOR_TELEPORT, 2);
+                addAvailableTravelItem(items, net.runelite.api.ItemID.CAMELOT_TELEPORT, 1);
+                if (!config.preferHouseTravel()) addAvailableTravelItem(items, net.runelite.api.ItemID.TELEPORT_TO_HOUSE, 3);
             } else {
             items.add(new FarmingItem(ItemID.LAW_RUNE, 10));
             items.add(new FarmingItem(ItemID.FIRE_RUNE, 30));
@@ -717,31 +717,25 @@ public class FarmTreeRunScript extends Script {
             items.add(new FarmingItem(ItemID.WATER_RUNE, 30));
             }
             if (config.travelKourendBook()) {
-                addFirstTravelItem(net.runelite.api.ItemID.BOOK_OF_THE_DEAD, net.runelite.api.ItemID.KHAREDSTS_MEMOIRS);
+                addFirstTravelItem(items, net.runelite.api.ItemID.BOOK_OF_THE_DEAD, net.runelite.api.ItemID.KHAREDSTS_MEMOIRS);
             }
             if (config.preferHouseTravel()) {
                 items.add(new FarmingItem(net.runelite.api.ItemID.TELEPORT_TO_HOUSE, 10));
             }
             if (config.travelQuetzal()) {
-                addFirstTravelItem(net.runelite.api.ItemID.PERFECTED_QUETZAL_WHISTLEI,
+                addFirstTravelItem(items, net.runelite.api.ItemID.PERFECTED_QUETZAL_WHISTLEI,
                         net.runelite.api.ItemID.PERFECTED_QUETZAL_WHISTLE,
                         net.runelite.api.ItemID.ENHANCED_QUETZAL_WHISTLE,
                         net.runelite.api.ItemID.BASIC_QUETZAL_WHISTLE);
             }
             if (config.travelFairyStaff()) {
-                addFirstTravelItem(net.runelite.api.ItemID.DRAMEN_STAFF, net.runelite.api.ItemID.LUNAR_STAFF);
+                addFirstTravelItem(items, net.runelite.api.ItemID.DRAMEN_STAFF, net.runelite.api.ItemID.LUNAR_STAFF);
             }
 
 //              TODO: Need to handle what happens if a required item does not exist
 
             // Merge entries with the same itemId + noted flag so withdrawal doesn't under-count
-            Map<Long, FarmingItem> merged = new LinkedHashMap<>();
-            for (FarmingItem item : items) {
-                long key = ((long) item.getItemId() << 1) | (item.isNoted() ? 1 : 0);
-                merged.merge(key, item, (a, b) ->
-                    new FarmingItem(a.getItemId(), a.getQuantity() + b.getQuantity(), a.isNoted(), a.isOptional()));
-            }
-            items = new ArrayList<>(merged.values());
+            items = mergeItems(items);
 
             // Deposit only what we don't need: keep desired ids and their noted variants
             Set<Integer> keepIds = new HashSet<>();
@@ -824,16 +818,26 @@ public class FarmTreeRunScript extends Script {
         }
     }
 
-    private void addAvailableTravelItem(int id, int quantity) {
+    static List<FarmingItem> mergeItems(List<FarmingItem> items) {
+        Map<Long, FarmingItem> merged = new LinkedHashMap<>();
+        for (FarmingItem item : items) {
+            long key = ((long) item.getItemId() << 1) | (item.isNoted() ? 1 : 0);
+            merged.merge(key, item, (a, b) ->
+                new FarmingItem(a.getItemId(), a.getQuantity() + b.getQuantity(), a.isNoted(), a.isOptional()));
+        }
+        return new ArrayList<>(merged.values());
+    }
+
+    private void addAvailableTravelItem(List<FarmingItem> items, int id, int quantity) {
         int available = Rs2Inventory.itemQuantity(id) + Rs2Bank.count(id);
         if (available > 0) items.add(new FarmingItem(id, Math.min(quantity, available), false, true));
     }
 
-    private void addFirstTravelItem(int... ids) {
+    private void addFirstTravelItem(List<FarmingItem> items, int... ids) {
         for (int id : ids) {
             if (Rs2Equipment.isWearing(id)) return;
             if (Rs2Inventory.hasItem(id) || Rs2Bank.hasItem(id)) {
-                addAvailableTravelItem(id, 1);
+                addAvailableTravelItem(items, id, 1);
                 return;
             }
         }
@@ -843,14 +847,18 @@ public class FarmTreeRunScript extends Script {
     private boolean handlePatch(FarmTreeRunConfig config, Patch patch) {
         if (!canContinueInteraction()) return false;
         String[] possibleActions = {"Check", "Chop", "Pick", "Rake", "Clear", "Inspect"};
-        GameObject treePatch = null;
+        Rs2TileObjectModel treePatch = null;
         String foundAction = null;
         String exactAction = null;
 
         // Loop through the possible actions and try to find the tree patch with any valid action
         for (String action : possibleActions) {
             if (!canContinueInteraction()) return false;
-            treePatch = Rs2GameObject.findObjectByImposter(patch.getId(), action, false);  // Find object by patchId and action
+            treePatch = Microbot.getRs2TileObjectCache().query()  // Find object by patchId and action
+                    .ofType(TileObjectType.GAME)
+                    .withId(patch.getId())
+                    .withActionContains(action)
+                    .nearest();
             if (treePatch != null) {
                 foundAction = action;
                 if (!foundAction.contains("Inspect")) {
@@ -865,7 +873,11 @@ public class FarmTreeRunScript extends Script {
 
         // Gagex named actions differently, sometimes it's Pick-fruit and sometimes Pick-banana.
         // Also seen "Chop down" and "Chop-down".
-        List<String> exactTreeActions = Arrays.stream(Rs2GameObject.findObjectComposition(treePatch.getId()).getActions()).collect(Collectors.toList());
+        ObjectComposition treeComposition = visibleComposition(treePatch.getId());
+        if (treeComposition == null || treeComposition.getActions() == null) {
+            return false;
+        }
+        List<String> exactTreeActions = Arrays.stream(treeComposition.getActions()).collect(Collectors.toList());
         for (String action : exactTreeActions) {
             if (action == null)
                 continue;
@@ -951,13 +963,13 @@ public class FarmTreeRunScript extends Script {
      * @return {@code true} if payment was successful, else {@code false}
      */
     private boolean handlePayment(FarmTreeRunConfig config, Patch patch, PaymentKind action) {
-        if (isTreePatch(patch) && !isPatchEmpty(patch) && !shouldProtectTree(config) && action != PaymentKind.CLEAR)
+        if (isTreePatch(patch) && !shouldProtectTree(config) && action != PaymentKind.CLEAR)
             return true;
 
-        if (isFruitTreePatch(patch) && !isPatchEmpty(patch) && !shouldProtectFruitTree(config) && action != PaymentKind.CLEAR)
+        if (isFruitTreePatch(patch) && !shouldProtectFruitTree(config) && action != PaymentKind.CLEAR)
             return true;
 
-        if (isHardTreePatch(patch) && !isPatchEmpty(patch) && !shouldProtectHardTree(config) && action != PaymentKind.CLEAR)
+        if (isHardTreePatch(patch) && !shouldProtectHardTree(config) && action != PaymentKind.CLEAR)
             return true;
 
         int paymentId = isHardTreePatch(patch) ? config.selectedHardTree().getPaymentId()
@@ -996,7 +1008,7 @@ public class FarmTreeRunScript extends Script {
         return false;
     }
 
-    private boolean handlePlantingTree(GameObject treePatch, Patch patch, FarmTreeRunConfig config) {
+    private boolean handlePlantingTree(Rs2TileObjectModel treePatch, Patch patch, FarmTreeRunConfig config) {
         // Skip if patch is not empty
         if (!isPatchEmpty(patch))
             return true;
@@ -1019,7 +1031,7 @@ public class FarmTreeRunScript extends Script {
             }
         }
 
-        if (!Rs2GameObject.hasAction(Rs2GameObject.findObjectComposition(patch.id), "Rake")) {
+        if (!hasAction(patch.id, "Rake")) {
             Rs2Inventory.useItemOnObject(saplingToUse, treePatch.getId());
             sleepUntil(() -> !isPatchEmpty(patch), 5000);
             return !isPatchEmpty(patch);
@@ -1028,27 +1040,27 @@ public class FarmTreeRunScript extends Script {
         return false;
     }
 
-    private void handlePickingFruit(GameObject fruitTreePatch, Patch patch, String exactAction) {
+    private void handlePickingFruit(Rs2TileObjectModel fruitTreePatch, Patch patch, String exactAction) {
         System.out.println("Picking fruit...");
-        if (!Rs2GameObject.interact(fruitTreePatch, exactAction)) return;
+        if (!fruitTreePatch.click(exactAction)) return;
         // Wait for the picking to complete (player stops animating and patch no longer has the "Pick" action)
-        sleepUntil(() -> !Rs2GameObject.hasAction(Rs2GameObject.findObjectComposition(fruitTreePatch.getId()), exactAction), 12000);
+        sleepUntil(() -> !hasAction(fruitTreePatch.getId(), exactAction), 12000);
         handleNotingFruit(patch);
     }
 
-    private void handleCheckHealth(GameObject treePatch) {
+    private void handleCheckHealth(Rs2TileObjectModel treePatch) {
         System.out.println("Checking health...");
 
         // Rake the patch
-        if (!Rs2GameObject.interact(treePatch, "Check-health")) return;
-        sleepUntil(() -> !Rs2GameObject.hasAction(Rs2GameObject.findObjectComposition(treePatch.getId()), "Check-health"), 5000);
+        if (!treePatch.click("Check-health")) return;
+        sleepUntil(() -> !hasAction(treePatch.getId(), "Check-health"), 5000);
     }
 
-    private void handleRakeAction(GameObject treePatch) {
+    private void handleRakeAction(Rs2TileObjectModel treePatch) {
         System.out.println("Raking the patch...");
 
-        if (!Rs2GameObject.interact(treePatch, "Rake")) return;
-        sleepUntil(() -> !Rs2GameObject.hasAction(Rs2GameObject.findObjectComposition(treePatch.getId()), "Rake"), 30000);
+        if (!treePatch.click("Rake")) return;
+        sleepUntil(() -> !hasAction(treePatch.getId(), "Rake"), 30000);
         sleep(400, 1200);
         if (Rs2Inventory.hasItem(ItemID.WEEDS)) {
             Rs2Inventory.dropAll(ItemID.WEEDS);
@@ -1056,15 +1068,15 @@ public class FarmTreeRunScript extends Script {
         }
     }
 
-    private void handleClearAction(GameObject treePatch) {
+    private void handleClearAction(Rs2TileObjectModel treePatch) {
         System.out.println("Clearing dead tree...");
 
-        boolean interactionSuccess = Rs2GameObject.interact(treePatch, "clear");
+        boolean interactionSuccess = treePatch.click("Clear");
         if (!interactionSuccess) {
             System.out.println("Failed to interact with the tree patch to clear it.");
             return;
         }
-        sleepUntil(() -> !Rs2GameObject.hasAction(Rs2GameObject.findObjectComposition(treePatch.getId()), "Clear"), 6000);
+        sleepUntil(() -> !hasAction(treePatch.getId(), "Clear"), 6000);
     }
 
     private void equipGraceful() {
@@ -1204,8 +1216,26 @@ public class FarmTreeRunScript extends Script {
     }
 
     private boolean isPatchEmpty(Patch patch) {
-        String name = Rs2GameObject.getObjectComposition(patch.getId()).getName().toLowerCase();
-        return name.endsWith("patch");
+        return isEmptyPatchComposition(visibleComposition(patch.getId()));
+    }
+
+    private static ObjectComposition visibleComposition(int objectId) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            ObjectComposition composition = Microbot.getClient().getObjectDefinition(objectId);
+            if (composition == null) return null;
+            return composition.getImpostorIds() == null ? composition : composition.getImpostor();
+        }).orElse(null);
+    }
+
+    private static boolean hasAction(int objectId, String action) {
+        ObjectComposition composition = visibleComposition(objectId);
+        if (composition == null || composition.getActions() == null) return false;
+        return Arrays.stream(composition.getActions()).anyMatch(a -> a != null && a.equalsIgnoreCase(action));
+    }
+
+    static boolean isEmptyPatchComposition(ObjectComposition composition) {
+        if (composition == null || composition.getName() == null) return true;
+        return composition.getName().toLowerCase().endsWith("patch");
     }
 
     private Integer getLinkedId(int id) {
@@ -1271,7 +1301,6 @@ public class FarmTreeRunScript extends Script {
     @Override
     public void shutdown() {
         if(isRunning()) {
-            items.clear();
             super.shutdown();
             Microbot.stopPlugin(plugin);
         }

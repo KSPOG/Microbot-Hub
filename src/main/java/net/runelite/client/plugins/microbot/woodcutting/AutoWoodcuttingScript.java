@@ -16,7 +16,6 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.grounditem.LootingParameters;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.plugins.microbot.util.inventory.InteractOrder;
@@ -157,10 +156,7 @@ public class AutoWoodcuttingScript extends Script {
             String chopAction = treeType.getAction();
             tree = rs2TileObjectCache.query()
                     .where(x -> patchIds.contains(x.getId()))
-                    .where(x -> {
-                        var composition = x.getObjectComposition();
-                        return composition != null && Rs2GameObject.hasAction(composition, chopAction);
-                    })
+                    .where(x -> x.hasAction(chopAction))
                     .nearest();
         } else {
             tree = rs2TileObjectCache.query().within(getInitialPlayerLocation(), config.distanceToStray()).withName(treeType.getName()).nearestOnClientThread();
@@ -257,7 +253,7 @@ public class AutoWoodcuttingScript extends Script {
 
         updateActiveTree(config);
 
-        if (config.progressiveMode() && ensureProgressiveLocation(config)) {
+        if (shouldEnsureProgressiveLocation(config) && ensureProgressiveLocation(config)) {
             return true;
         }
 
@@ -320,6 +316,10 @@ public class AutoWoodcuttingScript extends Script {
                 }
                 break;
         }
+    }
+
+    boolean shouldEnsureProgressiveLocation(AutoWoodcuttingConfig config) {
+        return config.progressiveMode() && woodcuttingScriptState == WoodcuttingScriptState.WOODCUTTING;
     }
 
     private boolean ensureProgressiveLocation(AutoWoodcuttingConfig config) {
@@ -495,8 +495,15 @@ public class AutoWoodcuttingScript extends Script {
     }
 
     private void walkBack(AutoWoodcuttingConfig config) {
-        Rs2Walker.walkTo(new WorldPoint(getReturnPoint(config).getX() - Rs2Random.between(-1, 1), getReturnPoint(config).getY() - Rs2Random.between(-1, 1), getReturnPoint(config).getPlane()));
-        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(getReturnPoint(config)) <= 4);
+        WorldPoint target = getReturnPoint(config);
+        if (target == null) {
+            return;
+        }
+        Rs2Walker.walkTo(new WorldPoint(target.getX() - Rs2Random.between(-1, 1), target.getY() - Rs2Random.between(-1, 1), target.getPlane()));
+        sleepUntil(() -> {
+            WorldPoint playerLocation = Rs2Player.getWorldLocation();
+            return playerLocation != null && playerLocation.distanceTo(target) <= 4;
+        });
     }
     
     /**

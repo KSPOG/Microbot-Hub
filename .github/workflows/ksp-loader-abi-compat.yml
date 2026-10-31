@@ -1,0 +1,82 @@
+name: KSP Source Loader ABI Compatibility
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/main/java/net/runelite/client/plugins/microbot/loader/**'
+      - '.github/workflows/ksp-loader-abi-compat.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/main/java/net/runelite/client/plugins/microbot/loader/**'
+      - '.github/workflows/ksp-loader-abi-compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  loader-compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+          cache: gradle
+      - name: Validate safe stop and hot reload invariants
+        shell: python
+        run: |
+          from pathlib import Path
+          source = Path('src/main/java/net/runelite/client/plugins/microbot/loader/KspSourceLoaderPlugin.java').read_text()
+          stop = source.split('private void stop(Plugin plugin)', 1)[1].split('private void prepareUnload', 1)[0]
+          unload = source.split('private void unload(LoadedUnit unit)', 1)[1].split('private Set<String> activeKeys', 1)[0]
+          refresh = source.split('private boolean refreshUnit(RemoteUnit remote)', 1)[1].split('private Path build(', 1)[0]
+          assert 'getMethod("stopPlugin", Plugin.class)' in stop
+          assert 'method.invoke(manager, plugin)' in stop
+          assert 'manager.stopPlugin(plugin)' not in stop
+          assert 'manager.isActive(plugin)' in stop
+          assert stop.index('method.invoke(manager, plugin)') < stop.index('manager.setPluginEnabled(plugin, false);', stop.index('method.invoke(manager, plugin)'))
+          assert 'throws Exception' in source.split('private void unload(LoadedUnit unit)', 1)[1][:35]
+          assert 'Refusing to unload active plugin' in unload
+          assert 'close(unit.loader);' in unload
+          assert unload.index('Refusing to unload active plugin') < unload.index('close(unit.loader);')
+          assert 'seen.remove(remote.key, remote.fingerprint);' in refresh
+          assert 'old runtime retained; stop failed' in refresh
+          assert 'return false;' in refresh
+          cfg = Path('src/main/java/net/runelite/client/plugins/microbot/loader/KspSourceLoaderConfig.java').read_text()
+          assert 'enum SourceBranch' in cfg and 'MAIN' in cfg and 'DEV' in cfg
+          assert 'BRANCH_KEY = "sourceBranch"' in cfg
+          assert 'getConfig(KspSourceLoaderConfig.class).sourceBranch()' in source
+          assert 'REFRESH_KEY.equals(event.getKey())' in source
+          assert 'BRANCH_KEY.equals(event.getKey())' in source
+          assert 'String branch = selection == KspSourceLoaderConfig.SourceBranch.DEV' in source
+          print('PASS: ABI-compatible stop, safe unload, retry, and Main/Dev branch selector')
+      - name: Compile KSP Source Loader against current Microbot API
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build -PpluginList=KspSourceLoaderPlugin --no-daemon --stacktrace -x test
+      - name: Verify packaged bytecode has no statically linked stopPlugin descriptor
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR=$(find build/libs -maxdepth 1 -type f -name 'KspSourceLoaderPlugin-*.jar' -print -quit)
+          test -n "$JAR"
+          jar tf "$JAR" | grep -q 'net/runelite/client/plugins/microbot/loader/KspSourceLoaderPlugin.class'
+          javap -p -c -classpath "$JAR" net.runelite.client.plugins.microbot.loader.KspSourceLoaderPlugin > /tmp/ksp-loader-bytecode.txt
+          if grep -E 'Method net/runelite/client/plugins/PluginManager.stopPlugin:' /tmp/ksp-loader-bytecode.txt; then
+            echo 'Unexpected statically linked PluginManager.stopPlugin()' >&2
+            exit 1
+          fi
+          grep -q 'java/lang/reflect/Method.invoke:' /tmp/ksp-loader-bytecode.txt
+          echo 'PASS: packaged loader uses return-ABI independent reflection'
+      - name: Upload compatible loader JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: KspSourceLoaderPlugin-ABI-Compat
+          path: build/libs/KspSourceLoaderPlugin-*.jar
+          if-no-files-found: error
+          retention-days: 14

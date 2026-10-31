@@ -5,9 +5,12 @@ import net.runelite.api.NPC;
 import net.runelite.api.Perspective;
 import net.runelite.api.TileObject;
 import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.microbot.api.tileobject.models.TileObjectType;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -16,6 +19,7 @@ import net.runelite.client.ui.overlay.outline.ModelOutlineRenderer;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.util.Comparator;
 
 import static net.runelite.client.ui.overlay.OverlayUtil.renderPolygon;
 
@@ -48,17 +52,19 @@ public class PVirewatchKillerOverlay extends Overlay {
     @Override
     public Dimension render(Graphics2D graphics) {
 
-        alterStatue = Rs2GameObject.findObjectById(39234);
+        Rs2TileObjectModel statue = nearestObject(o -> o.getId() == 39234);
+        alterStatue = statue != null ? statue.getTileObject() : null;
 
         if (alterStatue != null && !config.disableStatueOutline()) {
             renderOutline(alterStatue);
             renderOutline(graphics, alterStatue);
         }
 
-        if (plugin.fightArea != null && !config.disableFightArea()) {
-            for (int x = plugin.fightArea.getX(); x < plugin.fightArea.getX() + plugin.fightArea.getWidth(); x++) {
-                for (int y = plugin.fightArea.getY(); y < plugin.fightArea.getY() + plugin.fightArea.getHeight(); y++) {
-                    WorldPoint worldPoint = new WorldPoint(x, y, plugin.fightArea.getPlane());
+        WorldArea fightArea = plugin.fightArea;
+        if (fightArea != null && !config.disableFightArea()) {
+            for (int x = fightArea.getX(); x < fightArea.getX() + fightArea.getWidth(); x++) {
+                for (int y = fightArea.getY(); y < fightArea.getY() + fightArea.getHeight(); y++) {
+                    WorldPoint worldPoint = new WorldPoint(x, y, fightArea.getPlane());
                     drawTile(graphics, worldPoint, Color.YELLOW);
                 }
             }
@@ -75,11 +81,11 @@ public class PVirewatchKillerOverlay extends Overlay {
             }
         }
 
-        if (!config.disableNPCOutline()) {
+        if (!config.disableNPCOutline() && fightArea != null) {
             for (var npcModel : Microbot.getRs2NpcCache().query().withName("Vyrewatch Sentinel").where(n -> !n.isDead()).toList()) {
                 NPC npc = npcModel.getNpc();
                 if (npc != null && npc.getCanvasTilePoly() != null) {
-                    if (!plugin.fightArea.contains(npc.getWorldLocation())) continue;
+                    if (!fightArea.contains(npc.getWorldLocation())) continue;
 
                     try {
                         modelOutlineRenderer.drawOutline(npc, 2, Color.ORANGE, 4);
@@ -126,5 +132,17 @@ public class PVirewatchKillerOverlay extends Overlay {
             graphics.setStroke(new BasicStroke(2));
             graphics.draw(poly);
         }
+    }
+
+    private static Rs2TileObjectModel nearestObject(java.util.function.Predicate<TileObject> predicate) {
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (playerLocation == null) return null;
+        return Microbot.getRs2TileObjectCache().query()
+                .fromWorldView()
+                .where(o -> predicate.test(o.getTileObject()))
+                .toList().stream()
+                .min(Comparator.comparing((Rs2TileObjectModel o) -> o.getTileObjectType() != TileObjectType.GAME)
+                        .thenComparingInt(o -> o.getTileObject().getWorldLocation().distanceTo(playerLocation)))
+                .orElse(null);
     }
 }
