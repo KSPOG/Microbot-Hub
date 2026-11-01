@@ -1318,7 +1318,8 @@ public class KspSourceLoaderPlugin extends Plugin
     {
         if (path == null || !path.toLowerCase(Locale.ROOT).endsWith(".java")) return false;
         String normalized = "/" + path.replace('\\', '/').toLowerCase(Locale.ROOT) + "/";
-        return !normalized.contains("/src/test/")
+        return !normalized.contains("/.github/")
+                && !normalized.contains("/src/test/")
                 && !normalized.contains("/build/")
                 && !normalized.contains("/target/");
     }
@@ -1329,6 +1330,7 @@ public class KspSourceLoaderPlugin extends Plugin
         if (path == null) return false;
         String normalized = "/" + path.replace('\\', '/').toLowerCase(Locale.ROOT) + "/";
         return normalized.endsWith(".png/")
+                && !normalized.contains("/.github/")
                 && !normalized.contains("/src/test/")
                 && !normalized.contains("/build/")
                 && !normalized.contains("/target/");
